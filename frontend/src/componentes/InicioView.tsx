@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Account, Comanda, Mesa, TabletDevice, Turno } from '../types/pos';
 import { IntegrationCard, IntegrationVisual, NodoRed } from './IntegrationCard';
+import { ImpresoraCard } from './ImpresoraCard';
 import { cuentaDeMesa } from '../services/dataService';
 import type { MainNavTab } from './SeccionesNav';
 
@@ -153,6 +154,8 @@ export const InicioView: React.FC<InicioViewProps> = ({
           );
         })}
       </div>
+
+      <ImpresoraCard />
 
       {/* Red de módulos */}
       <IntegrationCard

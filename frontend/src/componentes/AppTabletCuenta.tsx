@@ -18,11 +18,13 @@ import {
   Ham,
   Hamburger,
   Home,
+  Loader2,
   LucideIcon,
   Minus,
   Pizza,
   Plus,
   Popcorn,
+  Printer,
   Salad,
   ShoppingBag,
   Sandwich,
@@ -43,6 +45,7 @@ import {
   posDataService,
   seleccionInicial,
 } from '../services/dataService';
+import { construirTicketCocina, imprimirTicketCocina } from '../services/ticketCocinaService';
 
 interface AppTabletCuentaProps {
   cuenta: Account;
@@ -52,6 +55,11 @@ interface AppTabletCuentaProps {
   onVolver: () => void;
   /** Solo en caja: permite dar de alta un producto que no está en el menú. */
   permitirNuevoProducto?: boolean;
+  /**
+   * Solo en la tablet: la pantalla ocupa exactamente el alto disponible, sin scroll de página.
+   * El menú y el pedido se reparten el espacio; si el contenido no cabe, solo se desplaza dentro de su recuadro.
+   */
+  pantallaCompleta?: boolean;
 }
 
 interface LineaPedido {
@@ -127,6 +135,8 @@ const etiquetaPrecio = (p: ProductCatalogItem) => {
 interface Alerta {
   titulo: string;
   detalle: string[];
+  /** Estado del ticket de cocina impreso al enviar la orden. */
+  impresion?: { estado: 'enviando' | 'ok' | 'error'; texto: string };
 }
 
 export const AppTabletCuenta: React.FC<AppTabletCuentaProps> = ({
@@ -135,7 +145,15 @@ export const AppTabletCuenta: React.FC<AppTabletCuentaProps> = ({
   productos: catalogo,
   onVolver,
   permitirNuevoProducto = false,
+  pantallaCompleta = false,
 }) => {
+  // En la tablet, mientras el menú está abierto se reduce la escala general para que todo quepa (ver index.css).
+  useEffect(() => {
+    if (!pantallaCompleta) return;
+    document.documentElement.classList.add('app-tablet-menu');
+    return () => document.documentElement.classList.remove('app-tablet-menu');
+  }, [pantallaCompleta]);
+
   // Si la categoría tiene un solo producto y ese producto tiene opciones, se muestran de inmediato.
   const unicoConOpciones = (c: string) => {
     const deCategoria = catalogo.filter((p) => p.category === c);
@@ -314,7 +332,21 @@ export const AppTabletCuenta: React.FC<AppTabletCuentaProps> = ({
               it.modifiers?.length ? ` — ${it.modifiers.join(', ').toLowerCase()}` : ''
             }`
         ),
+        impresion: { estado: 'enviando', texto: 'Imprimiendo ticket de cocina…' },
       });
+
+      // Ticket de cocina: se arma el JSON (types/ticketCocina.ts) y se imprime en la impresora de la caja.
+      // Si la impresora no responde, la orden ya quedó enviada; solo se avisa.
+      const actualizarImpresion = (impresion: NonNullable<Alerta['impresion']>) =>
+        setAlerta((prev) => (prev ? { ...prev, impresion } : prev));
+      imprimirTicketCocina(construirTicketCocina(comanda))
+        .then(() => actualizarImpresion({ estado: 'ok', texto: 'Ticket de cocina impreso.' }))
+        .catch((err) =>
+          actualizarImpresion({
+            estado: 'error',
+            texto: `No se imprimió el ticket: ${err instanceof Error ? err.message : 'error de impresión'}`,
+          })
+        );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo enviar el pedido.');
     }
@@ -354,46 +386,53 @@ export const AppTabletCuenta: React.FC<AppTabletCuentaProps> = ({
   };
 
   return (
-    <div className="space-y-4">
+    <div className={pantallaCompleta ? 'h-full min-h-0 flex flex-col gap-2' : 'space-y-4'}>
       {/* Barra superior de la cuenta */}
-      <div className="flex items-center justify-between gap-3">
-        <button
-          onClick={onVolver}
-          className="h-12 px-4 rounded-xl bg-white border border-neutral-200 hover:border-neutral-300 flex items-center gap-2 font-medium cursor-pointer"
-        >
-          <ArrowLeft className="w-5 h-5" /> Mesas
-        </button>
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between gap-3 shrink-0">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onVolver}
+            className={`${pantallaCompleta ? 'h-14 px-5 text-lg' : 'h-12 px-4'} rounded-xl bg-white border border-neutral-200 hover:border-neutral-300 flex items-center gap-2 font-medium cursor-pointer`}
+          >
+            <ArrowLeft className={pantallaCompleta ? 'w-6 h-6' : 'w-5 h-5'} /> Mesas
+          </button>
+          {/* Tipo de orden: solo ícono (bolsa = para llevar, casa = comer aquí) */}
+          <button
+            onClick={() => setCambiarTipoOrden(true)}
+            disabled={pagada}
+            title={cuenta.paraLlevar ? 'Para llevar · cambiar tipo de orden' : 'Comer aquí · cambiar tipo de orden'}
+            aria-label={cuenta.paraLlevar ? 'Para llevar' : 'Comer aquí'}
+            className={`${pantallaCompleta ? 'w-14 h-14' : 'w-12 h-12'} rounded-xl border-2 flex items-center justify-center cursor-pointer ${
+              cuenta.paraLlevar
+                ? 'bg-violet-100 border-violet-400 text-violet-900'
+                : 'bg-sky-50 border-sky-300 text-sky-800'
+            }`}
+          >
+            {cuenta.paraLlevar ? (
+              <ShoppingBag className={pantallaCompleta ? 'w-6 h-6' : 'w-5 h-5'} />
+            ) : (
+              <Home className={pantallaCompleta ? 'w-6 h-6' : 'w-5 h-5'} />
+            )}
+          </button>
+          {/* Ver pedido: solo ícono, con el número de rondas enviadas */}
           <button
             onClick={() => setVerPedido(true)}
-            className="relative h-12 px-4 rounded-xl bg-sky-50 border-2 border-sky-200 hover:bg-sky-100 text-sky-800 flex items-center gap-2 font-semibold cursor-pointer"
+            title="Ver pedido"
+            aria-label="Ver pedido"
+            className={`relative ${pantallaCompleta ? 'w-14 h-14' : 'w-12 h-12'} rounded-xl bg-sky-50 border-2 border-sky-200 hover:bg-sky-100 text-sky-800 flex items-center justify-center cursor-pointer`}
           >
-            <ClipboardList className="w-5 h-5" /> Ver pedido
+            <ClipboardList className={pantallaCompleta ? 'w-6 h-6' : 'w-5 h-5'} />
             {rondas.length > 0 && (
-              <span className="min-w-6 h-6 px-1.5 rounded-full bg-sky-600 text-white text-xs font-bold flex items-center justify-center">
+              <span className="absolute -top-2 -right-2 min-w-5 h-5 px-1 rounded-full bg-sky-600 text-white text-[11px] font-bold flex items-center justify-center">
                 {rondas.length}
               </span>
             )}
           </button>
-          <div className="text-right">
-            <div className="text-2xl font-bold flex items-center justify-end gap-2">
-              {cuenta.identifier}
-              <button
-                onClick={() => setCambiarTipoOrden(true)}
-                disabled={pagada}
-                title="Cambiar tipo de orden"
-                className={`h-8 px-2.5 rounded-lg border-2 text-xs font-black tracking-wider cursor-pointer ${
-                  cuenta.paraLlevar
-                    ? 'bg-violet-100 border-violet-400 text-violet-900'
-                    : 'bg-sky-50 border-sky-300 text-sky-800'
-                }`}
-              >
-                {cuenta.paraLlevar ? 'PARA LLEVAR' : 'COMER AQUÍ'}
-              </button>
-            </div>
-            <div className="text-sm text-neutral-500">
-              Total cuenta <span className="font-mono font-semibold text-neutral-900">${cuenta.total.toFixed(2)}</span>
-            </div>
+        </div>
+        <div className="text-right">
+          <div className={`${pantallaCompleta ? 'text-3xl' : 'text-2xl'} font-bold`}>{cuenta.identifier}</div>
+          <div className={`${pantallaCompleta ? 'text-base' : 'text-sm'} text-neutral-500`}>
+            Total cuenta <span className="font-mono font-semibold text-neutral-900">${cuenta.total.toFixed(2)}</span>
           </div>
         </div>
       </div>
@@ -413,40 +452,58 @@ export const AppTabletCuenta: React.FC<AppTabletCuentaProps> = ({
           Esta cuenta ya fue cobrada en caja.
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-[1fr_300px] lg:grid-cols-[1fr_360px]">
+        <div
+          className={
+            pantallaCompleta
+              ? 'flex-1 min-h-0 grid gap-2 grid-cols-[minmax(0,1fr)_minmax(13rem,32%)]'
+              : 'grid gap-4 md:grid-cols-[1fr_300px] lg:grid-cols-[1fr_360px]'
+          }
+        >
           {/* Menú */}
-          <section className="bg-white border border-neutral-200 rounded-2xl p-4 space-y-4">
+          <section
+            className={`bg-white border border-neutral-200 rounded-2xl ${
+              pantallaCompleta
+                ? productoOpciones && !pidioCuenta
+                  ? 'p-3 min-h-0 flex flex-col overflow-hidden'
+                  : 'p-4 space-y-4 min-h-0 overflow-y-auto overscroll-contain'
+                : 'p-4 space-y-4'
+            }`}
+          >
             {productoOpciones && !pidioCuenta ? (
               /* Pantalla de opciones: se elige todo y solo "Agregar a la orden" lo suma al pedido de la derecha */
-              <div className="space-y-5">
-                <div className="flex items-center justify-between gap-3">
+              <div className={pantallaCompleta ? 'flex-1 min-h-0 flex flex-col gap-2' : 'space-y-5'}>
+                <div className="flex items-center justify-between gap-3 shrink-0">
                   <button
                     onClick={() => abrirOpciones(null)}
-                    className="h-12 px-4 rounded-xl bg-white border border-neutral-200 hover:border-neutral-300 flex items-center gap-2 font-medium cursor-pointer"
+                    className={`${pantallaCompleta ? 'h-10 px-3 text-sm' : 'h-12 px-4'} rounded-xl bg-white border border-neutral-200 hover:border-neutral-300 flex items-center gap-2 font-medium cursor-pointer`}
                   >
                     <ArrowLeft className="w-5 h-5" /> Volver
                   </button>
                   <div className="text-right">
-                    <div className="text-xl font-bold">{productoOpciones.name}</div>
+                    <div className={`${pantallaCompleta ? 'text-lg' : 'text-xl'} font-bold leading-tight`}>{productoOpciones.name}</div>
                     <div className="text-sm text-neutral-500 font-mono">{etiquetaPrecio(productoOpciones)}</div>
                   </div>
                 </div>
 
+                {/* Contenido de opciones: en la tablet llena todo el espacio restante; los grupos se reparten el alto
+                    y los botones crecen para ocuparlo (el botón "Agregar" de abajo siempre queda visible) */}
+                <div className={pantallaCompleta ? 'flex-1 min-h-0 flex flex-col gap-3 overflow-y-auto overscroll-contain' : 'space-y-5'}>
+
                 {productoOpciones.paquete ? (
                   <>
                     {/* Paquete: cuántas piezas y cada una por separado */}
-                    <div className="space-y-2">
+                    <div className={pantallaCompleta ? 'shrink-0 space-y-2' : 'space-y-2'}>
                       <div className="text-sm font-semibold text-neutral-700">
                         1. ¿Cuántas {productoOpciones.paquete.nombrePlural.toLowerCase()}?
                       </div>
-                      <div className="flex items-center justify-between gap-4 rounded-2xl border border-neutral-200 bg-white p-3">
+                      <div className={`flex items-center justify-between gap-4 rounded-2xl border border-neutral-200 bg-white ${pantallaCompleta ? 'p-2' : 'p-3'}`}>
                         <div className="flex items-center gap-3">
                           <button
                             type="button"
                             onClick={() => cambiarCantidadPaquete(-1)}
                             disabled={indiceCantidadPaquete <= 0}
                             aria-label="Una burrita menos"
-                            className="w-14 h-14 rounded-xl border-2 border-neutral-200 bg-white flex items-center justify-center hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                            className={`${pantallaCompleta ? 'w-11 h-11' : 'w-14 h-14'} rounded-xl border-2 border-neutral-200 bg-white flex items-center justify-center hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer`}
                           >
                             <Minus className="w-5 h-5" />
                           </button>
@@ -463,7 +520,7 @@ export const AppTabletCuenta: React.FC<AppTabletCuentaProps> = ({
                                 cambiarCantidadPaquete(event.key === 'ArrowUp' ? 1 : -1);
                               }
                             }}
-                            className="w-12 text-center font-mono text-3xl font-bold rounded-lg focus-visible:outline-2 focus-visible:outline-orange-500"
+                            className={`w-12 text-center font-mono ${pantallaCompleta ? 'text-2xl' : 'text-3xl'} font-bold rounded-lg focus-visible:outline-2 focus-visible:outline-orange-500`}
                           >
                             {piezasSel.length}
                           </span>
@@ -472,7 +529,7 @@ export const AppTabletCuenta: React.FC<AppTabletCuentaProps> = ({
                             onClick={() => cambiarCantidadPaquete(1)}
                             disabled={indiceCantidadPaquete >= cantidadesPaquete.length - 1}
                             aria-label="Una burrita más"
-                            className="w-14 h-14 rounded-xl bg-orange-100 border-2 border-orange-200 text-orange-900 flex items-center justify-center hover:bg-orange-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                            className={`${pantallaCompleta ? 'w-11 h-11' : 'w-14 h-14'} rounded-xl bg-orange-100 border-2 border-orange-200 text-orange-900 flex items-center justify-center hover:bg-orange-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer`}
                           >
                             <Plus className="w-5 h-5" />
                           </button>
@@ -482,47 +539,51 @@ export const AppTabletCuenta: React.FC<AppTabletCuentaProps> = ({
                         </span>
                       </div>
                     </div>
+                    {/* Una tarjeta por pieza; en la tablet van lado a lado para que quepan sin scroll */}
+                    <div className={pantallaCompleta ? 'flex-1 min-h-0 grid grid-cols-[repeat(auto-fit,minmax(13rem,1fr))] gap-2' : 'space-y-5'}>
                     {piezasSel.map((sel, i) => (
-                      <div key={i} className="border-2 border-neutral-200 rounded-2xl p-3 space-y-4">
-                        <div className="font-bold">
+                      <div key={i} className={`border-2 border-neutral-200 rounded-2xl ${pantallaCompleta ? 'p-2.5 min-h-0 flex flex-col gap-2' : 'p-3 space-y-4'}`}>
+                        <div className={pantallaCompleta ? 'shrink-0 text-lg font-bold' : 'font-bold'}>
                           {productoOpciones.paquete!.nombrePieza} {i + 1}
                         </div>
                         <GruposEditor
+                          compacto={pantallaCompleta}
                           producto={productoOpciones}
                           seleccion={sel}
                           onChange={(nueva) => setPiezasSel((prev) => prev.map((x, k) => (k === i ? nueva : x)))}
                         />
                       </div>
                     ))}
+                    </div>
                   </>
                 ) : productoOpciones.reparto ? (
                   /* Reparto: cuántas piezas de cada opción dentro de la misma orden */
-                  <div className="space-y-2">
-                    <div className="text-sm font-semibold text-neutral-700">1. {productoOpciones.reparto} y cantidad</div>
-                    <div className="space-y-2">
+                  <div className={pantallaCompleta ? 'flex-1 min-h-0 flex flex-col gap-2' : 'space-y-2'}>
+                    <div className="shrink-0 text-sm font-semibold text-neutral-700">1. {productoOpciones.reparto} y cantidad</div>
+                    <div className={pantallaCompleta ? 'flex-1 min-h-0 flex flex-col gap-2' : 'space-y-2'}>
                       {opcionesOrdenadas(productoOpciones.grupos!.find((g) => g.nombre === productoOpciones.reparto)!).map(
                         (op) => {
                           const n = repartoSel[op] ?? 0;
                           return (
                             <div
                               key={op}
-                              className={`flex items-center justify-between gap-3 rounded-2xl border-2 px-4 py-2 ${
+                              className={`flex items-center justify-between gap-3 rounded-2xl border-2 px-4 py-2 ${pantallaCompleta ? 'flex-1 min-h-16' : ''} ${
                                 n > 0 ? 'bg-orange-50 border-orange-400' : 'bg-white border-orange-200'
                               }`}
                             >
-                              <span className="text-lg font-semibold">{op}</span>
+                              <span className={`${pantallaCompleta ? 'text-2xl' : 'text-lg'} font-semibold`}>{op}</span>
                               <div className="flex items-center gap-3">
                                 <button
                                   onClick={() => setRepartoSel((prev) => ({ ...prev, [op]: Math.max(0, n - 1) }))}
-                                  className="w-14 h-14 rounded-xl border-2 border-neutral-200 bg-white flex items-center justify-center cursor-pointer"
+                                  className={`${pantallaCompleta ? 'w-16 h-16' : 'w-14 h-14'} rounded-xl border-2 border-neutral-200 bg-white flex items-center justify-center cursor-pointer`}
                                   aria-label={`Una menos de ${op}`}
                                 >
                                   <Minus className="w-5 h-5" />
                                 </button>
-                                <span className="w-10 text-center font-mono text-2xl font-bold">{n}</span>
+                                <span className={`${pantallaCompleta ? 'w-14 text-3xl' : 'w-10 text-2xl'} text-center font-mono font-bold`}>{n}</span>
                                 <button
                                   onClick={() => setRepartoSel((prev) => ({ ...prev, [op]: n + 1 }))}
-                                  className="w-14 h-14 rounded-xl border-2 border-neutral-200 bg-white flex items-center justify-center cursor-pointer"
+                                  className={`${pantallaCompleta ? 'w-16 h-16' : 'w-14 h-14'} rounded-xl border-2 border-neutral-200 bg-white flex items-center justify-center cursor-pointer`}
                                   aria-label={`Una más de ${op}`}
                                 >
                                   <Plus className="w-5 h-5" />
@@ -533,32 +594,33 @@ export const AppTabletCuenta: React.FC<AppTabletCuentaProps> = ({
                         }
                       )}
                     </div>
-                    <div className="text-right text-sm text-neutral-600">
+                    <div className="shrink-0 text-right text-sm text-neutral-600">
                       Total: <strong>{totalReparto}</strong> {productoOpciones.name.toLowerCase()}
                     </div>
                   </div>
                 ) : (
                   <>
                     <GruposEditor
+                      compacto={pantallaCompleta}
                       producto={productoOpciones}
                       seleccion={seleccion}
                       onChange={setSeleccion}
                       contarEnPedido={(op) => cantidadEnPedido(productoOpciones.id, op)}
                     />
-                    <div className="space-y-2">
-                      <div className="text-sm font-semibold text-neutral-700">Cantidad</div>
+                    <div className={pantallaCompleta ? 'shrink-0 flex items-center justify-between gap-4 rounded-2xl border border-neutral-200 px-3 py-2' : 'space-y-2'}>
+                      <div className={`${pantallaCompleta ? 'text-base' : 'text-sm'} font-semibold text-neutral-700`}>Cantidad</div>
                       <div className="flex items-center gap-4">
                         <button
                           onClick={() => setCantidadSel((n) => Math.max(1, n - 1))}
-                          className="w-14 h-14 rounded-xl border-2 border-neutral-200 bg-white flex items-center justify-center cursor-pointer"
+                          className={`w-14 h-14 rounded-xl border-2 border-neutral-200 bg-white flex items-center justify-center cursor-pointer`}
                           aria-label="Menos"
                         >
                           <Minus className="w-5 h-5" />
                         </button>
-                        <span className="w-12 text-center font-mono text-3xl font-bold">{cantidadSel}</span>
+                        <span className={`w-12 text-center font-mono text-3xl font-bold`}>{cantidadSel}</span>
                         <button
                           onClick={() => setCantidadSel((n) => n + 1)}
-                          className="w-14 h-14 rounded-xl border-2 border-neutral-200 bg-white flex items-center justify-center cursor-pointer"
+                          className={`w-14 h-14 rounded-xl border-2 border-neutral-200 bg-white flex items-center justify-center cursor-pointer`}
                           aria-label="Más"
                         >
                           <Plus className="w-5 h-5" />
@@ -567,12 +629,12 @@ export const AppTabletCuenta: React.FC<AppTabletCuentaProps> = ({
                     </div>
                   </>
                 )}
-
+                </div>
 
                 <button
                   onClick={() => agregarSeleccion(productoOpciones)}
                   disabled={!!faltante}
-                  className="w-full h-16 rounded-2xl bg-amber-500 hover:bg-amber-400 disabled:bg-neutral-200 disabled:text-neutral-500 disabled:cursor-not-allowed text-neutral-950 text-lg font-bold flex items-center justify-center gap-2 cursor-pointer"
+                  className={`w-full ${pantallaCompleta ? 'h-12 text-base shrink-0' : 'h-16 text-lg'} rounded-2xl bg-amber-500 hover:bg-amber-400 disabled:bg-neutral-200 disabled:text-neutral-500 disabled:cursor-not-allowed text-neutral-950 font-bold flex items-center justify-center gap-2 cursor-pointer`}
                 >
                   <Plus className="w-5 h-5" />
                   {faltante ??
@@ -580,7 +642,7 @@ export const AppTabletCuenta: React.FC<AppTabletCuentaProps> = ({
                 </button>
 
                 {agregadoFlash && (
-                  <div className="text-center text-sm font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-xl py-2">
+                  <div className="shrink-0 text-center text-sm font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-xl py-2">
                     ✓ Agregado: {agregadoFlash}
                   </div>
                 )}
@@ -666,7 +728,13 @@ export const AppTabletCuenta: React.FC<AppTabletCuentaProps> = ({
               )
             )}
             {/* Categorías en cuadros */}
-            <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
+            <div
+              className={
+                pantallaCompleta
+                  ? 'grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-2'
+                  : 'grid grid-cols-3 sm:grid-cols-5 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2'
+              }
+            >
               {categorias.map((c, i) => {
                 const Icon = ICONO_CATEGORIA[c] ?? UtensilsCrossed;
                 const color = COLORES_CATEGORIA[i % COLORES_CATEGORIA.length];
@@ -677,12 +745,12 @@ export const AppTabletCuenta: React.FC<AppTabletCuentaProps> = ({
                     key={c}
                     onClick={() => elegirCategoria(c)}
                     aria-pressed={activa}
-                    className={`relative aspect-square rounded-2xl border-2 p-2 flex flex-col items-center justify-center gap-1.5 text-center transition-colors cursor-pointer ${
+                    className={`relative ${pantallaCompleta ? 'h-28' : 'aspect-square'} rounded-2xl border-2 p-2 flex flex-col items-center justify-center gap-1.5 text-center transition-colors cursor-pointer ${
                       activa ? `${color.activo} shadow-sm` : color.normal
                     } ${cantidad === 0 && !activa ? 'opacity-60' : ''}`}
                   >
-                    <Icon className="w-7 h-7 sm:w-8 sm:h-8 shrink-0" />
-                    <span className={`text-xs sm:text-sm leading-tight ${activa ? 'font-bold' : 'font-semibold'}`}>{c}</span>
+                    <Icon className={`${pantallaCompleta ? 'w-9 h-9' : 'w-7 h-7 sm:w-8 sm:h-8'} shrink-0`} />
+                    <span className={`${pantallaCompleta ? 'text-sm' : 'text-xs sm:text-sm'} leading-tight ${activa ? 'font-bold' : 'font-semibold'}`}>{c}</span>
                     <span className="absolute top-1.5 right-2 font-mono text-[11px] opacity-70">{cantidad}</span>
                   </button>
                 );
@@ -697,7 +765,11 @@ export const AppTabletCuenta: React.FC<AppTabletCuentaProps> = ({
               </p>
             )}
 
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+            <div
+              className={
+                pantallaCompleta ? 'grid grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] gap-2' : 'grid grid-cols-2 lg:grid-cols-3 gap-3'
+              }
+            >
               {productos.map((p) => {
                 const enPedido = cantidadEnPedido(p.id) || undefined;
                 const tieneOpciones = !!p.grupos?.length;
@@ -728,15 +800,23 @@ export const AppTabletCuenta: React.FC<AppTabletCuentaProps> = ({
           </section>
 
           {/* Pedido y estado */}
-          <aside className="space-y-4 md:sticky md:top-20 md:self-start md:max-h-[calc(100vh-6rem)] md:overflow-y-auto">
-            <section className="bg-white border border-neutral-200 rounded-2xl p-4 space-y-3">
-              <h3 className="font-bold">Nuevo pedido</h3>
+          <aside
+            className={
+              pantallaCompleta
+                ? 'min-h-0 flex flex-col gap-2'
+                : 'space-y-4 md:sticky md:top-20 md:self-start md:max-h-[calc(100vh-6rem)] md:overflow-y-auto'
+            }
+          >
+            <section
+              className={`bg-white border border-neutral-200 rounded-2xl p-4 space-y-3 ${pantallaCompleta ? 'flex-1 min-h-0 flex flex-col' : ''}`}
+            >
+              <h3 className="font-bold shrink-0">Nuevo pedido</h3>
               {lineas.length === 0 ? (
                 <p className="text-sm text-neutral-500">
                   {pidioCuenta ? 'La cuenta ya fue pedida.' : 'Toca productos del menú para agregarlos.'}
                 </p>
               ) : (
-                <ul className="space-y-3">
+                <ul className={`space-y-3 ${pantallaCompleta ? 'flex-1 min-h-0 overflow-y-auto overscroll-contain pr-1' : ''}`}>
                   {lineas.map((l) => {
                     const p = producto(l.itemId)!;
                     const clave = claveDe(l);
@@ -814,7 +894,7 @@ export const AppTabletCuenta: React.FC<AppTabletCuentaProps> = ({
               <button
                 onClick={enviarACocina}
                 disabled={lineas.length === 0}
-                className="w-full h-14 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-neutral-950 text-lg font-semibold flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full h-14 shrink-0 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-neutral-950 text-lg font-semibold flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Send className="w-5 h-5" />
                 Enviar a cocina{lineas.length > 0 && ` · $${totalPedido.toFixed(2)}`}
@@ -822,7 +902,7 @@ export const AppTabletCuenta: React.FC<AppTabletCuentaProps> = ({
             </section>
 
             {pidioCuenta ? (
-              <div className="h-14 rounded-xl bg-amber-50 border-2 border-amber-300 text-amber-800 font-semibold flex items-center justify-center gap-2">
+              <div className="h-14 shrink-0 rounded-xl bg-amber-50 border-2 border-amber-300 text-amber-800 font-semibold flex items-center justify-center gap-2">
                 <BellRing className="w-5 h-5" /> Cuenta pedida a caja
               </div>
             ) : (
@@ -830,7 +910,7 @@ export const AppTabletCuenta: React.FC<AppTabletCuentaProps> = ({
                 onClick={pedirCuenta}
                 disabled={cuenta.total === 0 || lineas.length > 0}
                 title={lineas.length > 0 ? 'Envía o borra el pedido nuevo antes de pedir la cuenta' : undefined}
-                className="w-full h-14 rounded-xl bg-white border-2 border-emerald-300 hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed text-emerald-800 text-lg font-semibold flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full h-14 shrink-0 rounded-xl bg-white border-2 border-emerald-300 hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed text-emerald-800 text-lg font-semibold flex items-center justify-center gap-2 cursor-pointer"
               >
                 <BellRing className="w-5 h-5" /> Pedir la cuenta
               </button>
@@ -895,6 +975,24 @@ export const AppTabletCuenta: React.FC<AppTabletCuentaProps> = ({
                   <li key={i}>{d}</li>
                 ))}
               </ul>
+              {alerta.impresion && (
+                <div
+                  className={`flex items-center justify-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border ${
+                    alerta.impresion.estado === 'ok'
+                      ? 'text-emerald-800 bg-emerald-50 border-emerald-200'
+                      : alerta.impresion.estado === 'error'
+                      ? 'text-amber-800 bg-amber-50 border-amber-200'
+                      : 'text-neutral-600 bg-neutral-50 border-neutral-200'
+                  }`}
+                >
+                  {alerta.impresion.estado === 'enviando' ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                  ) : (
+                    <Printer className="w-3.5 h-3.5 shrink-0" />
+                  )}
+                  {alerta.impresion.texto}
+                </div>
+              )}
               <button
                 onClick={() => setAlerta(null)}
                 autoFocus
@@ -1087,11 +1185,14 @@ function GruposEditor({
   seleccion,
   onChange,
   contarEnPedido,
+  compacto = false,
 }: {
   producto: ProductCatalogItem;
   seleccion: SeleccionProducto;
   onChange: (sel: SeleccionProducto) => void;
   contarEnPedido?: (opcion: string) => number;
+  /** Tablet: opciones más chicas y en más columnas para que todo quepa sin scroll. */
+  compacto?: boolean;
 }) {
   const principal = grupoPrincipal(producto);
   const grupos = (producto.grupos ?? []).filter((g) => g.nombre !== producto.reparto);
@@ -1107,7 +1208,7 @@ function GruposEditor({
   };
 
   return (
-    <div className="space-y-5">
+    <div className={compacto ? 'flex-1 min-h-0 flex flex-col gap-3' : 'space-y-5'}>
       {grupos.map((g, gi) => {
         const elegidas = seleccion[g.nombre] ?? [];
         const todas = g.tipo === 'varias' && elegidas.length === g.opciones.length;
@@ -1124,8 +1225,13 @@ function GruposEditor({
             ? ' · uno u otro (opcional)'
             : ' · elige una';
         return (
-          <div key={g.nombre} className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
+          <div
+            key={g.nombre}
+            className={compacto ? 'min-h-0 flex flex-col gap-1.5' : 'space-y-2'}
+            // Más opciones → más alto para ese grupo
+            style={compacto ? { flex: `${Math.max(g.opciones.length, 2)} 1 0` } : undefined}
+          >
+            <div className="shrink-0 flex items-center justify-between gap-2">
               <div className="text-sm font-semibold text-neutral-700">
                 {gi + 1}. {g.nombre}
                 <span className="font-normal text-neutral-500">{ayuda}</span>
@@ -1133,13 +1239,13 @@ function GruposEditor({
               {g.tipo === 'varias' && (
                 <button
                   onClick={() => onChange({ ...seleccion, [g.nombre]: todas ? [] : [...g.opciones] })}
-                  className="h-10 px-4 rounded-full border-2 border-emerald-200 bg-white text-sm font-semibold text-emerald-800 hover:bg-emerald-50 cursor-pointer"
+                  className={`${compacto ? 'h-8 px-3 text-xs' : 'h-10 px-4 text-sm'} shrink-0 whitespace-nowrap rounded-full border-2 border-emerald-200 bg-white font-semibold text-emerald-800 hover:bg-emerald-50 cursor-pointer`}
                 >
                   {todas ? 'Quitar todo' : 'Con todo'}
                 </button>
               )}
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <div className={compacto ? 'flex-1 min-h-0 grid auto-rows-fr grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-2' : 'grid grid-cols-2 sm:grid-cols-3 gap-2'}>
               {opcionesOrdenadas(g).map((op) => {
                 const marcada = elegidas.includes(op);
                 const enPedidoOp = g === principal && contarEnPedido ? contarEnPedido(op) : 0;
@@ -1149,7 +1255,7 @@ function GruposEditor({
                     key={op}
                     onClick={() => tocar(g, op)}
                     aria-pressed={marcada}
-                    className={`relative min-h-20 px-2 rounded-2xl border-2 text-lg font-semibold flex flex-col items-center justify-center transition-colors cursor-pointer ${
+                    className={`relative ${compacto ? 'h-full min-h-11 py-1.5 text-lg rounded-xl' : 'min-h-20 text-lg rounded-2xl'} px-2 border-2 font-semibold flex flex-col items-center justify-center transition-colors cursor-pointer ${
                       marcada ? color.on : color.off
                     }`}
                   >

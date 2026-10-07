@@ -6,3 +6,27 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Datos que guarda la API en disco (usuarios creados desde Configuración)
+backend/data/
+
+# Herramientas locales y dependencias de Laravel
+.tools/
+vendor/
+backend/bootstrap/cache/*.php
+backend/storage/*.key
+backend/storage/logs/*
+!backend/storage/logs/.gitignore
+backend/storage/framework/cache/data/*
+!backend/storage/framework/cache/data/.gitignore
+backend/storage/framework/sessions/*
+!backend/storage/framework/sessions/.gitignore
+backend/storage/framework/views/*
+!backend/storage/framework/views/.gitignore
+backend/.phpunit.result.cache
+backend/.phpunit.cache/
+backend/.phpunit.cache
+
+# Configuracion y SQL locales con credenciales del servidor
+/db/config.local.php
+/backend/database/server-access.local.sql

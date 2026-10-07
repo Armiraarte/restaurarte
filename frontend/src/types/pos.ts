@@ -18,6 +18,16 @@ export interface OrderItem {
   modifiers?: string[];
   notes?: string;
   addedAt: string;
+  /** Lo elegido, estructurado (para el ticket de cocina y la base de datos). Ver types/ticketCocina.ts. */
+  detalle?: DetallePartida;
+}
+
+/** Elección original de una partida. BD: partidas.producto_id + partida_opciones. */
+export interface DetallePartida {
+  productoId: string;
+  seleccion?: SeleccionProducto; // producto normal: { "Relleno": ["Frijol"], … }
+  piezas?: SeleccionProducto[]; // paquete: una selección por pieza
+  reparto?: Record<string, number>; // reparto: { "BBQ": 5, … }
 }
 
 export interface Order {
@@ -65,6 +75,8 @@ export interface Comanda {
   isAddition: boolean; // True if it's an extra comanda sent later
   sequenceNumber: number; // 1, 2, 3...
   sentAt: string;
+  /** Fecha y hora completas del envío (ISO 8601). BD: comandas.enviada_en */
+  enviadaEn?: string;
   elapsedMinutes: number;
   sentByTablet: string;
   waiterName: string;

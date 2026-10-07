@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { AlertTriangle, Eye, EyeOff, Loader2, Lock, User, UtensilsCrossed } from 'lucide-react';
+import { AlertTriangle, Eye, EyeOff, Loader2, Lock, Tablet, User, UtensilsCrossed } from 'lucide-react';
 import { login, Usuario } from '../services/authService';
+import { BotonInstalarPwa } from './InstalarPwa';
 
 interface LoginViewProps {
   onLoginSuccess: (usuario: Usuario) => void;
@@ -112,6 +113,25 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             <span>{cargando ? 'Verificando…' : 'Entrar'}</span>
           </button>
         </form>
+
+        {/* Las tablets de meseros usan su propia app en /tablet */}
+        <div className="flex items-center gap-3 my-5">
+          <span className="flex-1 h-px bg-neutral-300" />
+          <span className="text-xs text-neutral-500">¿Es una tablet de mesero?</span>
+          <span className="flex-1 h-px bg-neutral-300" />
+        </div>
+
+        <a
+          href="/tablet"
+          className="w-full flex items-center justify-center gap-2 bg-white hover:bg-sky-50 border-2 border-sky-300 text-sky-900 font-semibold text-sm py-3 rounded-xl transition-colors cursor-pointer"
+        >
+          <Tablet className="w-5 h-5" />
+          <span>Entrar como tablet</span>
+        </a>
+
+        <div className="mt-3">
+          <BotonInstalarPwa nombreApp="de caja" />
+        </div>
       </div>
     </div>
   );

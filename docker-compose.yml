@@ -10,6 +10,14 @@ services:
       ADMIN_USUARIO: ${ADMIN_USUARIO:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Define ADMIN_PASSWORD en el archivo .env}
       ADMIN_NOMBRE: ${ADMIN_NOMBRE:-Administrador}
+      # Agente de impresión corriendo en la PC (Windows) donde está conectada la impresora.
+      PRINT_AGENT_URL: ${PRINT_AGENT_URL:-http://host.docker.internal:9101}
+      PRINT_AGENT_TOKEN: ${PRINT_AGENT_TOKEN:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # Usuarios creados desde Configuración (se conservan al reconstruir el contenedor).
+      - backend-data:/app/data
 
   frontend:
     build: ./frontend
@@ -19,3 +27,6 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+
+volumes:
+  backend-data:

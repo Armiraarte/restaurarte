@@ -405,6 +405,8 @@ const STORAGE_KEYS = {
   MESAS: 'pos_mesas_v3',
   PRODUCTOS: 'pos_productos_v3',
   PRODUCTOS_SEMILLA: 'pos_productos_semilla_v3',
+  // Marca de la limpieza única de registros de prueba (cuentas, ventas, turnos…).
+  REGISTROS_LIMPIOS: 'pos_registros_limpios_v1',
 };
 
 /** "5" se muestra como "Mesa 5"; un nombre ("Terraza") se muestra tal cual. */
@@ -422,6 +424,26 @@ const formatOrderNumber = (seq: number) => `#${seq.toString().padStart(5, '0')}`
 const formatTicketNumber = (seq: number) => `T-${seq.toString().padStart(4, '0')}`;
 
 // Datos de ejemplo: uno de cada entidad.
+/** Turno abierto sin ventas, para poder cobrar desde el inicio. */
+function turnoVacio(cashierName: string): Turno {
+  const now = new Date();
+  const hora = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')} hrs`;
+  return {
+    id: `TURNO-${Date.now().toString().slice(-4)}`,
+    cashierName,
+    openedAt: `${now.toLocaleDateString('es-MX')} ${hora}`,
+    initialCash: 0,
+    status: 'abierto',
+    salesCount: 0,
+    totalCashCollected: 0,
+    totalCardCollected: 0,
+    totalTransferCollected: 0,
+    totalSales: 0,
+    expectedCash: 0,
+    payments: [],
+  };
+}
+
 function getInitialSeed() {
   const now = new Date();
   const formatTime = (minutesAgo: number) => {
@@ -441,111 +463,10 @@ function getInitialSeed() {
     ipAddress: '192.168.1.101',
     lastConnection: 'Ahora (Activa)',
     sessionStartedAt: formatTime(120),
-    lastActivity: `Envió Orden ${formatOrderNumber(1)} para Mesa 1`,
-    activeTablesCount: 1,
-    activeOrdersCount: 1,
+    lastActivity: 'Sin actividad',
+    activeTablesCount: 0,
+    activeOrdersCount: 0,
     appVersion: 'v2.4.1 (APK)',
-  };
-
-  const item: OrderItem = {
-    id: 'it-1',
-    orderId: 'ord-1',
-    comandaId: 'cmd-1',
-    productName: 'Hamburguesa (Res)',
-    category: 'Hamburguesas',
-    quantity: 1,
-    unitPrice: 80,
-    totalPrice: 80,
-    modifiers: ['Con papas', 'Sin cebolla', 'Con catsup', 'Con chile', 'Con jitomate', 'Con lechuga'],
-    addedAt: formatTime(5),
-  };
-
-  const order: Order = {
-    id: 'ord-1',
-    orderNumber: formatOrderNumber(1),
-    accountId: 'acc-mesa-1',
-    accountIdentifier: 'Mesa 1',
-    tabletId: tablet.id,
-    tabletName: tablet.name,
-    waiterName: tablet.assignedWaiter,
-    createdAt: formatTime(5),
-    status: 'enviada',
-    items: [item],
-    total: 80,
-  };
-
-  const comanda: Comanda = {
-    id: 'cmd-1',
-    orderId: order.id,
-    orderNumber: order.orderNumber,
-    accountId: order.accountId,
-    accountIdentifier: order.accountIdentifier,
-    isAddition: false,
-    sequenceNumber: 1,
-    sentAt: formatTime(5),
-    elapsedMinutes: 5,
-    sentByTablet: tablet.name,
-    waiterName: tablet.assignedWaiter,
-    status: 'nueva',
-    items: [item],
-  };
-
-  const account: Account = {
-    id: 'acc-mesa-1',
-    identifierType: 'mesa',
-    identifier: 'Mesa 1',
-    tableNumber: 1,
-    openedAt: formatTime(8),
-    openedByTablet: `${tablet.name} (${tablet.location})`,
-    waiterName: tablet.assignedWaiter,
-    status: 'abierta',
-    items: [item],
-    ordersCount: 1,
-    subtotal: 68.97,
-    tax: 11.03,
-    total: 80,
-  };
-
-  const payment: PaymentRecord = {
-    id: 'PAY-1',
-    ticketNumber: formatTicketNumber(1),
-    accountId: 'acc-previa',
-    accountIdentifier: 'Mesa 2',
-    turnoId: 'TURNO-001',
-    cashierName: 'Sebastián Martínez',
-    paidAt: `${formatTime(60)} hrs`,
-    total: 80,
-    method: 'efectivo',
-    breakdown: { efectivo: 80 },
-    cashReceived: 100,
-    changeGiven: 20,
-    subtotal: 68.97,
-    tax: 11.03,
-    items: [{ ...item, id: 'it-prev-1', orderId: undefined, comandaId: 'cmd-previa', notes: undefined, addedAt: formatTime(90) }],
-  };
-
-  const turno: Turno = {
-    id: 'TURNO-001',
-    cashierName: 'Sebastián Martínez',
-    openedAt: `${formatTime(120)} hrs`,
-    initialCash: 1000,
-    status: 'abierto',
-    salesCount: 1,
-    totalCashCollected: 80,
-    totalCardCollected: 0,
-    totalTransferCollected: 0,
-    totalSales: 80,
-    expectedCash: 1080,
-    payments: [payment],
-  };
-
-  const event: SocketEventLog = {
-    id: 'evt-1',
-    eventType: 'order.sent_to_kitchen',
-    timestamp: formatTime(5),
-    message: `Orden ${order.orderNumber} enviada a cocina para Mesa 1.`,
-    source: tablet.name,
-    relatedId: order.id,
   };
 
   const mesa: Mesa = { id: 'mesa-1', nombre: '1' };
@@ -553,16 +474,16 @@ function getInitialSeed() {
   return {
     productos: PRODUCTOS_INICIALES.map((p) => ({ ...p })),
     mesas: [mesa],
-    accounts: [account],
-    orders: [order],
-    comandas: [comanda],
+    accounts: [] as Account[],
+    orders: [] as Order[],
+    comandas: [] as Comanda[],
     tablets: [tablet],
-    currentTurno: turno,
+    currentTurno: turnoVacio(tablet.assignedWaiter),
     turnosHistory: [] as Turno[],
-    payments: [payment],
-    events: [event],
-    ticketSeq: 2,
-    orderSeq: 2,
+    payments: [] as PaymentRecord[],
+    events: [] as SocketEventLog[],
+    ticketSeq: 1,
+    orderSeq: 1,
   };
 }
 
@@ -586,6 +507,10 @@ class POSDataService {
 
   constructor() {
     this.loadState();
+    if (!localStorage.getItem(STORAGE_KEYS.REGISTROS_LIMPIOS)) {
+      this.limpiarRegistros();
+      localStorage.setItem(STORAGE_KEYS.REGISTROS_LIMPIOS, '1');
+    }
     this.syncBetweenTabs();
   }
 
@@ -1401,6 +1326,8 @@ class POSDataService {
         modifiers: entry.modifiers || modifiers,
         notes: entry.notes,
         addedAt: timeStr,
+        // Elección estructurada para el ticket de cocina / base de datos (partida_opciones)
+        detalle: { productoId: product.id, seleccion: entry.seleccion, piezas: entry.piezas, reparto: entry.reparto },
       });
     });
 
@@ -1431,6 +1358,7 @@ class POSDataService {
       isAddition,
       sequenceNumber,
       sentAt: timeStr,
+      enviadaEn: now.toISOString(),
       elapsedMinutes: 0,
       sentByTablet: tabletName,
       waiterName,
@@ -1502,6 +1430,27 @@ class POSDataService {
 
     this.saveState();
     return this.accounts[index];
+  }
+
+  /** Borra cuentas, órdenes, comandas, pagos, turnos y eventos; conserva menú, mesas y tablets. */
+  public limpiarRegistros() {
+    this.accounts = [];
+    this.orders = [];
+    this.comandas = [];
+    this.payments = [];
+    this.events = [];
+    this.turnosHistory = [];
+    this.currentTurno = turnoVacio(this.currentTurno?.cashierName ?? WAITERS_LIST[0]);
+    this.ticketSeq = 1;
+    this.orderSeq = 1;
+    this.tablets = this.tablets.map((t) => ({
+      ...t,
+      lastActivity: 'Sin actividad',
+      activeTablesCount: 0,
+      activeOrdersCount: 0,
+    }));
+    this.saveState();
+    this.notify();
   }
 
   // Reset demo

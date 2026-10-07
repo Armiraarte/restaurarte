@@ -1,21 +1,27 @@
 import React from 'react';
 import { SocketEventLog, TabletDevice } from '../types/pos';
 import { RealtimeEventTicker } from './RealtimeEventTicker';
+import { ImpresorasTicketsPanel } from './ImpresorasTicketsPanel';
+import { TabletsEnLineaPanel } from './TabletsEnLineaPanel';
 import { Clock, Tablet, Wifi, WifiOff } from 'lucide-react';
 
 interface TabletsViewProps {
   tablets: TabletDevice[];
   events: SocketEventLog[];
   onOpenSimulador: () => void;
+  /** El panel "Tablets en línea" (verificar conexión) solo lo ve el administrador. */
+  esAdmin?: boolean;
 }
 
-export const TabletsView: React.FC<TabletsViewProps> = ({ tablets, events, onOpenSimulador }) => {
+export const TabletsView: React.FC<TabletsViewProps> = ({ tablets, events, onOpenSimulador, esAdmin = false }) => {
   const ordenadas = [...tablets].sort((a, b) => Number(a.number) - Number(b.number));
   const conectadas = tablets.filter((t) => t.status === 'conectada').length;
   const desconectadas = tablets.length - conectadas;
 
   return (
     <div className="space-y-6">
+      {esAdmin && <TabletsEnLineaPanel />}
+
       <div className="bg-white border border-neutral-200 rounded-xl p-5 space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
@@ -98,6 +104,8 @@ export const TabletsView: React.FC<TabletsViewProps> = ({ tablets, events, onOpe
           </div>
         )}
       </div>
+
+      <ImpresorasTicketsPanel />
 
       {/* Eventos en vivo enviados por las tablets */}
       <RealtimeEventTicker events={events} />

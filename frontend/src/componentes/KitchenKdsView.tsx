@@ -15,7 +15,9 @@ import {
   ClipboardList,
   History,
   LucideIcon,
+  Printer,
 } from 'lucide-react';
+import { TicketCocinaModal } from './TicketCocinaModal';
 
 type VistaCocina = 'ordenes' | 'preparacion' | 'historial';
 
@@ -55,6 +57,8 @@ export const KitchenKdsView: React.FC<KitchenKdsViewProps> = ({
   // Ninguna lista visible hasta que se toque un botón; tocar el activo la oculta.
   const [vista, setVista] = useState<VistaCocina | null>(null);
   const [actionSuccessNotice, setActionSuccessNotice] = useState<string | null>(null);
+  // Comanda cuyo ticket de cocina se está viendo
+  const [ticketComanda, setTicketComanda] = useState<Comanda | null>(null);
 
   const notifyAction = (msg: string) => {
     setActionSuccessNotice(msg);
@@ -150,8 +154,17 @@ export const KitchenKdsView: React.FC<KitchenKdsViewProps> = ({
                   </span>
                 )}
               </div>
-              <div className="text-xs font-mono text-neutral-600 mt-0.5">
-                Orden <strong className="text-neutral-900">{cmd.orderNumber}</strong>
+              <div className="text-xs font-mono text-neutral-600 mt-0.5 flex items-center gap-2">
+                <span>
+                  Orden cocina <strong className="text-neutral-900">{cmd.orderNumber}</strong>
+                </span>
+                {/* Ticket de cocina: vista previa, JSON e impresión */}
+                <button
+                  onClick={() => setTicketComanda(cmd)}
+                  className="font-sans h-6 px-2 rounded-md border border-neutral-200 bg-white hover:bg-neutral-50 text-[11px] font-semibold text-neutral-700 flex items-center gap-1 cursor-pointer"
+                >
+                  <Printer className="w-3 h-3" /> Ticket
+                </button>
               </div>
             </div>
 
@@ -365,6 +378,10 @@ export const KitchenKdsView: React.FC<KitchenKdsViewProps> = ({
             )}
           </motion.div>
         )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {ticketComanda && <TicketCocinaModal comanda={ticketComanda} onCerrar={() => setTicketComanda(null)} />}
       </AnimatePresence>
     </div>
   );

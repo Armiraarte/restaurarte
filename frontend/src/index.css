@@ -1,6 +1,24 @@
 @import "tailwindcss";
 
 @layer base {
+  /* App de meseros (/tablet): la página nunca hace scroll (100vw × 100vh). */
+  html.app-tablet {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+  html.app-tablet body {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+  /* Menú de la tablet (pantalla de pedido): todo el diseño usa rem, así que este tamaño base escala
+     textos, botones y espacios a la vez para que todo quepa en pantalla. Mesas e inicio de sesión
+     no lo usan y conservan su tamaño normal. Ajusta los tres valores para hacerlo más grande o más chico. */
+  html.app-tablet.app-tablet-menu {
+    font-size: clamp(11px, min(1.55vh, 1.2vw), 15px);
+  }
+
   body {
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }

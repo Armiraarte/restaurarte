@@ -1,20 +1,31 @@
 // App exclusiva de las tablets de los meseros (se abre en /tablet).
 // Más adelante se moverá a su propio proyecto como PWA.
 import React, { useEffect, useState } from 'react';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertTriangle,
-  BellRing,
-  CheckCircle2,
-  LayoutGrid,
+  Eye,
+  EyeOff,
+  Hash,
+  Loader2,
+  Lock,
   LogOut,
+  Minus,
+  Monitor,
   Plus,
   User,
   UtensilsCrossed,
 } from 'lucide-react';
-import { Account, Comanda, Mesa, ProductCatalogItem, TabletDevice } from '../types/pos';
-import { WAITERS_LIST, cuentaDeMesa, etiquetaMesa, posDataService } from '../services/dataService';
-import { AppTabletCuenta, DialogoTipoOrden, SelectorTipoOrden } from './AppTabletCuenta';
+import { Account, ProductCatalogItem, TabletDevice } from '../types/pos';
+import { WAITERS_LIST, posDataService } from '../services/dataService';
+import { AppTabletCuenta, SelectorTipoOrden } from './AppTabletCuenta';
+import { BotonInstalarPwa } from './InstalarPwa';
+import { login, logout as cerrarSesionCuenta, obtenerSesion, Rol, Usuario } from '../services/authService';
+import { salirDeLinea } from '../services/tabletsService';
+import { AvisoVerificacion, useLatidoTablet } from './VerificacionConexion';
+
+// Cuentas que pueden abrir la app de meseros (se crean en Configuración → Usuarios).
+const ROLES_TABLET: Rol[] = ['tablet', 'admin'];
 
 const SESION_KEY = 'tablet_sesion'; // sin prefijo pos_ para no disparar la sincronización
 
@@ -23,7 +34,6 @@ function useDatosPos() {
   useEffect(() => posDataService.subscribe(() => setVersion((v) => v + 1)), []);
   return {
     tablets: posDataService.getTablets(),
-    mesas: posDataService.getMesas(),
     cuentas: posDataService.getOpenAccounts(),
     comandas: posDataService.getComandas(),
     productos: posDataService.getProductos(),
@@ -48,11 +58,28 @@ function guardarSesion(tabletId: string | null) {
 }
 
 export default function AppTablet() {
-  const { tablets, mesas, cuentas, comandas, productos } = useDatosPos();
+  const { tablets, cuentas, productos } = useDatosPos();
   const [tabletId, setTabletId] = useState<string | null>(leerSesion);
+  // Cuenta con la que se inició sesión en esta tablet (usuario y contraseña/PIN del backend).
+  const [cuenta, setCuenta] = useState<Usuario | null>(null);
+  const [verificandoCuenta, setVerificandoCuenta] = useState(true);
+
+  useEffect(() => {
+    obtenerSesion()
+      .then((u) => setCuenta(u && ROLES_TABLET.includes(u.rol) ? u : null))
+      .catch(() => setCuenta(null))
+      .finally(() => setVerificandoCuenta(false));
+  }, []);
 
   const tablet = tablets.find((t) => t.id === tabletId);
   const sesionActiva = tablet && tablet.status === 'conectada';
+
+  // Mientras haya cuenta, la tablet avisa a caja que está en línea y atiende "Verificar conexión".
+  const faseVerificacion = useLatidoTablet(
+    !!cuenta,
+    sesionActiva ? tablet.number : null,
+    sesionActiva ? tablet.assignedWaiter : null,
+  );
 
   const handleLogin = (id: string, mesero: string) => {
     posDataService.tabletLogin(id, mesero);
@@ -66,25 +93,164 @@ export default function AppTablet() {
     setTabletId(null);
   };
 
-  if (!tablet || !sesionActiva) {
-    return <LoginTablet tablets={tablets} onLogin={handleLogin} />;
+  // Cierra la sesión de la cuenta: la tablet vuelve a pedir usuario y contraseña/PIN.
+  const handleCerrarCuenta = () => {
+    handleLogout();
+    salirDeLinea().catch(() => {}); // antes de borrar el token, para que caja deje de verla en línea
+    cerrarSesionCuenta();
+    setCuenta(null);
+  };
+
+  let pantalla: React.ReactNode;
+  if (verificandoCuenta) {
+    pantalla = <div className="h-dvh bg-neutral-100" />;
+  } else if (!cuenta) {
+    pantalla = <LoginCuentaTablet onLogin={setCuenta} />;
+  } else if (!tablet || !sesionActiva) {
+    pantalla = <LoginTablet tablets={tablets} cuenta={cuenta} onLogin={handleLogin} onCerrarCuenta={handleCerrarCuenta} />;
+  } else {
+    pantalla = <PantallaMesero tablet={tablet} cuentas={cuentas} productos={productos} onLogout={handleLogout} />;
   }
 
   return (
-    <PantallaMesero
-      tablet={tablet}
-      mesas={mesas}
-      cuentas={cuentas}
-      comandas={comandas}
-      productos={productos}
-      onLogout={handleLogout}
-    />
+    <>
+      {pantalla}
+      <AvisoVerificacion fase={faseVerificacion} />
+    </>
   );
 }
 
 /* ---------- Inicio de sesión ---------- */
 
-function LoginTablet({ tablets, onLogin }: { tablets: TabletDevice[]; onLogin: (id: string, mesero: string) => void }) {
+/** Paso 1: usuario y contraseña/PIN de una cuenta creada en Configuración → Usuarios. */
+function LoginCuentaTablet({ onLogin }: { onLogin: (u: Usuario) => void }) {
+  const [usuario, setUsuario] = useState('');
+  const [password, setPassword] = useState('');
+  const [mostrar, setMostrar] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [cargando, setCargando] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!usuario.trim() || !password) {
+      setError('Ingresa tu usuario y tu contraseña o PIN.');
+      return;
+    }
+    setCargando(true);
+    setError(null);
+    try {
+      const u = await login(usuario, password);
+      if (!ROLES_TABLET.includes(u.rol)) {
+        cerrarSesionCuenta();
+        throw new Error('Esta cuenta no tiene acceso a la app de meseros.');
+      }
+      onLogin(u);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo iniciar sesión.');
+      setCargando(false);
+    }
+  };
+
+  const claseInput =
+    'w-full h-14 bg-neutral-50 border-2 border-neutral-200 rounded-xl pl-11 pr-4 text-lg text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-amber-400 select-text';
+
+  return (
+    <div className="h-dvh overflow-hidden bg-neutral-100 text-neutral-900 flex items-center justify-center p-4 select-none">
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-md max-h-full overflow-y-auto bg-white border border-neutral-200 rounded-2xl p-6 sm:p-8 space-y-5 shadow-sm"
+      >
+        <div className="flex items-center gap-3">
+          <span className="w-12 h-12 rounded-xl bg-amber-500 flex items-center justify-center">
+            <UtensilsCrossed className="w-6 h-6 text-neutral-950" />
+          </span>
+          <div>
+            <div className="text-2xl font-bold tracking-tight">RESTAURARTE</div>
+            <div className="text-sm text-neutral-500">App de meseros · Iniciar sesión</div>
+          </div>
+        </div>
+
+        <label className="block space-y-2">
+          <span className="text-sm font-semibold text-neutral-700">Usuario</span>
+          <div className="relative">
+            <User className="w-5 h-5 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              value={usuario}
+              onChange={(e) => setUsuario(e.target.value)}
+              autoFocus
+              autoCapitalize="none"
+              autoComplete="username"
+              placeholder="usuario"
+              className={claseInput}
+            />
+          </div>
+        </label>
+
+        <label className="block space-y-2">
+          <span className="text-sm font-semibold text-neutral-700">Contraseña o PIN</span>
+          <div className="relative">
+            <Lock className="w-5 h-5 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type={mostrar ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              placeholder="••••"
+              className={`${claseInput} pr-12`}
+            />
+            <button
+              type="button"
+              onClick={() => setMostrar((v) => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-neutral-500 hover:text-neutral-700 cursor-pointer"
+              aria-label={mostrar ? 'Ocultar' : 'Mostrar'}
+            >
+              {mostrar ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+            </button>
+          </div>
+        </label>
+
+        {error && (
+          <div className="flex items-center gap-2 text-sm text-rose-700 bg-rose-50 border border-rose-200 px-3 py-2 rounded-lg">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            {error}
+          </div>
+        )}
+
+        <button
+          type="submit"
+          disabled={cargando}
+          className="w-full h-14 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-neutral-950 text-lg font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+        >
+          {cargando && <Loader2 className="w-5 h-5 animate-spin" />}
+          {cargando ? 'Verificando…' : 'Entrar'}
+        </button>
+
+        <BotonInstalarPwa nombreApp="de meseros" />
+
+        <a
+          href="/"
+          className="flex items-center justify-center gap-1.5 text-sm text-neutral-500 hover:text-neutral-800 transition-colors"
+        >
+          <Monitor className="w-4 h-4" />
+          Ir al inicio de sesión de caja
+        </a>
+      </form>
+    </div>
+  );
+}
+
+/** Paso 2: con la cuenta ya validada, se elige el número de tablet y el mesero. */
+function LoginTablet({
+  tablets,
+  cuenta,
+  onLogin,
+  onCerrarCuenta,
+}: {
+  tablets: TabletDevice[];
+  cuenta: Usuario;
+  onLogin: (id: string, mesero: string) => void;
+  onCerrarCuenta: () => void;
+}) {
   const [tabletId, setTabletId] = useState(tablets[0]?.id ?? '');
   const [mesero, setMesero] = useState(WAITERS_LIST[0] ?? '');
   const [error, setError] = useState<string | null>(null);
@@ -98,8 +264,8 @@ function LoginTablet({ tablets, onLogin }: { tablets: TabletDevice[]; onLogin: (
   };
 
   return (
-    <div className="min-h-screen bg-neutral-100 text-neutral-900 flex items-center justify-center p-4 select-none">
-      <div className="w-full max-w-lg bg-white border border-neutral-200 rounded-2xl p-6 sm:p-8 space-y-6 shadow-sm">
+    <div className="h-dvh overflow-hidden bg-neutral-100 text-neutral-900 flex items-center justify-center p-4 select-none">
+      <div className="w-full max-w-lg max-h-full overflow-y-auto bg-white border border-neutral-200 rounded-2xl p-6 sm:p-8 space-y-6 shadow-sm">
         <div className="flex items-center gap-3">
           <span className="w-12 h-12 rounded-xl bg-amber-500 flex items-center justify-center">
             <UtensilsCrossed className="w-6 h-6 text-neutral-950" />
@@ -163,6 +329,20 @@ function LoginTablet({ tablets, onLogin }: { tablets: TabletDevice[]; onLogin: (
         >
           Iniciar sesión
         </button>
+
+        <div className="flex items-center justify-between gap-3 pt-1 text-sm text-neutral-500">
+          <span className="truncate">
+            Cuenta: <span className="font-medium text-neutral-800">{cuenta.nombre}</span>
+          </span>
+          <button
+            type="button"
+            onClick={onCerrarCuenta}
+            className="flex items-center gap-1.5 shrink-0 hover:text-rose-700 transition-colors cursor-pointer"
+          >
+            <LogOut className="w-4 h-4" />
+            Cerrar sesión
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -170,344 +350,309 @@ function LoginTablet({ tablets, onLogin }: { tablets: TabletDevice[]; onLogin: (
 
 /* ---------- Pantalla principal del mesero ---------- */
 
-type Pestana = 'mesas' | 'listos';
-
 function PantallaMesero({
   tablet,
-  mesas,
   cuentas,
-  comandas,
   productos,
   onLogout,
 }: {
   tablet: TabletDevice;
-  mesas: Mesa[];
   cuentas: Account[];
-  comandas: Comanda[];
   productos: ProductCatalogItem[];
   onLogout: () => void;
 }) {
-  const [pestana, setPestana] = useState<Pestana>('mesas');
   const [cuentaAbiertaId, setCuentaAbiertaId] = useState<string | null>(null);
-
-  const listos = comandas.filter((c) => c.status === 'lista' && c.sentByTablet === tablet.name);
   const cuentaAbierta = cuentaAbiertaId ? posDataService.getAccountById(cuentaAbiertaId) : undefined;
 
   return (
-    <div className="min-h-screen bg-neutral-100 text-neutral-900 flex flex-col select-none">
-      {/* Encabezado */}
-      <header className="sticky top-0 z-20 bg-white border-b border-neutral-200">
-        <div className="px-4 py-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <span className="w-10 h-10 rounded-lg bg-sky-100 text-sky-800 flex items-center justify-center font-mono font-bold shrink-0">
-              {tablet.number}
+    // Ocupa exactamente la pantalla (100dvh): sin scroll de página; solo se desplaza el recuadro que no quepa.
+    <div className="h-dvh overflow-hidden bg-neutral-100 text-neutral-900 flex flex-col select-none">
+      {/* Encabezado: mesero en sesión.
+          BD: tablets.mesero_id → usuarios.nombre; "Sesión desde" = inicio de la sesión de la tablet. */}
+      <header className="shrink-0 bg-white border-b border-neutral-200">
+        <div className="px-3 py-2 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="w-8 h-8 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
+              <User className="w-4 h-4" />
             </span>
-            <div className="min-w-0">
-              <div className="font-semibold truncate">{tablet.assignedWaiter}</div>
-              <div className="text-xs text-neutral-500">Sesión desde {tablet.sessionStartedAt ?? '—'}</div>
+            <div className="min-w-0 leading-tight">
+              <div className="text-sm font-semibold truncate">{tablet.assignedWaiter}</div>
+              <div className="text-[11px] text-neutral-500">Sesión desde {tablet.sessionStartedAt ?? '—'}</div>
             </div>
           </div>
           <button
             onClick={onLogout}
-            className="h-11 px-4 rounded-xl border border-neutral-200 text-neutral-600 hover:text-rose-700 hover:border-rose-200 flex items-center gap-2 text-sm font-medium cursor-pointer"
+            className="h-9 px-3 rounded-lg border border-neutral-200 text-neutral-600 hover:text-rose-700 hover:border-rose-200 flex items-center gap-1.5 text-xs font-medium cursor-pointer"
           >
             <LogOut className="w-4 h-4" />
             <span className="hidden sm:inline">Cerrar sesión</span>
           </button>
         </div>
-
-        {!cuentaAbierta && (
-          <div className="px-4 pb-3 grid grid-cols-2 gap-2">
-            <BotonPestana activo={pestana === 'mesas'} onClick={() => setPestana('mesas')} icon={LayoutGrid} label="Mesas" color="violet" />
-            <BotonPestana
-              activo={pestana === 'listos'}
-              onClick={() => setPestana('listos')}
-              icon={BellRing}
-              label="Listos para servir"
-              color="emerald"
-              badge={listos.length || undefined}
-            />
-          </div>
-        )}
       </header>
 
-      <main className="flex-1 p-4">
+      <main className="flex-1 min-h-0 p-3">
         {cuentaAbierta ? (
           <AppTabletCuenta
             cuenta={cuentaAbierta}
             origen={tablet}
             productos={productos}
+            pantallaCompleta
             onVolver={() => setCuentaAbiertaId(null)}
           />
-        ) : pestana === 'mesas' ? (
-          <VistaMesas tablet={tablet} mesas={mesas} cuentas={cuentas} onAbrirCuenta={setCuentaAbiertaId} />
         ) : (
-          <VistaListos comandas={listos} />
+          <VistaMesas tablet={tablet} cuentas={cuentas} onAbrirCuenta={setCuentaAbiertaId} />
         )}
       </main>
     </div>
   );
 }
 
-function BotonPestana({
-  activo,
-  onClick,
-  icon: Icon,
-  label,
-  color,
-  badge,
-}: {
-  activo: boolean;
-  onClick: () => void;
-  icon: typeof LayoutGrid;
-  label: string;
-  color: 'violet' | 'emerald';
-  badge?: number;
-}) {
-  const estilos = {
-    violet: activo ? 'bg-violet-100 border-violet-400 text-violet-900' : 'bg-violet-50 border-violet-200 text-violet-800',
-    emerald: activo ? 'bg-emerald-100 border-emerald-400 text-emerald-900' : 'bg-emerald-50 border-emerald-200 text-emerald-800',
-  };
-  return (
-    <button
-      onClick={onClick}
-      className={`relative h-12 rounded-xl border-2 flex items-center justify-center gap-2 font-medium cursor-pointer ${estilos[color]} ${
-        activo ? 'font-semibold' : ''
-      }`}
-    >
-      <Icon className="w-5 h-5" />
-      <span>{label}</span>
-      {badge !== undefined && (
-        <span className="min-w-6 h-6 px-1.5 rounded-full bg-emerald-600 text-white text-xs font-bold flex items-center justify-center">
-          {badge}
-        </span>
-      )}
-    </button>
-  );
-}
-
 /* ---------- Mesas ---------- */
 
+/**
+ * Cuadrícula de cuentas abiertas (por número de mesa y por nombre) + botón "+" para abrir una nueva.
+ *
+ * BD (tabla `cuentas`), una tarjeta por fila con estado <> 'pagada':
+ *   - título          → identificador ("Mesa 7" o "Juan")
+ *   - PARA LLEVAR/... → para_llevar
+ *   - Ocupada/Pedida  → estado ('abierta' | 'cuenta_solicitada')
+ *   - total           → suma de partidas de la cuenta
+ *   - mesero          → mesero_id → usuarios.nombre
+ * Orden: primero las mesas por número (ascendente), después las cuentas por nombre (alfabético).
+ */
 function VistaMesas({
   tablet,
-  mesas,
   cuentas,
   onAbrirCuenta,
 }: {
   tablet: TabletDevice;
-  mesas: Mesa[];
   cuentas: Account[];
   onAbrirCuenta: (accountId: string) => void;
 }) {
-  const [nombre, setNombre] = useState('');
-  const [nombreParaLlevar, setNombreParaLlevar] = useState(false);
-  const [mostrarNombre, setMostrarNombre] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  // Mesa libre tocada: antes de abrirla se pregunta el tipo de orden.
-  const [mesaPorAbrir, setMesaPorAbrir] = useState<Mesa | null>(null);
+  const [nuevaAbierta, setNuevaAbierta] = useState(false);
 
-  const cuentasPorNombre = cuentas.filter((a) => a.identifierType === 'nombre');
+  const abiertas = cuentas.filter((c) => c.status !== 'pagada');
+  const porMesa = abiertas
+    .filter((c) => c.identifierType === 'mesa')
+    .sort((a, b) => (a.tableNumber ?? 0) - (b.tableNumber ?? 0));
+  const porNombre = abiertas
+    .filter((c) => c.identifierType === 'nombre')
+    .sort((a, b) => a.identifier.localeCompare(b.identifier));
+  const tarjetas = [...porMesa, ...porNombre];
 
+  // Siguiente número consecutivo: el mayor número de mesa con cuenta abierta + 1 (o 1 si no hay).
+  // BD: SELECT COALESCE(MAX(numero_mesa), 0) + 1 FROM cuentas WHERE estado <> 'pagada'
+  const siguienteMesa = porMesa.reduce((max, c) => Math.max(max, c.tableNumber ?? 0), 0) + 1;
+
+  // BD: INSERT INTO cuentas (tipo_identificador, identificador, numero_mesa, mesero_id, tablet_id, para_llevar, estado)
+  //     → 'mesa' | 'nombre', "Mesa N" | nombre, N | NULL, mesero en sesión, tablet en sesión, true/false, 'abierta'
   const abrir = (tipo: 'mesa' | 'nombre', identificador: string, paraLlevar: boolean) => {
+    const cuenta = posDataService.simulateIncomingAccount(tipo, identificador, tablet.name, tablet.assignedWaiter, paraLlevar);
+    setNuevaAbierta(false);
+    onAbrirCuenta(cuenta.id);
+  };
+
+  return (
+    <section className="h-full min-h-0 flex flex-col gap-2">
+      <h2 className="shrink-0 text-sm font-bold text-neutral-700">Mesas</h2>
+
+      {/* Si hay más mesas de las que caben, solo esta zona se desplaza (la página no) */}
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 auto-rows-min content-start gap-2">
+        {tarjetas.map((cuenta) => {
+          const pidio = cuenta.status === 'cuenta_solicitada';
+          return (
+            <button
+              key={cuenta.id}
+              onClick={() => onAbrirCuenta(cuenta.id)}
+              className={`min-h-20 rounded-xl border-2 p-2.5 text-left flex flex-col justify-between gap-2 transition-colors cursor-pointer ${
+                pidio ? 'bg-amber-50 border-amber-300' : 'bg-sky-50 border-sky-300'
+              }`}
+            >
+              {/* Título y, en el otro extremo, el tipo de orden (cuentas.para_llevar) */}
+              <div className="flex items-start justify-between gap-1.5">
+                <span className="text-sm font-bold leading-tight break-words min-w-0">{cuenta.identifier}</span>
+                <span
+                  className={`shrink-0 text-[9px] font-black tracking-wider px-1.5 py-0.5 rounded border ${
+                    cuenta.paraLlevar
+                      ? 'bg-violet-100 text-violet-800 border-violet-300'
+                      : 'bg-white text-sky-800 border-sky-200'
+                  }`}
+                >
+                  {cuenta.paraLlevar ? 'PARA LLEVAR' : 'COMER AQUÍ'}
+                </span>
+              </div>
+              <div className="leading-tight">
+                <div className={`text-xs font-medium ${pidio ? 'text-amber-800' : 'text-sky-800'}`}>
+                  {pidio ? 'Cuenta pedida' : 'Ocupada'} · ${cuenta.total.toFixed(2)}
+                </div>
+                <div className="text-[11px] text-neutral-500 truncate">{cuenta.waiterName}</div>
+              </div>
+            </button>
+          );
+        })}
+
+        {/* Abrir una cuenta nueva */}
+        <button
+          onClick={() => setNuevaAbierta(true)}
+          aria-label="Abrir cuenta"
+          title="Abrir cuenta"
+          className="min-h-20 rounded-xl border-2 border-dashed border-neutral-300 bg-white text-neutral-500 hover:border-emerald-400 hover:text-emerald-700 flex items-center justify-center transition-colors cursor-pointer"
+        >
+          <Plus className="w-7 h-7" />
+        </button>
+      </div>
+
+      <AnimatePresence>
+        {nuevaAbierta && (
+          <DialogoNuevaCuenta siguienteMesa={siguienteMesa} onAbrir={abrir} onCancelar={() => setNuevaAbierta(false)} />
+        )}
+      </AnimatePresence>
+    </section>
+  );
+}
+
+type ModoNuevaCuenta = 'nombre' | 'mesa';
+
+/**
+ * Abrir cuenta: dos opciones, "Por nombre" y, justo abajo, "Núm. de mesa".
+ * El número de mesa es libre (cualquier N ≥ 1, sin límite ni lista fija de mesas) y se sugiere el
+ * siguiente consecutivo; así escala a cualquier cantidad de mesas.
+ * BD: no depende de la tabla `mesas`; la cuenta guarda el número (ver comentario de `abrir`).
+ */
+function DialogoNuevaCuenta({
+  siguienteMesa,
+  onAbrir,
+  onCancelar,
+}: {
+  siguienteMesa: number;
+  onAbrir: (tipo: 'mesa' | 'nombre', identificador: string, paraLlevar: boolean) => void;
+  onCancelar: () => void;
+}) {
+  const [modo, setModo] = useState<ModoNuevaCuenta>('mesa');
+  const [nombre, setNombre] = useState('');
+  const [numero, setNumero] = useState(String(siguienteMesa));
+  const [paraLlevar, setParaLlevar] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const numeroMesa = Number(numero);
+  const numeroValido = Number.isInteger(numeroMesa) && numeroMesa >= 1;
+  const listo = modo === 'nombre' ? !!nombre.trim() : numeroValido;
+
+  const cambiarNumero = (delta: number) => setNumero((n) => String(Math.max(1, (Number(n) || 0) + delta)));
+
+  const confirmar = () => {
     try {
-      const cuenta = posDataService.simulateIncomingAccount(
-        tipo,
-        identificador,
-        tablet.name,
-        tablet.assignedWaiter,
-        paraLlevar
-      );
-      setError(null);
-      setNombre('');
-      setNombreParaLlevar(false);
-      setMostrarNombre(false);
-      setMesaPorAbrir(null);
-      onAbrirCuenta(cuenta.id);
+      // "Mesa N" es la misma etiqueta que usa la caja; tableNumber (numero_mesa) se obtiene de N.
+      if (modo === 'mesa') onAbrir('mesa', `Mesa ${numeroMesa}`, paraLlevar);
+      else onAbrir('nombre', nombre, paraLlevar);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo abrir la cuenta.');
     }
   };
 
+  const claseOpcion = (activo: boolean) =>
+    `rounded-xl border-2 p-3 space-y-2 transition-colors cursor-pointer ${
+      activo ? 'border-emerald-400 bg-emerald-50/50' : 'border-neutral-200 bg-white hover:border-neutral-300'
+    }`;
+
   return (
-    <div className="space-y-6">
-      {error && (
-        <div className="flex items-center gap-2 text-sm text-rose-700 bg-rose-50 border border-rose-200 px-3 py-2 rounded-lg">
-          <AlertTriangle className="w-4 h-4 shrink-0" />
-          {error}
-        </div>
-      )}
+    <motion.div
+      className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-black/30"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onCancelar}
+    >
+      <motion.div
+        role="dialog"
+        aria-labelledby="nueva-cuenta-titulo"
+        className="w-full max-w-sm bg-white rounded-2xl shadow-xl p-5 space-y-3 max-h-[90vh] overflow-y-auto"
+        initial={{ scale: 0.95, y: 10 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 id="nueva-cuenta-titulo" className="text-base font-bold">
+          Abrir cuenta
+        </h2>
 
-      <section className="space-y-3">
-        <h2 className="text-lg font-bold">Mesas</h2>
-        {mesas.length === 0 ? (
-          <p className="text-sm text-neutral-500">No hay mesas registradas. Pídelas a caja.</p>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            {mesas.map((mesa) => {
-              const cuenta = cuentaDeMesa(mesa, cuentas);
-              const pidio = cuenta?.status === 'cuenta_solicitada';
-              return (
-                <button
-                  key={mesa.id}
-                  onClick={() => (cuenta ? onAbrirCuenta(cuenta.id) : setMesaPorAbrir(mesa))}
-                  className={`min-h-28 rounded-2xl border-2 p-4 text-left flex flex-col justify-between transition-colors cursor-pointer ${
-                    !cuenta
-                      ? 'bg-white border-neutral-200 hover:border-emerald-300'
-                      : pidio
-                      ? 'bg-amber-50 border-amber-300'
-                      : 'bg-sky-50 border-sky-300'
-                  }`}
-                >
-                  <span className="text-2xl font-bold leading-tight break-words">{etiquetaMesa(mesa)}</span>
-                  {cuenta ? (
-                    <div className="text-sm">
-                      <div className={pidio ? 'text-amber-800 font-medium' : 'text-sky-800 font-medium'}>
-                        {pidio ? 'Cuenta pedida' : 'Ocupada'} · ${cuenta.total.toFixed(2)}
-                      </div>
-                      {cuenta.paraLlevar && (
-                        <span className="text-[10px] font-black tracking-wider px-1.5 py-0.5 rounded bg-violet-100 text-violet-800 border border-violet-300">
-                          PARA LLEVAR
-                        </span>
-                      )}
-                      <div className="text-xs text-neutral-500 truncate">{cuenta.waiterName}</div>
-                    </div>
-                  ) : (
-                    <div className="text-sm text-emerald-700 font-medium flex items-center gap-1">
-                      <Plus className="w-4 h-4" /> Abrir mesa
-                    </div>
-                  )}
-                </button>
-              );
-            })}
+        {/* Opción 1: por nombre (cuentas.tipo_identificador = 'nombre') */}
+        <div className={claseOpcion(modo === 'nombre')} onClick={() => setModo('nombre')}>
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            <User className="w-4 h-4 text-neutral-500" /> Por nombre
           </div>
-        )}
-      </section>
-
-      <section className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-bold">Cuentas por nombre</h2>
-          {!mostrarNombre && (
-            <button
-              onClick={() => setMostrarNombre(true)}
-              className="h-11 px-4 rounded-xl bg-white border border-neutral-200 hover:border-neutral-300 text-sm font-medium flex items-center gap-1.5 cursor-pointer"
-            >
-              <Plus className="w-4 h-4" /> Nueva
-            </button>
-          )}
+          <input
+            value={nombre}
+            onChange={(e) => setNombre(e.target.value)}
+            onFocus={() => setModo('nombre')}
+            placeholder="Nombre del cliente"
+            className="w-full h-10 px-3 rounded-lg border border-neutral-300 bg-white text-sm focus:outline-none focus:border-amber-500 select-text"
+          />
         </div>
 
-        {mostrarNombre && (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              abrir('nombre', nombre, nombreParaLlevar);
-            }}
-            className="grid gap-2 sm:grid-cols-[1fr_auto_auto]"
-          >
-            <input
-              value={nombre}
-              onChange={(e) => setNombre(e.target.value)}
-              autoFocus
-              placeholder="Nombre del cliente"
-              className="flex-1 h-12 px-4 rounded-xl border border-neutral-300 bg-white text-base focus:outline-none focus:border-amber-500 select-text"
-            />
-            <button type="submit" className="h-12 px-5 rounded-xl bg-amber-500 hover:bg-amber-400 font-semibold cursor-pointer">
-              Abrir
-            </button>
+        {/* Opción 2: número de mesa (cuentas.tipo_identificador = 'mesa'), consecutivo y sin límite */}
+        <div className={claseOpcion(modo === 'mesa')} onClick={() => setModo('mesa')}>
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            <Hash className="w-4 h-4 text-neutral-500" /> Núm. de mesa
+          </div>
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setMostrarNombre(false)}
-              className="h-12 px-4 rounded-xl text-neutral-600 hover:bg-neutral-200 cursor-pointer"
+              onClick={() => {
+                setModo('mesa');
+                cambiarNumero(-1);
+              }}
+              aria-label="Mesa anterior"
+              className="w-10 h-10 rounded-lg border border-neutral-300 bg-white flex items-center justify-center cursor-pointer"
             >
-              Cancelar
+              <Minus className="w-4 h-4" />
             </button>
-            <div className="sm:col-span-3">
-              <SelectorTipoOrden paraLlevar={nombreParaLlevar} onChange={setNombreParaLlevar} compacto />
-            </div>
-          </form>
-        )}
+            <input
+              value={numero}
+              onChange={(e) => setNumero(e.target.value.replace(/\D/g, ''))}
+              onFocus={() => setModo('mesa')}
+              inputMode="numeric"
+              aria-label="Número de mesa"
+              className="flex-1 min-w-0 h-10 px-3 rounded-lg border border-neutral-300 bg-white text-center font-mono text-base font-bold focus:outline-none focus:border-amber-500 select-text"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                setModo('mesa');
+                cambiarNumero(1);
+              }}
+              aria-label="Mesa siguiente"
+              className="w-10 h-10 rounded-lg border border-neutral-300 bg-white flex items-center justify-center cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          </div>
+          <p className="text-[11px] text-neutral-500">Siguiente consecutivo: Mesa {siguienteMesa}</p>
+        </div>
 
-        {cuentasPorNombre.length === 0 ? (
-          !mostrarNombre && <p className="text-sm text-neutral-500">No hay cuentas abiertas por nombre.</p>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {cuentasPorNombre.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => onAbrirCuenta(c.id)}
-                className="min-h-16 rounded-2xl border-2 bg-white border-neutral-200 hover:border-sky-300 p-4 text-left flex items-center justify-between gap-3 cursor-pointer"
-              >
-                <span className="font-semibold truncate">
-                  {c.identifier}
-                  {c.paraLlevar && (
-                        <span className="ml-1.5 text-[10px] font-black tracking-wider px-1.5 py-0.5 rounded bg-violet-100 text-violet-800 border border-violet-300">
-                          PARA LLEVAR
-                        </span>
-                      )}
-                </span>
-                <span className="font-mono text-sm text-neutral-600">${c.total.toFixed(2)}</span>
-              </button>
-            ))}
+        {/* cuentas.para_llevar */}
+        <SelectorTipoOrden paraLlevar={paraLlevar} onChange={setParaLlevar} compacto />
+
+        {error && (
+          <div className="flex items-center gap-2 text-xs text-rose-700 bg-rose-50 border border-rose-200 px-3 py-2 rounded-lg">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            {error}
           </div>
         )}
-      </section>
 
-      <AnimatePresence>
-        {mesaPorAbrir && (
-          <DialogoTipoOrden
-            titulo={`Abrir ${etiquetaMesa(mesaPorAbrir)}`}
-            onElegir={(paraLlevar) => abrir('mesa', etiquetaMesa(mesaPorAbrir), paraLlevar)}
-            onCancelar={() => setMesaPorAbrir(null)}
-          />
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-/* ---------- Listos para servir ---------- */
-
-function VistaListos({ comandas }: { comandas: Comanda[] }) {
-  if (comandas.length === 0) {
-    return (
-      <div className="text-center text-neutral-500 py-16">
-        <CheckCircle2 className="w-10 h-10 mx-auto text-neutral-300 mb-2" />
-        No hay pedidos listos por ahora.
-      </div>
-    );
-  }
-
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-      {comandas.map((c) => (
-        <div key={c.id} className="bg-white border-2 border-emerald-200 rounded-2xl p-4 space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xl font-bold">
-              {c.accountIdentifier}
-              {c.paraLlevar && (
-                <span className="ml-2 align-middle text-[10px] font-black tracking-wider px-1.5 py-0.5 rounded bg-violet-100 text-violet-800 border border-violet-300">
-                  PARA LLEVAR
-                </span>
-              )}
-            </span>
-            <span className="text-xs font-mono text-neutral-500">{c.orderNumber}</span>
-          </div>
-          <ul className="text-sm space-y-1">
-            {c.items.map((it) => (
-              <li key={it.id}>
-                <span className="font-semibold">{it.quantity}×</span> {it.productName}
-              </li>
-            ))}
-          </ul>
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={onCancelar} className="h-11 rounded-xl text-sm text-neutral-600 hover:bg-neutral-100 font-medium cursor-pointer">
+            Cancelar
+          </button>
           <button
-            onClick={() => posDataService.kitchenMarkDelivered(c.id)}
-            className="w-full h-12 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold flex items-center justify-center gap-2 cursor-pointer"
+            onClick={confirmar}
+            disabled={!listo}
+            className="h-11 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:bg-neutral-200 disabled:text-neutral-500 disabled:cursor-not-allowed text-sm font-semibold cursor-pointer"
           >
-            <CheckCircle2 className="w-5 h-5" /> Entregado en mesa
+            Abrir
           </button>
         </div>
-      ))}
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
-

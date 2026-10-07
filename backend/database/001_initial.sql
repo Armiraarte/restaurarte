@@ -5,7 +5,7 @@ CREATE TABLE usuarios (
   id text PRIMARY KEY,
   usuario text NOT NULL CHECK (btrim(usuario) <> ''),
   nombre text NOT NULL,
-  rol text NOT NULL CHECK (rol IN ('admin', 'cajero', 'mesero', 'cocina')),
+  rol text NOT NULL CHECK (rol IN ('admin', 'cajero', 'mesero', 'cocina', 'tablet')),
   password_hash text NOT NULL,
   activo boolean NOT NULL DEFAULT true,
   creado_en timestamptz NOT NULL DEFAULT now()

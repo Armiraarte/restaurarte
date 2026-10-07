@@ -166,9 +166,9 @@ export const SimulationPanel: React.FC<SimulationPanelProps> = ({
   };
 
   const handleResetData = () => {
-    if (window.confirm('¿Restablecer el sistema a los datos iniciales de prueba?')) {
-      posDataService.resetToInitialState();
-      showFeedback('✓ Sistema restablecido a datos iniciales de demostración.');
+    if (window.confirm('¿Borrar todos los registros (cuentas, comandas, ventas y turnos)? El menú y las mesas se conservan.')) {
+      posDataService.limpiarRegistros();
+      showFeedback('✓ Registros borrados.');
     }
   };
 
@@ -331,7 +331,7 @@ export const SimulationPanel: React.FC<SimulationPanelProps> = ({
                   className="w-full py-2 text-xs font-medium text-neutral-600 hover:text-neutral-900 bg-neutral-50 border border-neutral-200 hover:bg-neutral-100 rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Restablecer Datos de Demostración</span>
+                  <span>Limpiar todos los registros</span>
                 </button>
               </div>
             </div>

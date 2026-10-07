@@ -14,7 +14,8 @@ export default defineConfig(() => {
     server: {
       // En desarrollo, las llamadas a /api se reenvían al backend.
       proxy: {
-        '/api': process.env.API_URL || 'http://localhost:4000',
+        // xfwd: manda la IP real del dispositivo (X-Forwarded-For); el backend la guarda en tablets.ip.
+        '/api': { target: process.env.API_URL || 'http://localhost:4000', xfwd: true },
       },
     },
   };

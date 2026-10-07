@@ -2,8 +2,17 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>RESTAURARTE</title>
+    <!-- PWA: en /tablet, main.tsx cambia el manifiesto por manifest-tablet.webmanifest -->
+    <link id="manifest" rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#f59e0b" />
+    <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="RESTAURARTE" />
     <meta name="description" content="Sistema principal de caja para restaurante: control de cuentas abiertas, seguimiento de comandas, cobro multimetodo y gestion de turnos de caja." />
     <meta property="og:title" content="RESTAURARTE" />
     <meta property="og:description" content="Sistema principal de caja para restaurante: control de cuentas abiertas, seguimiento de comandas, cobro multimetodo y gestion de turnos de caja." />

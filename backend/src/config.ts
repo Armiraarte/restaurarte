@@ -12,8 +12,14 @@ function leerJwtSecret(): string {
 
 export const config = {
   port: Number(process.env.PORT) || 4000,
+  // Carpeta para los datos que la API guarda en disco (usuarios creados desde Configuración).
+  dataDir: process.env.DATA_DIR || 'data',
   jwtSecret: leerJwtSecret(),
   jwtExpiresIn: (process.env.JWT_EXPIRES_IN || '12h') as `${number}h`,
+  printAgent: {
+    url: (process.env.PRINT_AGENT_URL || 'http://localhost:9101').replace(/\/$/, ''),
+    token: process.env.PRINT_AGENT_TOKEN || '',
+  },
   admin: {
     usuario: process.env.ADMIN_USUARIO || 'admin',
     password: process.env.ADMIN_PASSWORD || 'admin123',

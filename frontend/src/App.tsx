@@ -18,6 +18,7 @@ import { TabletsView } from './componentes/TabletsView';
 import { SimulationPanel } from './componentes/SimulationPanel';
 import { LoginView } from './componentes/LoginView';
 import { MesasView } from './componentes/MesasView';
+import { ConfiguracionView } from './componentes/ConfiguracionView';
 import { InicioView } from './componentes/InicioView';
 import { logout, obtenerSesion, Usuario } from './services/authService';
 
@@ -45,11 +46,25 @@ export default function App() {
     return <LoginView onLoginSuccess={setUsuario} />;
   }
 
+  // Las cuentas de tipo tablet no usan la caja: van a la app de meseros.
+  if (usuario.rol === 'tablet') {
+    window.location.replace('/tablet');
+    return <div className="min-h-screen bg-neutral-100" />;
+  }
+
   return <PosDashboard usuario={usuario} onLogout={handleLogout} />;
 }
 
 function PosDashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () => void }) {
   const [currentTab, setCurrentTab] = useState<MainNavTab>('inicio');
+  // Módulo de configuración (solo admin): se muestra en lugar de la sección actual.
+  const [enConfiguracion, setEnConfiguracion] = useState(false);
+  const verConfiguracion = enConfiguracion && usuario.rol === 'admin';
+
+  const irASeccion = (tab: MainNavTab) => {
+    setEnConfiguracion(false);
+    setCurrentTab(tab);
+  };
 
   // Core state synced with reactive posDataService
   const [openAccounts, setOpenAccounts] = useState<Account[]>([]);
@@ -120,12 +135,17 @@ function PosDashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () =>
   return (
     <div className="min-h-screen bg-neutral-100 text-neutral-900 flex flex-col font-sans selection:bg-amber-500 selection:text-neutral-950">
       {/* 1. Navbar: logo y usuario */}
-      <Header usuario={usuario} onLogout={onLogout} />
+      <Header
+        usuario={usuario}
+        onLogout={onLogout}
+        onOpenConfig={() => setEnConfiguracion((v) => !v)}
+        configActiva={verConfiguracion}
+      />
 
       {/* Secciones: INICIO | COCINA | TABLET | CAJAS | MESAS | COMANDAS */}
       <SeccionesNav
         currentTab={currentTab}
-        onTabChange={setCurrentTab}
+        onTabChange={irASeccion}
         cocinaActiveCount={cocinaActiveCount}
         hasDisconnectedTablet={tablets.some((t) => t.status === 'desconectada')}
         openAccountsCount={openAccounts.length}
@@ -137,7 +157,9 @@ function PosDashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () =>
 
       {/* 2. Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
-        {currentTab === 'inicio' && (
+        {verConfiguracion && <ConfiguracionView onVolver={() => setEnConfiguracion(false)} />}
+
+        {!verConfiguracion && currentTab === 'inicio' && (
           <InicioView
             nombreUsuario={usuario.nombre}
             accounts={openAccounts}
@@ -145,27 +167,28 @@ function PosDashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () =>
             mesas={mesas}
             tablets={tablets}
             currentTurno={currentTurno}
-            onNavigate={setCurrentTab}
+            onNavigate={irASeccion}
             onOpenSimulador={() => setIsSimuladorOpen(true)}
           />
         )}
 
-        {currentTab === 'cocina' && (
+        {!verConfiguracion && currentTab === 'cocina' && (
           <KitchenKdsView
             comandas={comandas}
             onOpenSimulador={() => setIsSimuladorOpen(true)}
           />
         )}
 
-        {currentTab === 'tablets' && (
+        {!verConfiguracion && currentTab === 'tablets' && (
           <TabletsView
             tablets={tablets}
             events={recentEvents}
+            esAdmin={usuario.rol === 'admin'}
             onOpenSimulador={() => setIsSimuladorOpen(true)}
           />
         )}
 
-        {currentTab === 'cajas' && (
+        {!verConfiguracion && currentTab === 'cajas' && (
           <AccountsView
             accounts={openAccounts}
             onSelectAccount={handleSelectAccount}
@@ -174,7 +197,7 @@ function PosDashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () =>
           />
         )}
 
-        {currentTab === 'mesas' && (
+        {!verConfiguracion && currentTab === 'mesas' && (
           <MesasView
             mesas={mesas}
             accounts={openAccounts}
@@ -184,7 +207,7 @@ function PosDashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () =>
           />
         )}
 
-        {currentTab === 'comandas' && (
+        {!verConfiguracion && currentTab === 'comandas' && (
           <ComandasView comandas={comandas} onOpenSimulador={() => setIsSimuladorOpen(true)} />
         )}
 
