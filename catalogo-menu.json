@@ -1,0 +1,570 @@
+{
+  "origen": "frontend/src/services/dataService.ts",
+  "categorias": [
+    "Tacos Dorados",
+    "Tacos",
+    "Quesadillas",
+    "Sopes",
+    "Enchiladas",
+    "Tostadas",
+    "Burritas",
+    "Lonches",
+    "Hamburguesas",
+    "Ensaladas",
+    "Papas a la Francesa",
+    "Alitas",
+    "Salchichas",
+    "Bebidas"
+  ],
+  "productos": [
+    {
+      "id": "p-taco-dorado",
+      "name": "Taco Dorado",
+      "category": "Tacos Dorados",
+      "price": 10,
+      "grupos": [
+        {
+          "nombre": "Relleno",
+          "tipo": "una",
+          "opciones": [
+            "Papa",
+            "Frijol",
+            "Jamón",
+            "Salchicha"
+          ]
+        },
+        {
+          "nombre": "Repollo o lechuga",
+          "tipo": "una",
+          "opciones": [
+            "Repollo",
+            "Lechuga"
+          ],
+          "opcional": true,
+          "conSin": true
+        },
+        {
+          "nombre": "Complementos",
+          "tipo": "varias",
+          "opciones": [
+            "Salsa",
+            "Crema"
+          ],
+          "todasPorDefecto": true
+        }
+      ]
+    },
+    {
+      "id": "p-taco",
+      "name": "Taco",
+      "category": "Tacos",
+      "price": 18,
+      "grupos": [
+        {
+          "nombre": "Carne",
+          "tipo": "una",
+          "opciones": [
+            "Barbacoa",
+            "Chicharrón",
+            "Pollo"
+          ]
+        },
+        {
+          "nombre": "Preparación",
+          "tipo": "una",
+          "opciones": [
+            "Dorado",
+            "Sancochado",
+            "Blandito"
+          ]
+        },
+        {
+          "nombre": "Ingredientes",
+          "tipo": "varias",
+          "opciones": [
+            "Queso",
+            "Cilantro",
+            "Cebolla",
+            "Salsa"
+          ],
+          "todasPorDefecto": true
+        }
+      ]
+    },
+    {
+      "id": "p-quesadilla",
+      "name": "Quesadilla",
+      "category": "Quesadillas",
+      "price": 15,
+      "grupos": [
+        {
+          "nombre": "Relleno",
+          "tipo": "una",
+          "opciones": [
+            "Papa",
+            "Frijol",
+            "Picadillo",
+            "Pollo",
+            "Queso",
+            "Jamón",
+            "Chicharrón",
+            "Jalapeño"
+          ]
+        },
+        {
+          "nombre": "Opción de queso",
+          "tipo": "una",
+          "opciones": [
+            "Con queso",
+            "Sin queso"
+          ]
+        },
+        {
+          "nombre": "Complementos",
+          "tipo": "varias",
+          "opciones": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema"
+          ],
+          "todasPorDefecto": true
+        }
+      ]
+    },
+    {
+      "id": "p-sope",
+      "name": "Sope",
+      "category": "Sopes",
+      "price": 15,
+      "grupos": [
+        {
+          "nombre": "Relleno",
+          "tipo": "una",
+          "opciones": [
+            "Papa",
+            "Frijol",
+            "Picadillo",
+            "Pollo",
+            "Chicharrón"
+          ]
+        },
+        {
+          "nombre": "Complementos",
+          "tipo": "varias",
+          "opciones": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema",
+            "Queso"
+          ],
+          "todasPorDefecto": true
+        }
+      ]
+    },
+    {
+      "id": "p-enchilada",
+      "name": "Enchilada",
+      "category": "Enchiladas",
+      "price": 15,
+      "grupos": [
+        {
+          "nombre": "Relleno",
+          "tipo": "una",
+          "opciones": [
+            "Papa",
+            "Frijol",
+            "Picadillo",
+            "Pollo",
+            "Queso/Cebolla"
+          ]
+        },
+        {
+          "nombre": "Complementos",
+          "tipo": "varias",
+          "opciones": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema",
+            "Queso"
+          ],
+          "todasPorDefecto": true
+        }
+      ]
+    },
+    {
+      "id": "p-tostada",
+      "name": "Tostada",
+      "category": "Tostadas",
+      "price": 15,
+      "grupos": [
+        {
+          "nombre": "Tipo",
+          "tipo": "una",
+          "opciones": [
+            "Frijol",
+            "Jamón",
+            "Pierna",
+            "Pollo",
+            "Mixta",
+            "Cuerito"
+          ]
+        },
+        {
+          "nombre": "Complementos",
+          "tipo": "varias",
+          "opciones": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema",
+            "Queso"
+          ],
+          "todasPorDefecto": true
+        }
+      ]
+    },
+    {
+      "id": "p-burrita",
+      "name": "Burrita",
+      "category": "Burritas",
+      "price": 20,
+      "paquete": {
+        "precios": {
+          "1": 20,
+          "2": 35,
+          "3": 50
+        },
+        "nombrePieza": "Burrita",
+        "nombrePlural": "Burritas"
+      },
+      "grupos": [
+        {
+          "nombre": "Relleno",
+          "tipo": "una",
+          "opciones": [
+            "Pierna",
+            "Chicharrón",
+            "Milanesa"
+          ]
+        },
+        {
+          "nombre": "Ingredientes",
+          "tipo": "varias",
+          "opciones": [
+            "Lechuga",
+            "Jitomate",
+            "Cebolla",
+            "Chile",
+            "Aderezo"
+          ],
+          "todasPorDefecto": true
+        }
+      ]
+    },
+    {
+      "id": "p-lonche",
+      "name": "Lonche",
+      "category": "Lonches",
+      "price": 50,
+      "grupos": [
+        {
+          "nombre": "Tipo",
+          "tipo": "una",
+          "opciones": [
+            "Pierna",
+            "Milanesa",
+            "Jamón",
+            "Barbacoa"
+          ]
+        },
+        {
+          "nombre": "Presentación",
+          "tipo": "una",
+          "opciones": [
+            "Sin papas",
+            "Con papas"
+          ],
+          "precios": {
+            "Sin papas": 50,
+            "Con papas": 80
+          }
+        },
+        {
+          "nombre": "Ingredientes",
+          "tipo": "varias",
+          "opciones": [
+            "Catsup",
+            "Aderezo",
+            "Lechuga",
+            "Jitomate",
+            "Cebolla",
+            "Chile"
+          ],
+          "todasPorDefecto": true
+        }
+      ]
+    },
+    {
+      "id": "p-hamburguesa",
+      "name": "Hamburguesa",
+      "category": "Hamburguesas",
+      "price": 50,
+      "grupos": [
+        {
+          "nombre": "Tipo",
+          "tipo": "una",
+          "opciones": [
+            "Pollo",
+            "Res",
+            "Milanesa"
+          ]
+        },
+        {
+          "nombre": "Presentación",
+          "tipo": "una",
+          "opciones": [
+            "Sola",
+            "Con papas"
+          ],
+          "precios": {
+            "Sola": 50,
+            "Con papas": 80
+          }
+        },
+        {
+          "nombre": "Ingredientes",
+          "tipo": "varias",
+          "opciones": [
+            "Lechuga",
+            "Jitomate",
+            "Cebolla",
+            "Chile",
+            "Catsup"
+          ],
+          "todasPorDefecto": true
+        }
+      ]
+    },
+    {
+      "id": "p-ensalada",
+      "name": "Ensalada",
+      "category": "Ensaladas",
+      "price": 40,
+      "grupos": [
+        {
+          "nombre": "Proteína",
+          "tipo": "una",
+          "opciones": [
+            "Milanesa",
+            "Pollo a la plancha"
+          ]
+        },
+        {
+          "nombre": "Tamaño",
+          "tipo": "una",
+          "opciones": [
+            "Chica",
+            "Grande"
+          ],
+          "precios": {
+            "Chica": 40,
+            "Grande": 70
+          }
+        },
+        {
+          "nombre": "Ingredientes",
+          "tipo": "varias",
+          "opciones": [
+            "Jitomate",
+            "Pepino",
+            "Chile",
+            "Cebolla"
+          ],
+          "todasPorDefecto": true
+        }
+      ]
+    },
+    {
+      "id": "p-papas",
+      "name": "Papas a la Francesa",
+      "category": "Papas a la Francesa",
+      "price": 15,
+      "grupos": [
+        {
+          "nombre": "Presentación",
+          "tipo": "una",
+          "opciones": [
+            "Media orden",
+            "Orden completa"
+          ],
+          "precios": {
+            "Media orden": 15,
+            "Orden completa": 30
+          }
+        }
+      ]
+    },
+    {
+      "id": "p-alitas",
+      "name": "Alitas",
+      "category": "Alitas",
+      "price": 13,
+      "reparto": "Sabor",
+      "grupos": [
+        {
+          "nombre": "Sabor",
+          "tipo": "una",
+          "opciones": [
+            "Mango Habanero",
+            "Buffalo",
+            "BBQ"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "p-salchicha",
+      "name": "Salchicha",
+      "category": "Salchichas",
+      "price": 10,
+      "grupos": [
+        {
+          "nombre": "Presentación",
+          "tipo": "una",
+          "opciones": [
+            "Entera",
+            "Picada"
+          ]
+        },
+        {
+          "nombre": "Complementos",
+          "tipo": "varias",
+          "opciones": [
+            "Repollo",
+            "Salsa",
+            "Crema"
+          ],
+          "todasPorDefecto": true
+        }
+      ]
+    },
+    {
+      "id": "b-agua-lima",
+      "name": "Agua de Lima",
+      "category": "Bebidas",
+      "price": 15,
+      "grupos": [
+        {
+          "nombre": "Tamaño",
+          "tipo": "una",
+          "opciones": [
+            "Chica",
+            "Mediana",
+            "Grande"
+          ],
+          "precios": {
+            "Chica": 15,
+            "Mediana": 20,
+            "Grande": 40
+          }
+        }
+      ]
+    },
+    {
+      "id": "b-pepsi",
+      "name": "Pepsi",
+      "category": "Bebidas",
+      "price": 20
+    },
+    {
+      "id": "b-coca",
+      "name": "Coca-Cola",
+      "category": "Bebidas",
+      "price": 30
+    },
+    {
+      "id": "b-coca-zero",
+      "name": "Coca Zero",
+      "category": "Bebidas",
+      "price": 30
+    },
+    {
+      "id": "b-coca-light",
+      "name": "Coca Light",
+      "category": "Bebidas",
+      "price": 30
+    },
+    {
+      "id": "b-coca-medio",
+      "name": "Coca 1/2",
+      "category": "Bebidas",
+      "price": 25
+    },
+    {
+      "id": "b-mirinda",
+      "name": "Mirinda",
+      "category": "Bebidas",
+      "price": 20
+    },
+    {
+      "id": "b-7up",
+      "name": "7UP",
+      "category": "Bebidas",
+      "price": 20
+    },
+    {
+      "id": "b-jumex-manzana",
+      "name": "Jumex Manzana",
+      "category": "Bebidas",
+      "price": 30
+    },
+    {
+      "id": "b-jumex-durazno",
+      "name": "Jumex Durazno",
+      "category": "Bebidas",
+      "price": 30
+    },
+    {
+      "id": "b-manzanita",
+      "name": "Manzanita",
+      "category": "Bebidas",
+      "price": 20
+    },
+    {
+      "id": "b-limon-cereza",
+      "name": "Limón / Cereza",
+      "category": "Bebidas",
+      "price": 30
+    },
+    {
+      "id": "b-agua-mineral",
+      "name": "Agua Mineral",
+      "category": "Bebidas",
+      "price": 30
+    },
+    {
+      "id": "b-agua-natural",
+      "name": "Agua Natural",
+      "category": "Bebidas",
+      "price": 20
+    },
+    {
+      "id": "b-sangria",
+      "name": "Sangría",
+      "category": "Bebidas",
+      "price": 20
+    }
+  ],
+  "pendientes_menu": [
+    "Alitas: confirmar el segundo sabor (se cargó como \"Buffalo\").",
+    "Quesadillas: confirmar cómo funciona \"OPCIÓN CON QUESO\" (se cargó como Con queso / Sin queso).",
+    "Enchiladas: confirmar si \"Queso/Cebolla\" es queso con cebolla o dos opciones (se dejó literal).",
+    "Coca-Cola: confirmar la presentación de la de $30 junto a Coca Zero y Coca Light.",
+    "Coquita: confirmar si cuesta $20 o $25 (no se cargó).",
+    "Limón / Cereza: confirmar el nombre exacto.",
+    "Bebidas: confirmar a qué producto corresponde la anotación de $50."
+  ]
+}
