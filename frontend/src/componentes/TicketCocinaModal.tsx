@@ -5,6 +5,7 @@ import { AlertTriangle, Braces, CheckCircle2, Loader2, Printer, X } from 'lucide
 import { Comanda } from '../types/pos';
 import { TicketCocina } from '../types/ticketCocina';
 import { construirTicketCocina, imprimirTicketCocina } from '../services/ticketCocinaService';
+import { EncabezadoTicketRestaurante } from './Marca';
 
 const hora = (iso: string) => {
   const d = new Date(iso);
@@ -14,6 +15,7 @@ const hora = (iso: string) => {
 /** El ticket en papel: mismo orden y contenido que backend/src/ticketCocina.ts (lineasTicketCocina). */
 export const TicketCocinaPapel: React.FC<{ ticket: TicketCocina }> = ({ ticket: t }) => (
   <div className="w-[300px] max-w-full mx-auto bg-white text-neutral-950 font-mono text-[13px] leading-snug px-4 py-5 shadow-md border border-neutral-200">
+    <div className="mb-3"><EncabezadoTicketRestaurante /></div>
     <div className="text-center font-bold">COCINA</div>
     <div className="text-center text-2xl font-black uppercase leading-tight break-words">{t.mesa}</div>
     {t.para_llevar && <div className="text-center text-lg font-black">*** PARA LLEVAR ***</div>}

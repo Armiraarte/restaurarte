@@ -84,7 +84,7 @@ export const TabletsEnLineaPanel: React.FC = () => {
                       {t.tablet && <span className="ml-1.5 font-mono text-xs text-neutral-500">#{t.tablet}</span>}
                     </div>
                     <div className="text-xs text-neutral-500 truncate">
-                      {t.conectada ? (t.mesero ? `Mesero: ${t.mesero}` : 'Sin mesero elegido') : 'Sin conexión'}
+                      {t.conectada ? 'En línea' : 'Sin conexión'}
                     </div>
                   </div>
                 </div>

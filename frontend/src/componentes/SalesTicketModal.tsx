@@ -1,6 +1,7 @@
 import React from 'react';
 import { PaymentRecord } from '../types/pos';
 import { Printer, Check, X } from 'lucide-react';
+import { EncabezadoTicketRestaurante } from './Marca';
 
 interface SalesTicketModalProps {
   payment: PaymentRecord | null;
@@ -44,12 +45,7 @@ export const SalesTicketModal: React.FC<SalesTicketModalProps> = ({ payment, onC
           >
             {/* Header info */}
             <div className="text-center pb-3 border-b border-dashed border-neutral-400">
-              <h3 className="text-base font-bold tracking-tight text-neutral-950">
-                RESTAURANTE EL ASADOR
-              </h3>
-              <p className="text-[10px] text-neutral-600">RFC: REA-220419-8K2</p>
-              <p className="text-[10px] text-neutral-600">Av. Insurgentes Sur 1480, CDMX</p>
-              <p className="text-[10px] text-neutral-600">Tel: (55) 5589-3200</p>
+              <EncabezadoTicketRestaurante />
               <div className="mt-2 text-[11px] font-bold">
                 TICKET DE VENTA: {payment.ticketNumber}
               </div>
@@ -179,7 +175,6 @@ export const SalesTicketModal: React.FC<SalesTicketModalProps> = ({ payment, onC
             <div className="text-center pt-3 text-[10px] text-neutral-600 space-y-1">
               <p>Mesa liberada correctamente.</p>
               <p className="font-bold text-neutral-900">¡GRACIAS POR SU PREFERENCIA!</p>
-              <p className="text-[9px] text-neutral-400 mt-2">www.elasador.com.mx</p>
             </div>
           </div>
         </div>

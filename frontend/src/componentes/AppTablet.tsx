@@ -1,6 +1,6 @@
 // App exclusiva de las tablets de los meseros (se abre en /tablet).
 // Más adelante se moverá a su propio proyecto como PWA.
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertTriangle,
@@ -14,15 +14,20 @@ import {
   Monitor,
   Plus,
   User,
-  UtensilsCrossed,
 } from 'lucide-react';
 import { Account, ProductCatalogItem, TabletDevice } from '../types/pos';
-import { WAITERS_LIST, posDataService } from '../services/dataService';
-import { AppTabletCuenta, SelectorTipoOrden } from './AppTabletCuenta';
+import { posDataService } from '../services/dataService';
+import { SelectorTipoOrden } from './AppTabletCuenta';
+import { PedidoOrden } from './PedidoOrden';
 import { BotonInstalarPwa } from './InstalarPwa';
 import { login, logout as cerrarSesionCuenta, obtenerSesion, Rol, Usuario } from '../services/authService';
 import { salirDeLinea } from '../services/tabletsService';
+import { esOrdenActiva, etiquetaMesaRegistrada, listarMesasTurno, MesaRegistrada, registrarMesa } from '../services/mesasService';
+import { useEnVivo } from '../services/enVivo';
+import { cerrarSesionTablet, iniciarSesionTablet, SinTurnoError } from '../services/turnosService';
+import { IndicadorTurno } from './IndicadorTurno';
 import { AvisoVerificacion, useLatidoTablet } from './VerificacionConexion';
+import { LogoRestaurante, MarcaDeAgua } from './Marca';
 
 // Cuentas que pueden abrir la app de meseros (se crean en Configuración → Usuarios).
 const ROLES_TABLET: Rol[] = ['tablet', 'admin'];
@@ -64,28 +69,83 @@ export default function AppTablet() {
   const [cuenta, setCuenta] = useState<Usuario | null>(null);
   const [verificandoCuenta, setVerificandoCuenta] = useState(true);
 
+  // Si el servidor no responde al abrir (se reinició, Wi-Fi inestable), NO se pierde la sesión:
+  // se sigue en «verificando» y se reintenta cada 3 s. Solo un 401 (sesión inválida) manda al login.
   useEffect(() => {
-    obtenerSesion()
-      .then((u) => setCuenta(u && ROLES_TABLET.includes(u.rol) ? u : null))
-      .catch(() => setCuenta(null))
-      .finally(() => setVerificandoCuenta(false));
+    let cancelado = false;
+    let reintento: ReturnType<typeof setTimeout>;
+    const verificar = () =>
+      obtenerSesion()
+        .then((u) => {
+          if (cancelado) return;
+          setCuenta(u && ROLES_TABLET.includes(u.rol) ? u : null);
+          setVerificandoCuenta(false);
+        })
+        .catch(() => {
+          if (!cancelado) reintento = setTimeout(verificar, 3_000);
+        });
+    verificar();
+    return () => {
+      cancelado = true;
+      clearTimeout(reintento);
+    };
   }, []);
 
   const tablet = tablets.find((t) => t.id === tabletId);
   const sesionActiva = tablet && tablet.status === 'conectada';
 
   // Mientras haya cuenta, la tablet avisa a caja que está en línea y atiende "Verificar conexión".
-  const faseVerificacion = useLatidoTablet(
-    !!cuenta,
-    sesionActiva ? tablet.number : null,
-    sesionActiva ? tablet.assignedWaiter : null,
-  );
+  const faseVerificacion = useLatidoTablet(!!cuenta, sesionActiva ? tablet.number : null, null);
 
-  const handleLogin = (id: string, mesero: string) => {
-    posDataService.tabletLogin(id, mesero);
-    guardarSesion(id);
-    setTabletId(id);
-  };
+  // Al iniciar sesión con la cuenta, la tablet entra directo: su número sale de la cuenta (tablets.numero)
+  // y quien atiende es la propia tablet ("Tablet 01"); ya no se elige mesero.
+  const tabletDeCuenta = cuenta ? `tablet-${String(Number(cuenta.tablet?.numero) || 1).padStart(2, '0')}` : null;
+  const listo = !!tablet && !!sesionActiva && tablet.id === tabletDeCuenta && tablet.assignedWaiter === cuenta?.nombre;
+
+  // Al iniciar sesión, la tablet abre su sesión dentro del turno de caja (BD: sesiones_tablet).
+  // Si la caja aún no inicia turno, espera y reintenta.
+  const [turno, setTurno] = useState<'pendiente' | 'ok' | 'sinTurno' | 'error'>('pendiente');
+  const [errorTurno, setErrorTurno] = useState<string | null>(null);
+  const abrirSesionTurno = useCallback(async () => {
+    try {
+      await iniciarSesionTablet();
+      setTurno('ok');
+      setErrorTurno(null);
+    } catch (err) {
+      setTurno(err instanceof SinTurnoError ? 'sinTurno' : 'error');
+      setErrorTurno(err instanceof Error ? err.message : 'No se pudo iniciar la sesión de la tablet.');
+    }
+  }, []);
+  useEffect(() => {
+    if (!cuenta) {
+      setTurno('pendiente');
+      return;
+    }
+    // Un administrador puede usar la app de meseros sin tablet propia: no abre sesión de tablet.
+    if (cuenta.rol === 'admin') {
+      setTurno('ok');
+      return;
+    }
+    abrirSesionTurno();
+  }, [cuenta, abrirSesionTurno]);
+  useEffect(() => {
+    if (turno !== 'sinTurno' && turno !== 'error') return;
+    const id = setInterval(abrirSesionTurno, 10_000);
+    return () => clearInterval(id);
+  }, [turno, abrirSesionTurno]);
+  // Al iniciar o cerrar el turno (corte) la tablet vuelve a revisar su sesión al momento:
+  // si se cerró, pasa a «Esperando a que caja inicie turno»; si se abrió, entra sola.
+  useEnVivo(['turno'], () => {
+    if (cuenta && cuenta.rol !== 'admin') abrirSesionTurno();
+  });
+
+  useEffect(() => {
+    if (!cuenta || listo) return;
+    const t = posDataService.asegurarTablet(cuenta.tablet?.numero ?? '01');
+    posDataService.tabletLogin(t.id, cuenta.nombre);
+    guardarSesion(t.id);
+    setTabletId(t.id);
+  }, [cuenta, listo]);
 
   const handleLogout = () => {
     if (tablet) posDataService.tabletLogout(tablet.id);
@@ -97,26 +157,54 @@ export default function AppTablet() {
   const handleCerrarCuenta = () => {
     handleLogout();
     salirDeLinea().catch(() => {}); // antes de borrar el token, para que caja deje de verla en línea
+    cerrarSesionTablet().catch(() => {}); // cierra su sesión del turno (BD: sesiones_tablet.cerrada_en)
     cerrarSesionCuenta();
     setCuenta(null);
   };
 
   let pantalla: React.ReactNode;
   if (verificandoCuenta) {
-    pantalla = <div className="h-dvh bg-neutral-100" />;
+    pantalla = <div className="h-dvh" />;
   } else if (!cuenta) {
     pantalla = <LoginCuentaTablet onLogin={setCuenta} />;
-  } else if (!tablet || !sesionActiva) {
-    pantalla = <LoginTablet tablets={tablets} cuenta={cuenta} onLogin={handleLogin} onCerrarCuenta={handleCerrarCuenta} />;
+  } else if (turno === 'sinTurno' || turno === 'error') {
+    pantalla = (
+      <div className="h-dvh flex items-center justify-center p-4">
+        <div className="w-full max-w-sm bg-white border border-neutral-200 rounded-2xl p-6 text-center space-y-4 shadow-sm">
+          <Loader2 className="w-8 h-8 mx-auto text-amber-500 animate-spin" />
+          <div className="text-lg font-bold">{turno === 'sinTurno' ? 'Esperando a que caja inicie turno' : 'No se pudo iniciar sesión'}</div>
+          <p className="text-sm text-neutral-500">
+            {turno === 'sinTurno'
+              ? 'La tablet entra en cuanto se inicie sesión en la caja. Se vuelve a intentar sola.'
+              : errorTurno}
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={abrirSesionTurno} className="h-11 rounded-xl bg-amber-500 hover:bg-amber-400 text-sm font-semibold cursor-pointer">
+              Reintentar
+            </button>
+            <button onClick={handleCerrarCuenta} className="h-11 rounded-xl bg-red-600 hover:bg-red-700 border border-red-700 text-sm font-semibold text-white cursor-pointer">
+              Cerrar sesión
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  } else if (!listo || !tablet || turno !== 'ok') {
+    pantalla = <div className="h-dvh" />;
   } else {
-    pantalla = <PantallaMesero tablet={tablet} cuentas={cuentas} productos={productos} onLogout={handleLogout} />;
+    // Cerrar sesión en la tablet cierra la cuenta: vuelve a pedir usuario y contraseña/PIN.
+    pantalla = (
+      <PantallaMesero nombreTablet={cuenta.nombre} tablet={tablet} cuentas={cuentas} productos={productos} onLogout={handleCerrarCuenta} />
+    );
   }
 
   return (
-    <>
-      {pantalla}
+    // Cristal: las tarjetas son translúcidas y dejan ver el logo de la cenaduría del fondo.
+    <div className="cristal relative h-dvh overflow-hidden bg-neutral-100">
+      <MarcaDeAgua destacada={!cuenta} />
+      <div className="relative z-10 h-full">{pantalla}</div>
       <AvisoVerificacion fase={faseVerificacion} />
-    </>
+    </div>
   );
 }
 
@@ -152,22 +240,17 @@ function LoginCuentaTablet({ onLogin }: { onLogin: (u: Usuario) => void }) {
   };
 
   const claseInput =
-    'w-full h-14 bg-neutral-50 border-2 border-neutral-200 rounded-xl pl-11 pr-4 text-lg text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-amber-400 select-text';
+    'w-full h-14 bg-white/60 border-2 border-neutral-200 rounded-xl pl-11 pr-4 text-lg text-neutral-900 placeholder:text-neutral-500 focus:outline-none focus:border-amber-400 select-text';
 
   return (
-    <div className="h-dvh overflow-hidden bg-neutral-100 text-neutral-900 flex items-center justify-center p-4 select-none">
+    <div className="h-dvh overflow-hidden text-neutral-900 flex items-center justify-center p-4 select-none">
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-md max-h-full overflow-y-auto bg-white border border-neutral-200 rounded-2xl p-6 sm:p-8 space-y-5 shadow-sm"
+        className="w-full max-w-md max-h-full overflow-y-auto bg-white/15 border border-white/60 rounded-2xl p-6 sm:p-8 space-y-5 shadow-lg shadow-infernal/10"
       >
-        <div className="flex items-center gap-3">
-          <span className="w-12 h-12 rounded-xl bg-amber-500 flex items-center justify-center">
-            <UtensilsCrossed className="w-6 h-6 text-neutral-950" />
-          </span>
-          <div>
-            <div className="text-2xl font-bold tracking-tight">RESTAURARTE</div>
-            <div className="text-sm text-neutral-500">App de meseros · Iniciar sesión</div>
-          </div>
+        <div className="space-y-3 text-center">
+          <LogoRestaurante className="mx-auto w-full max-w-[320px]" />
+          <h1 className="text-sm font-semibold text-infernal">App de meseros · Iniciar sesión</h1>
         </div>
 
         <label className="block space-y-2">
@@ -239,170 +322,118 @@ function LoginCuentaTablet({ onLogin }: { onLogin: (u: Usuario) => void }) {
   );
 }
 
-/** Paso 2: con la cuenta ya validada, se elige el número de tablet y el mesero. */
-function LoginTablet({
-  tablets,
-  cuenta,
-  onLogin,
-  onCerrarCuenta,
-}: {
-  tablets: TabletDevice[];
-  cuenta: Usuario;
-  onLogin: (id: string, mesero: string) => void;
-  onCerrarCuenta: () => void;
-}) {
-  const [tabletId, setTabletId] = useState(tablets[0]?.id ?? '');
-  const [mesero, setMesero] = useState(WAITERS_LIST[0] ?? '');
-  const [error, setError] = useState<string | null>(null);
-
-  const entrar = () => {
-    try {
-      onLogin(tabletId, mesero);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo iniciar sesión.');
-    }
-  };
-
-  return (
-    <div className="h-dvh overflow-hidden bg-neutral-100 text-neutral-900 flex items-center justify-center p-4 select-none">
-      <div className="w-full max-w-lg max-h-full overflow-y-auto bg-white border border-neutral-200 rounded-2xl p-6 sm:p-8 space-y-6 shadow-sm">
-        <div className="flex items-center gap-3">
-          <span className="w-12 h-12 rounded-xl bg-amber-500 flex items-center justify-center">
-            <UtensilsCrossed className="w-6 h-6 text-neutral-950" />
-          </span>
-          <div>
-            <div className="text-2xl font-bold tracking-tight">RESTAURARTE</div>
-            <div className="text-sm text-neutral-500">App de meseros</div>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <div className="text-sm font-semibold text-neutral-700">Tablet</div>
-          <div className="grid grid-cols-4 gap-2">
-            {tablets.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setTabletId(t.id)}
-                className={`h-16 rounded-xl border-2 font-mono text-xl font-bold transition-colors cursor-pointer ${
-                  tabletId === t.id
-                    ? 'bg-sky-100 border-sky-400 text-sky-900'
-                    : 'bg-neutral-50 border-neutral-200 text-neutral-700 hover:bg-neutral-100'
-                }`}
-              >
-                {t.number}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <div className="text-sm font-semibold text-neutral-700">Mesero</div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {WAITERS_LIST.map((w) => (
-              <button
-                key={w}
-                onClick={() => setMesero(w)}
-                className={`h-14 px-4 rounded-xl border-2 flex items-center gap-2 text-left font-medium transition-colors cursor-pointer ${
-                  mesero === w
-                    ? 'bg-sky-100 border-sky-400 text-sky-900'
-                    : 'bg-neutral-50 border-neutral-200 text-neutral-700 hover:bg-neutral-100'
-                }`}
-              >
-                <User className="w-5 h-5 shrink-0" />
-                <span className="truncate">{w}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {error && (
-          <div className="flex items-center gap-2 text-sm text-rose-700 bg-rose-50 border border-rose-200 px-3 py-2 rounded-lg">
-            <AlertTriangle className="w-4 h-4 shrink-0" />
-            {error}
-          </div>
-        )}
-
-        <button
-          onClick={entrar}
-          disabled={!tabletId || !mesero}
-          className="w-full h-14 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-neutral-950 text-lg font-semibold transition-colors cursor-pointer"
-        >
-          Iniciar sesión
-        </button>
-
-        <div className="flex items-center justify-between gap-3 pt-1 text-sm text-neutral-500">
-          <span className="truncate">
-            Cuenta: <span className="font-medium text-neutral-800">{cuenta.nombre}</span>
-          </span>
-          <button
-            type="button"
-            onClick={onCerrarCuenta}
-            className="flex items-center gap-1.5 shrink-0 hover:text-rose-700 transition-colors cursor-pointer"
-          >
-            <LogOut className="w-4 h-4" />
-            Cerrar sesión
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ---------- Pantalla principal del mesero ---------- */
 
 function PantallaMesero({
+  nombreTablet,
   tablet,
   cuentas,
   productos,
   onLogout,
 }: {
+  /** Nombre de la cuenta de la tablet ("Tablet 01"). */
+  nombreTablet: string;
   tablet: TabletDevice;
   cuentas: Account[];
   productos: ProductCatalogItem[];
   onLogout: () => void;
 }) {
-  const [cuentaAbiertaId, setCuentaAbiertaId] = useState<string | null>(null);
-  const cuentaAbierta = cuentaAbiertaId ? posDataService.getAccountById(cuentaAbiertaId) : undefined;
+  // Orden abierta en pantalla (BD: orden.idOrden); su pedido se toma con PedidoOrden.
+  const [ordenAbierta, setOrdenAbierta] = useState<number | null>(null);
+  const [agregandoMesa, setAgregandoMesa] = useState(false);
+
+  // Órdenes activas (ABIERTA o PAGANDO) del turno abierto: es lo único que se dibuja; las cobradas van a Ventas.
+  const [mesas, setMesas] = useState<MesaRegistrada[] | null>(null);
+  const [errorMesas, setErrorMesas] = useState<string | null>(null);
+  const cargarMesas = useCallback(async () => {
+    try {
+      setMesas((await listarMesasTurno()).mesas.filter(esOrdenActiva));
+      setErrorMesas(null);
+    } catch (err) {
+      setErrorMesas(err instanceof Error ? err.message : 'No se pudieron cargar las mesas.');
+    }
+  }, []);
+  useEffect(() => {
+    cargarMesas();
+    // Respaldo: se vuelve a leer cada pocos segundos (lo normal es el aviso en vivo de abajo).
+    const id = setInterval(cargarMesas, 5_000);
+    return () => clearInterval(id);
+  }, [cargarMesas]);
+  useEnVivo(['ordenes'], cargarMesas);
+
+  // Siguiente número consecutivo: el mayor número de mesa activa en el turno + 1 (o 1 si no hay).
+  const siguienteMesa = (mesas ?? []).reduce((max, m) => (/^\d+$/.test(m.nombre) ? Math.max(max, Number(m.nombre)) : max), 0) + 1;
+
+  // "Agregar mesa": se registra en la base (en el turno abierto) y se abre su pedido.
+  const abrirCuenta = async (_tipo: 'mesa' | 'nombre', identificador: string, paraLlevar: boolean) => {
+    const { mesa } = await registrarMesa(identificador, paraLlevar);
+    setAgregandoMesa(false);
+    setOrdenAbierta(mesa.id);
+    cargarMesas();
+  };
+
+  const abrirMesaRegistrada = (mesa: MesaRegistrada) => setOrdenAbierta(mesa.id);
 
   return (
     // Ocupa exactamente la pantalla (100dvh): sin scroll de página; solo se desplaza el recuadro que no quepa.
-    <div className="h-dvh overflow-hidden bg-neutral-100 text-neutral-900 flex flex-col select-none">
-      {/* Encabezado: mesero en sesión.
-          BD: tablets.mesero_id → usuarios.nombre; "Sesión desde" = inicio de la sesión de la tablet. */}
-      <header className="shrink-0 bg-white border-b border-neutral-200">
-        <div className="px-3 py-2 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="w-8 h-8 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
-              <User className="w-4 h-4" />
+    <div className="h-dvh overflow-hidden text-neutral-900 flex flex-col select-none">
+      {/* Encabezado: nombre de la tablet (cuenta con la que inició sesión).
+          BD: usuarios.nombre = tablets.nombre ("Tablet 01"). */}
+      {/* Medidas en px (no rem): la pantalla de pedido escala el texto con rem y el encabezado no debe cambiar de tamaño. */}
+      <header className="shrink-0 h-[80px] bg-white border-b border-neutral-200">
+        <div className="h-full px-[16px] flex items-center justify-between gap-[12px]">
+          <div className="flex items-center gap-[12px] min-w-0">
+            <span className="w-[44px] h-[44px] rounded-full bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
+              <User className="w-[24px] h-[24px]" />
             </span>
             <div className="min-w-0 leading-tight">
-              <div className="text-sm font-semibold truncate">{tablet.assignedWaiter}</div>
-              <div className="text-[11px] text-neutral-500">Sesión desde {tablet.sessionStartedAt ?? '—'}</div>
+              <div className="text-[18px] font-bold truncate">{nombreTablet}</div>
+              <IndicadorTurno fijo className="mt-[8px]" />
             </div>
           </div>
-          <button
-            onClick={onLogout}
-            className="h-9 px-3 rounded-lg border border-neutral-200 text-neutral-600 hover:text-rose-700 hover:border-rose-200 flex items-center gap-1.5 text-xs font-medium cursor-pointer"
-          >
-            <LogOut className="w-4 h-4" />
-            <span className="hidden sm:inline">Cerrar sesión</span>
-          </button>
+          <div className="flex items-center gap-[8px] shrink-0">
+            {/* Agregar mesa (o cuenta a nombre de un cliente) */}
+            <button
+              onClick={() => setAgregandoMesa(true)}
+              className="neon-solido neon-fresco h-[56px] px-[24px] rounded-[12px] flex items-center gap-[8px] text-[18px] font-bold cursor-pointer"
+            >
+              <Plus className="w-[24px] h-[24px]" />
+              Agregar orden
+            </button>
+            <button
+              onClick={onLogout}
+              aria-label="Cerrar sesión"
+              className="h-[56px] px-[16px] rounded-[12px] bg-red-600 hover:bg-red-700 border border-red-700 text-white flex items-center gap-[8px] text-[14px] font-semibold cursor-pointer"
+            >
+              <LogOut className="w-[20px] h-[20px]" />
+              <span className="hidden sm:inline">Cerrar sesión</span>
+            </button>
+          </div>
         </div>
       </header>
 
       <main className="flex-1 min-h-0 p-3">
-        {cuentaAbierta ? (
-          <AppTabletCuenta
-            cuenta={cuentaAbierta}
-            origen={tablet}
-            productos={productos}
+        {ordenAbierta !== null ? (
+          // Pedido desde la base: menú (producto), envío a cocina (orden_has_detalle) y total.
+          <PedidoOrden
+            idOrden={ordenAbierta}
+            origen={nombreTablet}
             pantallaCompleta
-            onVolver={() => setCuentaAbiertaId(null)}
+            onVolver={() => {
+              setOrdenAbierta(null);
+              cargarMesas();
+            }}
           />
         ) : (
-          <VistaMesas tablet={tablet} cuentas={cuentas} onAbrirCuenta={setCuentaAbiertaId} />
+          <VistaMesas mesas={mesas} error={errorMesas} onAbrir={abrirMesaRegistrada} />
         )}
       </main>
+
+      <AnimatePresence>
+        {agregandoMesa && (
+          <DialogoNuevaCuenta siguienteMesa={siguienteMesa} onAbrir={abrirCuenta} onCancelar={() => setAgregandoMesa(false)} />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -410,103 +441,75 @@ function PantallaMesero({
 /* ---------- Mesas ---------- */
 
 /**
- * Cuadrícula de cuentas abiertas (por número de mesa y por nombre) + botón "+" para abrir una nueva.
- *
- * BD (tabla `cuentas`), una tarjeta por fila con estado <> 'pagada':
- *   - título          → identificador ("Mesa 7" o "Juan")
- *   - PARA LLEVAR/... → para_llevar
- *   - Ocupada/Pedida  → estado ('abierta' | 'cuenta_solicitada')
- *   - total           → suma de partidas de la cuenta
- *   - mesero          → mesero_id → usuarios.nombre
- * Orden: primero las mesas por número (ascendente), después las cuentas por nombre (alfabético).
+ * Cuadrícula de las mesas registradas en la base (tabla `mesas`) en el turno abierto (mesas.turno_id).
+ * Se agregan con "Agregar mesa" del encabezado. Por tarjeta:
+ *   - título          → mesas.codigo ("5" se muestra "Mesa 5"; un nombre tal cual)
+ *   - PARA LLEVAR/... → mesas.tipo_venta_id (2 = para llevar)
+ *   - estado y total  → del pedido de esta tablet si ya lo tiene; si no, mesas.total
+ * Orden: el que manda la base (números de menor a mayor, después nombres).
  */
 function VistaMesas({
-  tablet,
-  cuentas,
-  onAbrirCuenta,
+  mesas,
+  error,
+  onAbrir,
 }: {
-  tablet: TabletDevice;
-  cuentas: Account[];
-  onAbrirCuenta: (accountId: string) => void;
+  mesas: MesaRegistrada[] | null;
+  error: string | null;
+  onAbrir: (mesa: MesaRegistrada) => void;
 }) {
-  const [nuevaAbierta, setNuevaAbierta] = useState(false);
-
-  const abiertas = cuentas.filter((c) => c.status !== 'pagada');
-  const porMesa = abiertas
-    .filter((c) => c.identifierType === 'mesa')
-    .sort((a, b) => (a.tableNumber ?? 0) - (b.tableNumber ?? 0));
-  const porNombre = abiertas
-    .filter((c) => c.identifierType === 'nombre')
-    .sort((a, b) => a.identifier.localeCompare(b.identifier));
-  const tarjetas = [...porMesa, ...porNombre];
-
-  // Siguiente número consecutivo: el mayor número de mesa con cuenta abierta + 1 (o 1 si no hay).
-  // BD: SELECT COALESCE(MAX(numero_mesa), 0) + 1 FROM cuentas WHERE estado <> 'pagada'
-  const siguienteMesa = porMesa.reduce((max, c) => Math.max(max, c.tableNumber ?? 0), 0) + 1;
-
-  // BD: INSERT INTO cuentas (tipo_identificador, identificador, numero_mesa, mesero_id, tablet_id, para_llevar, estado)
-  //     → 'mesa' | 'nombre', "Mesa N" | nombre, N | NULL, mesero en sesión, tablet en sesión, true/false, 'abierta'
-  const abrir = (tipo: 'mesa' | 'nombre', identificador: string, paraLlevar: boolean) => {
-    const cuenta = posDataService.simulateIncomingAccount(tipo, identificador, tablet.name, tablet.assignedWaiter, paraLlevar);
-    setNuevaAbierta(false);
-    onAbrirCuenta(cuenta.id);
-  };
-
   return (
     <section className="h-full min-h-0 flex flex-col gap-2">
-      <h2 className="shrink-0 text-sm font-bold text-neutral-700">Mesas</h2>
+      <h2 className="shrink-0 text-sm font-bold text-neutral-700">Órdenes</h2>
+
+      {error && (
+        <div className="shrink-0 flex items-center gap-2 text-sm text-rose-700 bg-rose-50 border border-rose-200 px-3 py-2 rounded-lg">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          {error}
+        </div>
+      )}
+      {mesas === null && !error && (
+        <div className="py-8 flex justify-center text-neutral-400">
+          <Loader2 className="w-5 h-5 animate-spin" />
+        </div>
+      )}
+      {mesas?.length === 0 && (
+        <p className="text-sm text-neutral-500">No hay órdenes en este turno. Toca «Agregar orden» para abrir una.</p>
+      )}
 
       {/* Si hay más mesas de las que caben, solo esta zona se desplaza (la página no) */}
       <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 auto-rows-min content-start gap-2">
-        {tarjetas.map((cuenta) => {
-          const pidio = cuenta.status === 'cuenta_solicitada';
+        {(mesas ?? []).map((mesa) => {
+          const titulo = etiquetaMesaRegistrada(mesa);
+          const paraLlevar = mesa.tipo_venta_id === 2;
+          // BD: orden.total (suma de orden_has_detalle).
+          const total = Number(mesa.total);
+          const pidio = mesa.estatus === 1; // orden.estatus 1 = PAGANDO (pidió la cuenta)
           return (
             <button
-              key={cuenta.id}
-              onClick={() => onAbrirCuenta(cuenta.id)}
-              className={`min-h-20 rounded-xl border-2 p-2.5 text-left flex flex-col justify-between gap-2 transition-colors cursor-pointer ${
-                pidio ? 'bg-amber-50 border-amber-300' : 'bg-sky-50 border-sky-300'
-              }`}
+              key={mesa.id}
+              onClick={() => onAbrir(mesa)}
+              className={`neon ${pidio ? 'neon-fuego' : 'neon-cian'} min-h-20 rounded-xl border-2 p-2.5 text-left flex flex-col justify-between gap-2 cursor-pointer`}
             >
-              {/* Título y, en el otro extremo, el tipo de orden (cuentas.para_llevar) */}
+              {/* Título y, en el otro extremo, el tipo de venta (mesas.tipo_venta_id) */}
               <div className="flex items-start justify-between gap-1.5">
-                <span className="text-sm font-bold leading-tight break-words min-w-0">{cuenta.identifier}</span>
+                <span className="text-sm font-bold leading-tight break-words min-w-0">{titulo}</span>
                 <span
                   className={`shrink-0 text-[9px] font-black tracking-wider px-1.5 py-0.5 rounded border ${
-                    cuenta.paraLlevar
-                      ? 'bg-violet-100 text-violet-800 border-violet-300'
-                      : 'bg-white text-sky-800 border-sky-200'
+                    paraLlevar ? 'bg-violet-100 text-violet-800 border-violet-300' : 'bg-white text-sky-800 border-sky-200'
                   }`}
                 >
-                  {cuenta.paraLlevar ? 'PARA LLEVAR' : 'COMER AQUÍ'}
+                  {paraLlevar ? 'PARA LLEVAR' : 'COMER AQUÍ'}
                 </span>
               </div>
               <div className="leading-tight">
                 <div className={`text-xs font-medium ${pidio ? 'text-amber-800' : 'text-sky-800'}`}>
-                  {pidio ? 'Cuenta pedida' : 'Ocupada'} · ${cuenta.total.toFixed(2)}
+                  {pidio ? 'Cuenta pedida' : total > 0 ? 'Con pedido' : 'Sin pedido'} · ${total.toFixed(2)}
                 </div>
-                <div className="text-[11px] text-neutral-500 truncate">{cuenta.waiterName}</div>
               </div>
             </button>
           );
         })}
-
-        {/* Abrir una cuenta nueva */}
-        <button
-          onClick={() => setNuevaAbierta(true)}
-          aria-label="Abrir cuenta"
-          title="Abrir cuenta"
-          className="min-h-20 rounded-xl border-2 border-dashed border-neutral-300 bg-white text-neutral-500 hover:border-emerald-400 hover:text-emerald-700 flex items-center justify-center transition-colors cursor-pointer"
-        >
-          <Plus className="w-7 h-7" />
-        </button>
       </div>
-
-      <AnimatePresence>
-        {nuevaAbierta && (
-          <DialogoNuevaCuenta siguienteMesa={siguienteMesa} onAbrir={abrir} onCancelar={() => setNuevaAbierta(false)} />
-        )}
-      </AnimatePresence>
     </section>
   );
 }
@@ -525,7 +528,7 @@ function DialogoNuevaCuenta({
   onCancelar,
 }: {
   siguienteMesa: number;
-  onAbrir: (tipo: 'mesa' | 'nombre', identificador: string, paraLlevar: boolean) => void;
+  onAbrir: (tipo: 'mesa' | 'nombre', identificador: string, paraLlevar: boolean) => Promise<void>;
   onCancelar: () => void;
 }) {
   const [modo, setModo] = useState<ModoNuevaCuenta>('mesa');
@@ -540,13 +543,18 @@ function DialogoNuevaCuenta({
 
   const cambiarNumero = (delta: number) => setNumero((n) => String(Math.max(1, (Number(n) || 0) + delta)));
 
-  const confirmar = () => {
+  const [guardando, setGuardando] = useState(false);
+
+  const confirmar = async () => {
+    setGuardando(true);
+    setError(null);
     try {
-      // "Mesa N" es la misma etiqueta que usa la caja; tableNumber (numero_mesa) se obtiene de N.
-      if (modo === 'mesa') onAbrir('mesa', `Mesa ${numeroMesa}`, paraLlevar);
-      else onAbrir('nombre', nombre, paraLlevar);
+      // "Mesa N" es la misma etiqueta que usa la caja; en la base se guarda como código "N".
+      if (modo === 'mesa') await onAbrir('mesa', `Mesa ${numeroMesa}`, paraLlevar);
+      else await onAbrir('nombre', nombre, paraLlevar);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo abrir la cuenta.');
+      setGuardando(false);
     }
   };
 
@@ -646,10 +654,11 @@ function DialogoNuevaCuenta({
           </button>
           <button
             onClick={confirmar}
-            disabled={!listo}
-            className="h-11 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:bg-neutral-200 disabled:text-neutral-500 disabled:cursor-not-allowed text-sm font-semibold cursor-pointer"
+            disabled={!listo || guardando}
+            className="h-11 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:bg-neutral-200 disabled:text-neutral-500 disabled:cursor-not-allowed text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer"
           >
-            Abrir
+            {guardando && <Loader2 className="w-4 h-4 animate-spin" />}
+            {guardando ? 'Guardando…' : 'Abrir'}
           </button>
         </div>
       </motion.div>

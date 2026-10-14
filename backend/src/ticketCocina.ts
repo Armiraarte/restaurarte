@@ -5,6 +5,7 @@
 //   - Repartirlo en tablas (los comentarios `BD:` indican la columna sugerida).
 // El mismo tipo existe en frontend/src/types/ticketCocina.ts; si cambias uno, cambia el otro.
 import type { LineaTicket } from './impresion.js';
+import { encabezadoRestaurante } from './ticketMarca.js';
 
 /** Una elección dentro de un grupo de opciones. BD: partida_opciones (partida_id, grupo, eleccion). */
 export interface OpcionTicket {
@@ -57,40 +58,49 @@ export function validarTicketCocina(t: any): string | null {
   return null;
 }
 
-function hora(iso: string): string {
+/** "10/10/2026 09:05 a.m." en hora de México. */
+function fechaHora(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' });
+  return d.toLocaleString('es-MX', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'America/Mexico_City',
+  });
 }
 
-/** Formato impreso (impresora térmica de 80 mm). Sin precios: cocina solo necesita qué preparar. */
+/**
+ * Formato impreso (impresora térmica de 80 mm), compacto para ahorrar papel:
+ *   Orden cocina #00004-2
+ *   Mesa 1                     Tablet 01
+ *   10/10/2026 09:05 a.m.
+ *   ------------------------------------
+ *   Tacos Dorados · Frijol            x2
+ *     Crema, Salsa, Queso
+ *     Sin lechuga
+ * Sin precios: cocina solo necesita qué preparar.
+ */
 export function lineasTicketCocina(t: TicketCocina): LineaTicket[] {
   const lineas: LineaTicket[] = [
-    { texto: 'COCINA', alinear: 'centro', negrita: true },
-    { texto: t.mesa.toUpperCase(), alinear: 'centro', grande: true },
+    ...encabezadoRestaurante(),
+    { texto: `Orden cocina ${t.orden_cocina}`, grande: true },
+    { texto: t.para_llevar ? `${t.mesa} · PARA LLEVAR` : t.mesa, derecha: t.tablet, negrita: true },
+    { texto: fechaHora(t.enviada_en) },
+    { separador: true },
   ];
-  if (t.para_llevar) lineas.push({ texto: '*** PARA LLEVAR ***', alinear: 'centro', grande: true });
-  lineas.push(
-    { separador: true },
-    { texto: `Orden cocina ${t.orden_cocina}`, derecha: hora(t.enviada_en), negrita: true },
-    { texto: t.adicion ? `Ronda ${t.ronda} · ADICIÓN` : 'Pedido inicial', derecha: t.tablet },
-    { texto: `Mesero: ${t.mesero}` },
-    { separador: true },
-  );
 
   for (const p of t.productos) {
-    lineas.push({ texto: `${p.cantidad} x ${p.nombre}`, grande: true });
-    for (const d of p.descripcion) lineas.push({ texto: `   - ${d}` });
-    if (p.notas) lineas.push({ texto: `   NOTA: ${p.notas}`, negrita: true });
-    lineas.push({ texto: '' });
+    lineas.push({ texto: p.nombre, derecha: `x${p.cantidad}`, negrita: true });
+    for (const d of p.descripcion) lineas.push({ texto: `  ${d}` });
+    if (p.notas) lineas.push({ texto: `  NOTA: ${p.notas}`, negrita: true });
   }
 
-  if (t.notas_generales) lineas.push({ texto: `NOTA GENERAL: ${t.notas_generales}`, negrita: true });
-  lineas.push(
-    { separador: true },
-    { texto: 'Total de piezas', derecha: String(t.total_piezas), negrita: true },
-    { texto: 'Control interno de cocina', alinear: 'centro' },
-    { texto: '' },
-  );
+  if (t.notas_generales) lineas.push({ separador: true }, { texto: `NOTA: ${t.notas_generales}`, negrita: true });
+  // Espacio en blanco al final: el papel sale más largo y es fácil arrancarlo (≈ 3 cm).
+  for (let i = 0; i < 8; i++) lineas.push({ texto: '' });
+  lineas.push({ texto: '.', alinear: 'centro' }); // marca final: evita que el driver recorte el espacio en blanco
   return lineas;
 }

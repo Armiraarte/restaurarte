@@ -8,12 +8,13 @@ import { Account, Comanda, Mesa, PaymentRecord, ProductCatalogItem, SocketEventL
 import { cuentaDeMesa, posDataService } from './services/dataService';
 import { Header } from './componentes/Header';
 import { SeccionesNav, MainNavTab } from './componentes/SeccionesNav';
-import { ComandasView } from './componentes/ComandasView';
-import { AccountsView } from './componentes/AccountsView';
+import { CajasView } from './componentes/CajasView';
+import { MarcaDeAgua, PieDePagina } from './componentes/Marca';
+import { VentasView } from './componentes/VentasView';
+import { TurnosView } from './componentes/TurnosView';
 import { AccountDetailModal } from './componentes/AccountDetailModal';
 import { CobroModal } from './componentes/CobroModal';
 import { SalesTicketModal } from './componentes/SalesTicketModal';
-import { KitchenKdsView } from './componentes/KitchenKdsView';
 import { TabletsView } from './componentes/TabletsView';
 import { SimulationPanel } from './componentes/SimulationPanel';
 import { LoginView } from './componentes/LoginView';
@@ -21,16 +22,35 @@ import { MesasView } from './componentes/MesasView';
 import { ConfiguracionView } from './componentes/ConfiguracionView';
 import { InicioView } from './componentes/InicioView';
 import { logout, obtenerSesion, Usuario } from './services/authService';
+import { useMesasTurno, useTurnoActual } from './services/sincronizacion';
+import { useTabletsEnLinea } from './services/tabletsService';
+import { AvisoIniciarTurno, BannerSinTurno, SeccionSinTurno } from './componentes/TurnoRequerido';
+import { AnimatePresence as AnimarTurno } from 'framer-motion';
+import { esOrdenActiva, etiquetaMesaRegistrada } from './services/mesasService';
 
 export default function App() {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [verificandoSesion, setVerificandoSesion] = useState(true);
 
   useEffect(() => {
-    obtenerSesion()
-      .then(setUsuario)
-      .catch(() => setUsuario(null))
-      .finally(() => setVerificandoSesion(false));
+    // Si el servidor no responde (se reinició), se reintenta cada 3 s en vez de mandar al login.
+    let cancelado = false;
+    let reintento: ReturnType<typeof setTimeout>;
+    const verificar = () =>
+      obtenerSesion()
+        .then((u) => {
+          if (cancelado) return;
+          setUsuario(u);
+          setVerificandoSesion(false);
+        })
+        .catch(() => {
+          if (!cancelado) reintento = setTimeout(verificar, 3_000);
+        });
+    verificar();
+    return () => {
+      cancelado = true;
+      clearTimeout(reintento);
+    };
   }, []);
 
   const handleLogout = () => {
@@ -81,6 +101,16 @@ function PosDashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () =>
   const [activeTicket, setActiveTicket] = useState<PaymentRecord | null>(null);
   const [isSimuladorOpen, setIsSimuladorOpen] = useState(false);
 
+  // Turno de caja (BD: turnos): ya no se abre solo al iniciar sesión. Sin turno no se cobra ni se activan tabletas.
+  // undefined = cargando, null = sin turno. Al entrar sin turno sale el aviso para iniciarlo.
+  const turnoCaja = useTurnoActual();
+  // Tablets reales (servidor), para el Inicio y el aviso del botón Tablet.
+  const { tablets: tabletsEnLinea } = useTabletsEnLinea();
+  const tabletsConectadas = (tabletsEnLinea ?? []).filter((t) => t.conectada).length;
+  const tabletsTotal = tabletsEnLinea?.length ?? 0;
+  const sinTurno = turnoCaja === null;
+  const [avisoTurnoVisto, setAvisoTurnoVisto] = useState(false);
+
   // Sync with shared central data service
   useEffect(() => {
     const updateLocalState = () => {
@@ -109,9 +139,15 @@ function PosDashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () =>
   }, []);
 
   const solicitadasCount = openAccounts.filter((a) => a.status === 'cuenta_solicitada').length;
-  const mesasOcupadas = mesas.filter((m) => cuentaDeMesa(m, openAccounts)).length;
-  const nuevasComandasCount = comandas.filter((c) => c.status === 'nueva').length;
-  const cocinaActiveCount = comandas.filter((c) => c.status === 'nueva' || c.status === 'preparando').length;
+  // Contador del botón Mesas: mesas registradas en el turno (base de datos) y cuántas tienen pedido en esta caja.
+  const { mesas: mesasTurno } = useMesasTurno();
+  // Botón Cajas: órdenes que pidieron la cuenta (orden.estatus = 1, PAGANDO).
+  const ordenesPagando = (mesasTurno ?? []).filter((m) => m.estatus === 1).length;
+  // Botón Ventas: órdenes cobradas en el turno (orden.estatus = 2, PAGADO).
+  const ordenesPagadas = (mesasTurno ?? []).filter((m) => m.estatus === 2).length;
+  // Botón Órdenes: órdenes activas (no cobradas) y cuántas tienen pedido (BD: orden.total).
+  const ordenesActivas = (mesasTurno ?? []).filter(esOrdenActiva);
+  const mesasOcupadas = ordenesActivas.filter((m) => Number(m.total) > 0).length;
 
   const handleSelectAccount = (account: Account) => {
     setDetailAccount(account);
@@ -133,7 +169,10 @@ function PosDashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () =>
   };
 
   return (
-    <div className="min-h-screen bg-neutral-100 text-neutral-900 flex flex-col font-sans selection:bg-amber-500 selection:text-neutral-950">
+    <div className="cristal relative min-h-screen bg-neutral-100 text-neutral-900 flex flex-col font-sans selection:bg-amber-500 selection:text-neutral-950">
+      {/* Logo de la cenaduría de fondo, difuminado */}
+      <MarcaDeAgua />
+
       {/* 1. Navbar: logo y usuario */}
       <Header
         usuario={usuario}
@@ -142,76 +181,62 @@ function PosDashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () =>
         configActiva={verConfiguracion}
       />
 
-      {/* Secciones: INICIO | COCINA | TABLET | CAJAS | MESAS | COMANDAS */}
+      {/* Secciones: INICIO | CAJAS | MESAS | TABLET */}
       <SeccionesNav
         currentTab={currentTab}
         onTabChange={irASeccion}
-        cocinaActiveCount={cocinaActiveCount}
-        hasDisconnectedTablet={tablets.some((t) => t.status === 'desconectada')}
-        openAccountsCount={openAccounts.length}
-        solicitadasCount={solicitadasCount}
+        hasDisconnectedTablet={tabletsConectadas < tabletsTotal}
+        openAccountsCount={ordenesPagando}
+        solicitadasCount={ordenesPagando}
         mesasOcupadas={mesasOcupadas}
-        mesasTotal={mesas.length}
-        nuevasComandasCount={nuevasComandasCount}
+        mesasTotal={ordenesActivas.length}
+        ventasCount={ordenesPagadas}
       />
 
+      {sinTurno && <BannerSinTurno />}
+      <AnimarTurno>{sinTurno && !avisoTurnoVisto && <AvisoIniciarTurno onCerrar={() => setAvisoTurnoVisto(true)} />}</AnimarTurno>
+
       {/* 2. Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+      <main className="relative z-10 flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
         {verConfiguracion && <ConfiguracionView onVolver={() => setEnConfiguracion(false)} />}
 
         {!verConfiguracion && currentTab === 'inicio' && (
           <InicioView
             nombreUsuario={usuario.nombre}
-            accounts={openAccounts}
-            comandas={comandas}
-            mesas={mesas}
-            tablets={tablets}
-            currentTurno={currentTurno}
+            ordenesActivas={ordenesActivas.length}
+            ordenesConPedido={mesasOcupadas}
+            ordenesPorCobrar={ordenesPagando}
+            ordenesCobradas={ordenesPagadas}
+            hayTurno={!!turnoCaja}
+            tabletsConectadas={tabletsConectadas}
+            tabletsTotal={tabletsTotal}
             onNavigate={irASeccion}
             onOpenSimulador={() => setIsSimuladorOpen(true)}
           />
         )}
 
-        {!verConfiguracion && currentTab === 'cocina' && (
-          <KitchenKdsView
-            comandas={comandas}
-            onOpenSimulador={() => setIsSimuladorOpen(true)}
-          />
-        )}
-
         {!verConfiguracion && currentTab === 'tablets' && (
-          <TabletsView
-            tablets={tablets}
-            events={recentEvents}
-            esAdmin={usuario.rol === 'admin'}
-            onOpenSimulador={() => setIsSimuladorOpen(true)}
-          />
+          <TabletsView events={recentEvents} esAdmin={usuario.rol === 'admin'} />
         )}
 
         {!verConfiguracion && currentTab === 'cajas' && (
-          <AccountsView
-            accounts={openAccounts}
-            onSelectAccount={handleSelectAccount}
-            onInitiateCobro={handleInitiateCobro}
-            onOpenSimulador={() => setIsSimuladorOpen(true)}
-          />
+          // Órdenes que pidieron la cuenta (orden.estatus = 1, PAGANDO)
+          sinTurno ? <SeccionSinTurno seccion="Cajas" /> : <CajasView />
         )}
+
+        {/* Órdenes cobradas del turno abierto (orden.estatus = 2, PAGADO) */}
+        {!verConfiguracion && currentTab === 'ventas' && (sinTurno ? <SeccionSinTurno seccion="Ventas" /> : <VentasView />)}
+
+        {/* Turno actual, corte de turno e historial de cortes */}
+        {!verConfiguracion && currentTab === 'turnos' && <TurnosView onIrA={irASeccion} />}
 
         {!verConfiguracion && currentTab === 'mesas' && (
-          <MesasView
-            mesas={mesas}
-            accounts={openAccounts}
-            productos={productos}
-            nombreUsuario={usuario.nombre}
-            onSelectAccount={handleSelectAccount}
-          />
-        )}
-
-        {!verConfiguracion && currentTab === 'comandas' && (
-          <ComandasView comandas={comandas} onOpenSimulador={() => setIsSimuladorOpen(true)} />
+          sinTurno ? <SeccionSinTurno seccion="Órdenes" /> : <MesasView nombreUsuario={usuario.nombre} />
         )}
 
       </main>
+
+      <PieDePagina />
 
       {/* 3. Modals & Overlays */}
       {/* Account Detail Modal */}

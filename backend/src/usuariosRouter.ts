@@ -38,7 +38,8 @@ usuariosRouter.post('/', async (req, res) => {
   const { usuario, nombre, rol, password } = req.body ?? {};
   const acceso: TipoAcceso = req.body?.acceso === 'pin' ? 'pin' : 'password';
 
-  if (typeof nombre !== 'string' || !nombre.trim()) {
+  // En tablets el nombre se forma con el número ("Tablet 01"); solo los administradores lo escriben.
+  if (rol !== 'tablet' && (typeof nombre !== 'string' || !nombre.trim())) {
     res.status(400).json({ error: 'El nombre es obligatorio.' });
     return;
   }
@@ -81,7 +82,7 @@ usuariosRouter.post('/', async (req, res) => {
   }
 
   try {
-    const creado = await crearUsuario({ usuario, nombre, rol, password, acceso }, tablet);
+    const creado = await crearUsuario({ usuario, nombre: typeof nombre === 'string' ? nombre : '', rol, password, acceso }, tablet);
     res.status(201).json({ usuario: creado });
   } catch (err) {
     if (err instanceof ErrorUsuarios) {

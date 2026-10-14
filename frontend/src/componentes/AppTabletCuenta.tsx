@@ -46,6 +46,7 @@ import {
   seleccionInicial,
 } from '../services/dataService';
 import { construirTicketCocina, imprimirTicketCocina } from '../services/ticketCocinaService';
+import { COLORES_CATEGORIA, ICONO_CATEGORIA } from './iconosCategoria';
 
 interface AppTabletCuentaProps {
   cuenta: Account;
@@ -72,34 +73,6 @@ interface LineaPedido {
 }
 
 // Ícono de cada categoría (no hay íconos exactos de comida mexicana: se usa el más parecido).
-const ICONO_CATEGORIA: Record<string, LucideIcon> = {
-  Tacos: Croissant,
-  'Tacos Dorados': Flame,
-  Quesadillas: Pizza,
-  Sopes: Disc,
-  Enchiladas: Soup,
-  Tostadas: Cookie,
-  Burritas: Cylinder,
-  Lonches: Sandwich,
-  Hamburguesas: Hamburger,
-  Ensaladas: Salad,
-  'Papas a la Francesa': Popcorn,
-  Alitas: Drumstick,
-  Salchichas: Ham,
-  Bebidas: CupSoda,
-};
-
-// Colores pastel que se reparten en orden entre las categorías.
-const COLORES_CATEGORIA = [
-  { normal: 'bg-orange-50 border-orange-200 text-orange-800', activo: 'bg-orange-100 border-orange-400 text-orange-900' },
-  { normal: 'bg-amber-50 border-amber-200 text-amber-800', activo: 'bg-amber-100 border-amber-400 text-amber-900' },
-  { normal: 'bg-lime-50 border-lime-200 text-lime-800', activo: 'bg-lime-100 border-lime-400 text-lime-900' },
-  { normal: 'bg-emerald-50 border-emerald-200 text-emerald-800', activo: 'bg-emerald-100 border-emerald-400 text-emerald-900' },
-  { normal: 'bg-sky-50 border-sky-200 text-sky-800', activo: 'bg-sky-100 border-sky-400 text-sky-900' },
-  { normal: 'bg-violet-50 border-violet-200 text-violet-800', activo: 'bg-violet-100 border-violet-400 text-violet-900' },
-  { normal: 'bg-pink-50 border-pink-200 text-pink-800', activo: 'bg-pink-100 border-pink-400 text-pink-900' },
-];
-
 // JSON con llaves ordenadas: dos elecciones iguales dan la misma clave.
 const estable = (v: unknown): string =>
   Array.isArray(v)
@@ -195,6 +168,27 @@ export const AppTabletCuenta: React.FC<AppTabletCuentaProps> = ({
   const elegirCategoria = (c: string) => {
     setCategoria(c);
     abrirOpciones(unicoConOpciones(c));
+  };
+
+  // Tablet: las categorías son opciones rápidas. Con un solo producto se abre directo (sus opciones,
+  // o se agrega al pedido si no tiene); con varios, se muestran esos productos en grande.
+  const [categoriaAbierta, setCategoriaAbierta] = useState<string | null>(null);
+  const tocarCategoria = (c: string) => {
+    const deCategoria = catalogo.filter((p) => p.category === c);
+    setCategoria(c);
+    if (deCategoria.length > 1) {
+      setCategoriaAbierta(c);
+    } else if (deCategoria.length === 1) {
+      tocarProducto(deCategoria[0]);
+    }
+  };
+  const tocarProducto = (p: ProductCatalogItem) => {
+    if (p.grupos?.length) {
+      abrirOpciones(p.id);
+    } else {
+      agregar(p.id);
+      mostrarAviso(`Se agregó 1 × ${p.name} al pedido.`);
+    }
   };
   const [pedido, setPedido] = useState<LineaPedido[]>([]);
   const [notaAbierta, setNotaAbierta] = useState<string | null>(null);
@@ -463,9 +457,7 @@ export const AppTabletCuenta: React.FC<AppTabletCuentaProps> = ({
           <section
             className={`bg-white border border-neutral-200 rounded-2xl ${
               pantallaCompleta
-                ? productoOpciones && !pidioCuenta
-                  ? 'p-3 min-h-0 flex flex-col overflow-hidden'
-                  : 'p-4 space-y-4 min-h-0 overflow-y-auto overscroll-contain'
+                ? 'p-3 min-h-0 flex flex-col overflow-hidden'
                 : 'p-4 space-y-4'
             }`}
           >
@@ -647,6 +639,70 @@ export const AppTabletCuenta: React.FC<AppTabletCuentaProps> = ({
                   </div>
                 )}
               </div>
+            ) : pantallaCompleta ? (
+              categoriaAbierta ? (
+                /* Productos de la categoría tocada (cuando tiene varios): cuadros grandes que llenan el recuadro */
+                <div className="flex-1 min-h-0 flex flex-col gap-2">
+                  <div className="shrink-0 flex items-center justify-between gap-3">
+                    <button
+                      onClick={() => setCategoriaAbierta(null)}
+                      className="h-10 px-3 rounded-xl bg-white border border-neutral-200 hover:border-neutral-300 flex items-center gap-2 text-sm font-medium cursor-pointer"
+                    >
+                      <ArrowLeft className="w-5 h-5" /> Categorías
+                    </button>
+                    <div className="text-lg font-bold">{categoriaAbierta}</div>
+                  </div>
+                  <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain grid grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] auto-rows-[minmax(4.5rem,1fr)] gap-2">
+                    {catalogo
+                      .filter((p) => p.category === categoriaAbierta)
+                      .map((p) => {
+                        const enPedido = cantidadEnPedido(p.id) || undefined;
+                        return (
+                          <button
+                            key={p.id}
+                            onClick={() => tocarProducto(p)}
+                            disabled={pidioCuenta}
+                            className="relative rounded-2xl border-2 border-orange-200 bg-orange-50/40 hover:bg-orange-50 p-3 flex flex-col items-center justify-center gap-1 text-center disabled:opacity-50 cursor-pointer"
+                          >
+                            <span className="text-xl font-bold leading-tight">{p.name}</span>
+                            <span className="font-mono text-sm text-neutral-600">{etiquetaPrecio(p)}</span>
+                            {enPedido && (
+                              <span className="absolute top-2 right-2 min-w-6 h-6 px-1.5 rounded-full bg-orange-500 text-white text-xs font-bold flex items-center justify-center">
+                                {enPedido}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                  </div>
+                </div>
+              ) : (
+                /* Opciones rápidas: las categorías se reparten todo el recuadro (filas y columnas automáticas) */
+                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] auto-rows-[minmax(5rem,1fr)] gap-2">
+                  {categorias.map((c, i) => {
+                    const Icon = ICONO_CATEGORIA[c] ?? UtensilsCrossed;
+                    const color = COLORES_CATEGORIA[i % COLORES_CATEGORIA.length];
+                    const cantidad = catalogo.filter((p) => p.category === c).length;
+                    const enPedido = pedido.filter((l) => producto(l.itemId)?.category === c).reduce((acc, l) => acc + l.quantity, 0);
+                    return (
+                      <button
+                        key={c}
+                        onClick={() => tocarCategoria(c)}
+                        disabled={cantidad === 0 || pidioCuenta}
+                        className={`relative rounded-2xl border-2 p-2 flex flex-col items-center justify-center gap-2 text-center transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${color.normal}`}
+                      >
+                        <Icon className="w-14 h-14 shrink-0" />
+                        <span className="text-lg font-bold leading-tight">{c}</span>
+                        {enPedido > 0 && (
+                          <span className="absolute top-2 right-2 min-w-6 h-6 px-1.5 rounded-full bg-orange-500 text-white text-xs font-bold flex items-center justify-center">
+                            {enPedido}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )
             ) : (
               <>
             {permitirNuevoProducto && !pidioCuenta && (

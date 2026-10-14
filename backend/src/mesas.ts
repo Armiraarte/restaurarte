@@ -1,0 +1,164 @@
+// Mesas: el botón "Agregar mesa" de la tablet registra una orden en MySQL (tabla `orden`, la de Laravel:
+// migraciones 2026_10_09_000003 a 2026_10_10_000013; modelo App\Models\Orden).
+//   orden.idOrden         → número autoincrementable asignado por MySQL
+//   orden.codigo          → número de mesa ("5") o nombre del cliente ("Juan"); único
+//   orden.total           → 0.00 al crearla
+//   orden.tipo_orden      → 1 = comer aquí, 2 = para llevar (catálogo tipos_venta)
+//   orden.estatus         → 0 = ABIERTA (al crearla), 1 = PAGANDO, 2 = PAGADO
+//   orden.idTurno         → turno de caja abierto (la tablet solo muestra las órdenes de ese turno)
+//   orden.idSesion_tablet → sesión de la tablet que la registró
+// Las respuestas conservan los nombres que ya usa el frontend (id, tipo_venta_id, turno_id, sesion_tablet_id).
+import { Router, type Request, type Response, type NextFunction } from 'express';
+import type { PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
+import { requireAuth } from './auth.js';
+import { esDuplicado, pool } from './db.js';
+import { mysqlDisponible } from './usuarios.js';
+import { sesionTabletAbierta, turnoAbierto } from './turnos.js';
+
+const TIPO_VENTA = { comerAqui: 1, paraLlevar: 2 } as const;
+
+/** Igual que App\Models\Mesa::normalizarNombre: "Mesa 05" → "5"; un nombre se conserva sin espacios sobrantes. */
+export function normalizarNombreMesa(nombre: string): string {
+  const limpio = nombre.trim().replace(/\s+/g, ' ');
+  const numero = limpio.match(/^(?:mesa\s*)?0*(\d+)$/i);
+  return numero ? numero[1] || '0' : limpio;
+}
+
+interface MesaFila extends RowDataPacket {
+  id: number;
+  codigo: string;
+  nombre: string;
+  tipo_venta_id: number;
+  total: string;
+  estatus: number;
+  turno_id: number | null;
+  sesion_tablet_id: number | null;
+  creado_en: Date;
+  actualizado_en: Date;
+}
+
+/** Siguiente código de orden del turno: "T1-001", "T1-002"… (único en la tabla). */
+async function siguienteCodigo(conexion: PoolConnection, turnoId: number): Promise<string> {
+  const [filas] = await conexion.query<RowDataPacket[]>(
+    `SELECT COALESCE(MAX(CAST(SUBSTRING_INDEX(codigo, '-', -1) AS UNSIGNED)), 0) AS ultimo
+       FROM orden WHERE codigo LIKE ? FOR UPDATE`,
+    [`T${turnoId}-%`],
+  );
+  return `T${turnoId}-${String(Number(filas[0].ultimo) + 1).padStart(3, '0')}`;
+}
+
+const COLUMNAS =
+  'idOrden AS id, codigo, nombre, total, tipo_orden AS tipo_venta_id, estatus, idTurno AS turno_id, idSesion_tablet AS sesion_tablet_id, creado_en, actualizado_en';
+
+function soloRoles(...roles: string[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.usuario || !roles.includes(req.usuario.rol)) {
+      res.status(403).json({ error: 'Sin permiso.' });
+      return;
+    }
+    next();
+  };
+}
+
+export const mesasRouter = Router();
+mesasRouter.use(requireAuth, soloRoles('tablet', 'admin', 'cajero'));
+
+/**
+ * Mesas registradas en el turno abierto (lo que la tablet muestra). Sin turno abierto, la lista va vacía.
+ * Orden: primero los números de mesa de menor a mayor, después los nombres.
+ */
+mesasRouter.get('/', async (_req, res) => {
+  if (!pool || !mysqlDisponible()) {
+    res.status(503).json({ error: 'La base de datos no está disponible.' });
+    return;
+  }
+  const turno = await turnoAbierto();
+  if (!turno) {
+    res.json({ turno: null, mesas: [] });
+    return;
+  }
+  const [mesas] = await pool.query<MesaFila[]>(
+    `SELECT ${COLUMNAS} FROM orden WHERE idTurno = ?
+      ORDER BY nombre REGEXP '^[0-9]+$' DESC, CAST(nombre AS UNSIGNED), nombre, idOrden`,
+    [turno.idTurno],
+  );
+  res.json({ turno: { idTurno: turno.idTurno, fecha_inicio: turno.fecha_inicio }, mesas });
+});
+
+/**
+ * Registra la mesa al agregarla, dentro del turno abierto. Si ya existe una con ese código, no se duplica:
+ * se devuelve esa misma, se actualiza su tipo de venta y se liga al turno actual.
+ * Respuesta: { mesa, creada } — creada = true si se insertó una fila nueva.
+ */
+mesasRouter.post('/', async (req, res) => {
+  // El número de mesa o nombre del cliente va en orden.nombre; orden.codigo se genera (T1-001…).
+  const nombre = normalizarNombreMesa(String(req.body?.nombre ?? req.body?.codigo ?? ''));
+  if (!nombre || nombre.length > 100) {
+    res.status(400).json({ error: 'La mesa necesita un número o nombre (máximo 100 caracteres).' });
+    return;
+  }
+  if (!pool || !mysqlDisponible()) {
+    res.status(503).json({ error: 'La base de datos no está disponible; no se pudo registrar la mesa.' });
+    return;
+  }
+  const tipoVentaId = req.body?.tipo_venta_id ?? (req.body?.paraLlevar === true ? TIPO_VENTA.paraLlevar : TIPO_VENTA.comerAqui);
+  if (!Number.isSafeInteger(tipoVentaId) || tipoVentaId < 1) {
+    res.status(400).json({ error: 'El tipo de venta debe ser un ID válido del catálogo.' });
+    return;
+  }
+
+  const conexion = await pool.getConnection();
+  try {
+    await conexion.beginTransaction();
+    const ahora = new Date();
+    // La mesa se registra dentro del turno abierto y de la sesión de la tablet que la agrega.
+    const turno = await turnoAbierto(conexion);
+    if (!turno) {
+      await conexion.rollback();
+      res.status(409).json({ error: 'La caja no ha iniciado turno; no se puede agregar la mesa.', sinTurno: true });
+      return;
+    }
+    const tabletId = req.usuario!.tablet?.id;
+    const sesionId = tabletId ? ((await sesionTabletAbierta(tabletId, turno.idTurno, conexion))?.id ?? null) : null;
+    // Si esa mesa ya tiene una orden activa (ABIERTA o PAGANDO) en el turno, se usa esa; una orden PAGADA
+    // nunca se reabre: la nueva Mesa 1 es otra orden con su propio código.
+    const [activas] = await conexion.query<MesaFila[]>(
+      'SELECT idOrden AS id FROM orden WHERE idTurno = ? AND nombre = ? AND estatus IN (0, 1) FOR UPDATE',
+      [turno.idTurno, nombre],
+    );
+    let creada = false;
+    let id: number;
+
+    if (activas.length > 0) {
+      id = activas[0].id;
+    } else {
+      const codigo = await siguienteCodigo(conexion, turno.idTurno);
+      const [resultado] = await conexion.execute<ResultSetHeader>(
+        `INSERT INTO orden (codigo, nombre, total, tipo_orden, estatus, idTurno, idSesion_tablet, creado_en, actualizado_en)
+         VALUES (?, ?, 0.00, ?, 0, ?, ?, ?, ?)`,
+        [codigo, nombre, tipoVentaId, turno.idTurno, sesionId, ahora, ahora],
+      );
+      id = resultado.insertId;
+      creada = true;
+    }
+    await conexion.commit();
+
+    const [filas] = await pool.query<MesaFila[]>(`SELECT ${COLUMNAS} FROM orden WHERE idOrden = ?`, [id]);
+    res.status(creada ? 201 : 200).json({ mesa: filas[0], creada });
+  } catch (err) {
+    await conexion.rollback();
+    if (esDuplicado(err)) {
+      // Dos cajas/tablets generaron el mismo código al mismo tiempo: se pide reintentar.
+      res.status(409).json({ error: 'Se registró otra orden al mismo tiempo; intenta de nuevo.' });
+      return;
+    }
+    if ((err as { code?: string })?.code === 'ER_NO_REFERENCED_ROW_2') {
+      res.status(400).json({ error: 'El tipo de venta no existe en el catálogo.' });
+      return;
+    }
+    console.error('[mesas] No se pudo registrar la mesa:', err);
+    res.status(500).json({ error: 'No se pudo registrar la mesa en la base de datos.' });
+  } finally {
+    conexion.release();
+  }
+});

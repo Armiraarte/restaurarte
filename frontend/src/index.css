@@ -1,5 +1,103 @@
 @import "tailwindcss";
 
+/*
+ * PALETA – CENADURÍA LOS DIABLITOS
+ *   Rojo Diablito (principal)  #E61919   → red-500 / rose-500
+ *   Rojo Infernal (contornos)  #780B0B   → red-800 / rose-800
+ *   Naranja Fuego (acentos)    #FF7518   → amber-500 / orange-500 (botones principales)
+ *   Amarillo Queso (detalles)  #FFC247   → amber-400
+ *   Verde Fresco (ingredientes)#55A630   → emerald-500 / green-500
+ *   Crema Cálido (fondos)      #FFF4E4   → neutral-100 (fondo del sistema)
+ * Se redefinen las escalas de Tailwind, así todas las pantallas toman la paleta sin cambiar sus clases.
+ * Para usarlos por nombre: bg-diablito, text-infernal, bg-fuego, bg-queso, bg-fresco, bg-crema.
+ */
+@theme {
+  --color-diablito: #e61919;
+  --color-infernal: #780b0b;
+  --color-fuego: #ff7518;
+  --color-queso: #ffc247;
+  --color-fresco: #55a630;
+  --color-crema: #fff4e4;
+
+  /* Naranja Fuego + Amarillo Queso */
+  --color-amber-50: #fff8ec;
+  --color-amber-100: #ffefd0;
+  --color-amber-200: #ffdf9e;
+  --color-amber-300: #ffd073;
+  --color-amber-400: #ffc247;
+  --color-amber-500: #ff7518;
+  --color-amber-600: #e5600a;
+  --color-amber-700: #bf4b08;
+  --color-amber-800: #8f390a;
+  --color-amber-900: #6b2b0b;
+  --color-amber-950: #3d1704;
+  --color-orange-50: #fff5ec;
+  --color-orange-100: #ffe7d3;
+  --color-orange-200: #ffcca6;
+  --color-orange-300: #ffa96d;
+  --color-orange-400: #ff8c3d;
+  --color-orange-500: #ff7518;
+  --color-orange-600: #e5600a;
+  --color-orange-700: #bf4b08;
+  --color-orange-800: #8f390a;
+  --color-orange-900: #6b2b0b;
+  --color-orange-950: #3d1704;
+
+  /* Rojo Diablito + Rojo Infernal */
+  --color-red-50: #fff1f1;
+  --color-red-100: #ffdede;
+  --color-red-200: #ffbaba;
+  --color-red-300: #ff8888;
+  --color-red-400: #f44c4c;
+  --color-red-500: #e61919;
+  --color-red-600: #c41212;
+  --color-red-700: #9e0e0e;
+  --color-red-800: #780b0b;
+  --color-red-900: #5c0808;
+  --color-red-950: #330404;
+  --color-rose-50: #fff1f1;
+  --color-rose-100: #ffdede;
+  --color-rose-200: #ffbaba;
+  --color-rose-300: #ff8888;
+  --color-rose-400: #f44c4c;
+  --color-rose-500: #e61919;
+  --color-rose-600: #c41212;
+  --color-rose-700: #9e0e0e;
+  --color-rose-800: #780b0b;
+  --color-rose-900: #5c0808;
+  --color-rose-950: #330404;
+
+  /* Verde Fresco */
+  --color-emerald-50: #f1f9ec;
+  --color-emerald-100: #dff1d3;
+  --color-emerald-200: #c0e3a8;
+  --color-emerald-300: #98d173;
+  --color-emerald-400: #74bc4b;
+  --color-emerald-500: #55a630;
+  --color-emerald-600: #448a25;
+  --color-emerald-700: #366d1e;
+  --color-emerald-800: #2c561a;
+  --color-emerald-900: #244716;
+  --color-emerald-950: #112709;
+  --color-green-50: #f1f9ec;
+  --color-green-100: #dff1d3;
+  --color-green-200: #c0e3a8;
+  --color-green-300: #98d173;
+  --color-green-400: #74bc4b;
+  --color-green-500: #55a630;
+  --color-green-600: #448a25;
+  --color-green-700: #366d1e;
+  --color-green-800: #2c561a;
+  --color-green-900: #244716;
+  --color-green-950: #112709;
+
+  /* Crema Cálido: grises claros cálidos para fondos y bordes */
+  --color-neutral-50: #fffaf3;
+  --color-neutral-100: #fff4e4;
+  --color-neutral-200: #f0e3cf;
+  --color-neutral-300: #dfcdb3;
+}
+
 @layer base {
   /* App de meseros (/tablet): la página nunca hace scroll (100vw × 100vh). */
   html.app-tablet {
@@ -27,6 +125,89 @@
     font-family: 'JetBrains Mono', monospace;
     font-variant-numeric: tabular-nums;
   }
+}
+
+/*
+ * CRISTAL (glassmorphism): dentro de un contenedor .cristal, las tarjetas blancas se vuelven translúcidas
+ * con desenfoque, así se alcanza a ver la marca de agua del fondo. Las ventanas (role=dialog) quedan casi
+ * opacas para leerse bien.
+ */
+.cristal .bg-white {
+  background-color: rgb(255 255 255 / 0.55);
+  -webkit-backdrop-filter: blur(16px) saturate(1.6);
+  backdrop-filter: blur(16px) saturate(1.6);
+}
+.cristal .bg-neutral-50 {
+  background-color: rgb(255 250 243 / 0.5);
+}
+.cristal .border-neutral-200 {
+  border-color: rgb(255 255 255 / 0.75);
+}
+.cristal :is(.rounded-xl, .rounded-2xl).bg-white {
+  box-shadow:
+    0 10px 30px -14px rgb(120 11 11 / 0.22),
+    inset 0 1px 0 rgb(255 255 255 / 0.7);
+}
+.cristal :is([role='dialog'], [role='alertdialog']).bg-white,
+.cristal :is([role='dialog'], [role='alertdialog']) .bg-white {
+  background-color: rgb(255 255 255 / 0.9);
+}
+
+/*
+ * NEÓN (botones de la tablet): contorno de color brillante con resplandor.
+ *   .neon         → contorno + brillo sobre cristal (tarjetas, categorías)
+ *   .neon-solido  → relleno de color con brillo (acciones: Agregar orden, Enviar, Pedir cuenta)
+ * El color se elige con .neon-fuego / -diablito / -queso / -fresco / -cian / -magenta / -violeta / -lima.
+ */
+.neon-fuego { --neon: #ff7518; }
+.neon-diablito { --neon: #e61919; }
+.neon-queso { --neon: #f2a100; }
+.neon-fresco { --neon: #55a630; }
+.neon-cian { --neon: #00b4d8; }
+.neon-magenta { --neon: #e0249a; }
+.neon-violeta { --neon: #8b3dff; }
+.neon-lima { --neon: #7cc800; }
+
+.neon {
+  border-color: var(--neon, #ff7518) !important;
+  color: color-mix(in srgb, var(--neon, #ff7518) 72%, black) !important;
+  background-color: color-mix(in srgb, var(--neon, #ff7518) 7%, rgb(255 255 255 / 0.55)) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(1.5);
+  backdrop-filter: blur(12px) saturate(1.5);
+  box-shadow:
+    0 0 4px color-mix(in srgb, var(--neon, #ff7518) 65%, transparent),
+    0 0 18px color-mix(in srgb, var(--neon, #ff7518) 40%, transparent),
+    inset 0 0 16px color-mix(in srgb, var(--neon, #ff7518) 16%, transparent);
+  transition: box-shadow 0.2s, transform 0.1s;
+}
+.neon :is(svg) {
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--neon, #ff7518) 55%, transparent));
+}
+.neon-solido {
+  border: 1px solid color-mix(in srgb, var(--neon, #ff7518) 60%, white) !important;
+  color: white !important;
+  background-color: var(--neon, #ff7518) !important;
+  text-shadow: 0 0 10px rgb(255 255 255 / 0.55);
+  box-shadow:
+    0 0 6px color-mix(in srgb, var(--neon, #ff7518) 80%, transparent),
+    0 0 22px color-mix(in srgb, var(--neon, #ff7518) 55%, transparent),
+    inset 0 1px 0 rgb(255 255 255 / 0.35);
+  transition: box-shadow 0.2s, transform 0.1s, filter 0.2s;
+}
+.neon:active,
+.neon-solido:active {
+  transform: scale(0.97);
+}
+.neon:hover,
+.neon-solido:hover {
+  box-shadow:
+    0 0 6px color-mix(in srgb, var(--neon, #ff7518) 85%, transparent),
+    0 0 28px color-mix(in srgb, var(--neon, #ff7518) 60%, transparent),
+    inset 0 0 18px color-mix(in srgb, var(--neon, #ff7518) 22%, transparent);
+}
+.neon-solido:disabled {
+  filter: grayscale(0.4);
+  box-shadow: none;
 }
 
 @media print {

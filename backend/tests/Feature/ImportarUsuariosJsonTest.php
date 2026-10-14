@@ -46,7 +46,7 @@ class ImportarUsuariosJsonTest extends TestCase
         $t2 = Tablet::where('numero', '02')->firstOrFail();
         $this->assertSame('u-2', $t2->usuario_id);
         $this->assertSame('u-admin', $t2->creado_por);
-        $this->assertSame('TABLET 02', $t2->nombre);
+        $this->assertSame('Tablet 02', $t2->nombre);
         $this->assertSame('pin', $t2->usuario->acceso);
 
         // La contraseña/PIN sigue funcionando en Laravel (prefijo $2y$).

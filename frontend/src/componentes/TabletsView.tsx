@@ -1,22 +1,24 @@
 import React from 'react';
-import { SocketEventLog, TabletDevice } from '../types/pos';
+import { SocketEventLog } from '../types/pos';
+import { useTabletsEnLinea } from '../services/tabletsService';
 import { RealtimeEventTicker } from './RealtimeEventTicker';
 import { ImpresorasTicketsPanel } from './ImpresorasTicketsPanel';
 import { TabletsEnLineaPanel } from './TabletsEnLineaPanel';
-import { Clock, Tablet, Wifi, WifiOff } from 'lucide-react';
+import { AlertTriangle, Clock, Loader2, Tablet, Wifi, WifiOff } from 'lucide-react';
+
+const hora = (iso: string) => new Date(iso).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
 
 interface TabletsViewProps {
-  tablets: TabletDevice[];
   events: SocketEventLog[];
-  onOpenSimulador: () => void;
   /** El panel "Tablets en línea" (verificar conexión) solo lo ve el administrador. */
   esAdmin?: boolean;
 }
 
-export const TabletsView: React.FC<TabletsViewProps> = ({ tablets, events, onOpenSimulador, esAdmin = false }) => {
-  const ordenadas = [...tablets].sort((a, b) => Number(a.number) - Number(b.number));
-  const conectadas = tablets.filter((t) => t.status === 'conectada').length;
-  const desconectadas = tablets.length - conectadas;
+export const TabletsView: React.FC<TabletsViewProps> = ({ events, esAdmin = false }) => {
+  const { tablets, error } = useTabletsEnLinea();
+  const ordenadas = [...(tablets ?? [])].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { numeric: true }));
+  const conectadas = ordenadas.filter((t) => t.conectada).length;
+  const desconectadas = ordenadas.length - conectadas;
 
   return (
     <div className="space-y-6">
@@ -44,27 +46,32 @@ export const TabletsView: React.FC<TabletsViewProps> = ({ tablets, events, onOpe
             >
               Abrir app de tablet
             </a>
-            <button
-              onClick={onOpenSimulador}
-              className="px-3.5 py-1.5 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors cursor-pointer"
-            >
-              Simular desconexión
-            </button>
           </div>
         </div>
 
-        {/* Lista por número */}
-        {ordenadas.length === 0 ? (
+        {error && (
+          <div className="flex items-center gap-2 text-xs text-rose-700 bg-rose-50 border border-rose-200 px-3 py-2 rounded-lg">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {error}
+          </div>
+        )}
+
+        {/* Tablets que han iniciado sesión (servidor) */}
+        {tablets === null ? (
+          <div className="py-10 flex justify-center text-neutral-400">
+            <Loader2 className="w-5 h-5 animate-spin" />
+          </div>
+        ) : ordenadas.length === 0 ? (
           <div className="text-center text-sm text-neutral-500 py-10 border border-dashed border-neutral-300 rounded-lg">
-            No hay tablets registradas.
+            Ninguna tablet ha iniciado sesión.
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {ordenadas.map((tab) => {
-              const conectada = tab.status === 'conectada';
+              const conectada = tab.conectada;
+              const numero = tab.nombre.match(/\d+/)?.[0] ?? tab.nombre;
               return (
                 <div
-                  key={tab.id}
+                  key={tab.usuarioId}
                   className={`border rounded-xl p-4 space-y-3 ${
                     conectada ? 'border-neutral-200' : 'border-rose-200 bg-rose-50/40'
                   }`}
@@ -72,7 +79,7 @@ export const TabletsView: React.FC<TabletsViewProps> = ({ tablets, events, onOpe
                   <div className="flex items-center justify-between gap-2">
                     <div>
                       <div className="text-[10px] uppercase tracking-wider text-neutral-500">Tablet</div>
-                      <div className="text-3xl font-bold tracking-tight font-mono leading-none">{tab.number}</div>
+                      <div className="text-3xl font-bold tracking-tight font-mono leading-none">{numero}</div>
                     </div>
                     <span
                       className={`flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
@@ -88,15 +95,10 @@ export const TabletsView: React.FC<TabletsViewProps> = ({ tablets, events, onOpe
 
                   <div className="flex items-center gap-1.5 text-xs text-neutral-600 border-t border-neutral-100 pt-3">
                     <Clock className="w-3.5 h-3.5 text-neutral-400" />
-                    {conectada ? (
-                      <span>
-                        Inició sesión a las <strong className="font-mono text-neutral-900">{tab.sessionStartedAt ?? '—'}</strong>
-                      </span>
-                    ) : (
-                      <span>
-                        Desconectada desde <strong className="font-mono text-neutral-900">{tab.lastConnection}</strong>
-                      </span>
-                    )}
+                    <span>
+                      {conectada ? 'En línea · última señal' : 'Sin señal desde'}{' '}
+                      <strong className="font-mono text-neutral-900">{hora(tab.ultimoLatido)}</strong>
+                    </span>
                   </div>
                 </div>
               );

@@ -1,18 +1,17 @@
 import React from 'react';
-import { ChefHat, ClipboardList, Home, LayoutGrid, Receipt, Tablet, LucideIcon } from 'lucide-react';
+import { Clock, Home, LayoutGrid, Receipt, Tablet, TrendingUp, LucideIcon } from 'lucide-react';
 
-export type MainNavTab = 'inicio' | 'cocina' | 'tablets' | 'cajas' | 'mesas' | 'comandas';
+export type MainNavTab = 'inicio' | 'tablets' | 'cajas' | 'ventas' | 'mesas' | 'turnos';
 
 interface SeccionesNavProps {
   currentTab: MainNavTab;
   onTabChange: (tab: MainNavTab) => void;
-  cocinaActiveCount: number;
   hasDisconnectedTablet: boolean;
   openAccountsCount: number;
   solicitadasCount: number;
   mesasOcupadas: number;
   mesasTotal: number;
-  nuevasComandasCount: number;
+  ventasCount: number;
 }
 
 interface Seccion {
@@ -30,11 +29,6 @@ const COLORES: Record<MainNavTab, { normal: string; activo: string; icono: strin
     activo: 'bg-slate-600 border-slate-600 text-white ring-2 ring-slate-300 ring-offset-2',
     icono: 'text-slate-500',
   },
-  cocina: {
-    normal: 'bg-orange-50 border-orange-200 text-orange-800 hover:bg-orange-100',
-    activo: 'bg-orange-500 border-orange-500 text-white ring-2 ring-orange-300 ring-offset-2',
-    icono: 'text-orange-500',
-  },
   tablets: {
     normal: 'bg-sky-50 border-sky-200 text-sky-800 hover:bg-sky-100',
     activo: 'bg-sky-500 border-sky-500 text-white ring-2 ring-sky-300 ring-offset-2',
@@ -45,40 +39,44 @@ const COLORES: Record<MainNavTab, { normal: string; activo: string; icono: strin
     activo: 'bg-emerald-500 border-emerald-500 text-white ring-2 ring-emerald-300 ring-offset-2',
     icono: 'text-emerald-500',
   },
+  ventas: {
+    normal: 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100',
+    activo: 'bg-amber-500 border-amber-500 text-white ring-2 ring-amber-300 ring-offset-2',
+    icono: 'text-amber-500',
+  },
+  turnos: {
+    normal: 'bg-red-50 border-red-200 text-red-800 hover:bg-red-100',
+    activo: 'bg-red-500 border-red-500 text-white ring-2 ring-red-300 ring-offset-2',
+    icono: 'text-red-500',
+  },
   mesas: {
     normal: 'bg-violet-50 border-violet-200 text-violet-800 hover:bg-violet-100',
     activo: 'bg-violet-500 border-violet-500 text-white ring-2 ring-violet-300 ring-offset-2',
     icono: 'text-violet-500',
-  },
-  comandas: {
-    normal: 'bg-teal-50 border-teal-200 text-teal-800 hover:bg-teal-100',
-    activo: 'bg-teal-500 border-teal-500 text-white ring-2 ring-teal-300 ring-offset-2',
-    icono: 'text-teal-500',
   },
 };
 
 export const SeccionesNav: React.FC<SeccionesNavProps> = ({
   currentTab,
   onTabChange,
-  cocinaActiveCount,
   hasDisconnectedTablet,
   openAccountsCount,
   solicitadasCount,
   mesasOcupadas,
   mesasTotal,
-  nuevasComandasCount,
+  ventasCount,
 }) => {
   const secciones: Seccion[] = [
     { id: 'inicio', label: 'Inicio', icon: Home },
-    { id: 'cocina', label: 'Cocina', icon: ChefHat, badge: cocinaActiveCount > 0 ? String(cocinaActiveCount) : undefined },
-    { id: 'comandas', label: 'Comandas', icon: ClipboardList, badge: nuevasComandasCount > 0 ? String(nuevasComandasCount) : undefined },
     { id: 'cajas', label: 'Cajas', icon: Receipt, badge: String(openAccountsCount), alerta: solicitadasCount > 0 },
-    { id: 'mesas', label: 'Mesas', icon: LayoutGrid, badge: `${mesasOcupadas}/${mesasTotal}` },
+    { id: 'ventas', label: 'Ventas', icon: TrendingUp, badge: ventasCount > 0 ? String(ventasCount) : undefined },
+    { id: 'mesas', label: 'Órdenes', icon: LayoutGrid, badge: `${mesasOcupadas}/${mesasTotal}` },
     { id: 'tablets', label: 'Tablet', icon: Tablet, alerta: hasDisconnectedTablet },
+    { id: 'turnos', label: 'Turnos', icon: Clock },
   ];
 
   return (
-    <nav aria-label="Secciones" className="bg-white border-b border-neutral-200">
+    <nav aria-label="Secciones" className="relative z-10 bg-white border-b border-neutral-200">
       <div className="max-w-7xl mx-auto px-4 lg:px-8 py-3 grid grid-cols-3 md:grid-cols-6 gap-2 md:gap-3">
         {secciones.map(({ id, label, icon: Icon, badge, alerta }) => {
           const activo = currentTab === id;

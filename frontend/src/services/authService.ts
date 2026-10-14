@@ -5,6 +5,8 @@ export interface Usuario {
   usuario: string;
   nombre: string;
   rol: Rol;
+  /** Solo cuentas de tablet: su tablet (BD: tablets). */
+  tablet?: { id: string; numero: string; nombre: string; ubicacion: string };
 }
 
 const TOKEN_KEY = 'pos_token';

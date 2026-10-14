@@ -102,8 +102,8 @@ tabletsRouter.post('/verificacion/:id/confirmar', soloRoles('tablet', 'admin'), 
   res.json({ ok: true });
 });
 
-/** Admin: tablets que han iniciado sesión y su estado. */
-tabletsRouter.get('/', soloRoles('admin'), (_req, res) => {
+/** Caja (admin o cajero): tablets que han iniciado sesión y su estado. */
+tabletsRouter.get('/', soloRoles('admin', 'cajero'), (_req, res) => {
   const ahora = Date.now();
   const tablets = [...enLinea.values()]
     .filter((t) => t.usuarioId !== _req.usuario!.id) // el propio admin no se lista

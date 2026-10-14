@@ -42,9 +42,8 @@ class Tablet extends Model
             if (! $tablet->getKey()) {
                 $tablet->id = 'tablet-'.$tablet->numero;
             }
-            if (trim((string) $tablet->nombre) === '') {
-                $tablet->nombre = 'TABLET '.$tablet->numero;
-            }
+            // El nombre siempre sale del número: "Tablet 01" (igual que el nombre de su usuario).
+            $tablet->nombre = 'Tablet '.$tablet->numero;
 
             // La cuenta vinculada debe ser de tipo tablet.
             if ($tablet->isDirty('usuario_id')) {

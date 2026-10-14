@@ -2,16 +2,20 @@ import { Router } from 'express';
 import { config } from './config.js';
 import { requireAuth } from './auth.js';
 import { lineasTicketCocina, validarTicketCocina, type TicketCocina } from './ticketCocina.js';
+import { encabezadoRestaurante } from './ticketMarca.js';
 
 // La impresora está conectada por USB a la PC de Windows; el backend (en Docker) no la ve,
 // así que reenvía todo al agente de impresión que corre en esa PC (carpeta print-agent/).
 
 export interface LineaTicket {
+  imagen?: 'logo-completo';
+  anchoMm?: number;
   texto?: string;
   derecha?: string;
   alinear?: 'izquierda' | 'centro' | 'derecha';
   negrita?: boolean;
   grande?: boolean;
+  pequeno?: boolean;
   separador?: boolean;
 }
 
@@ -37,10 +41,15 @@ async function llamarAgente(ruta: string, init?: RequestInit) {
   return data;
 }
 
+/** Manda líneas ya armadas a la impresora (por el agente de impresión). */
+export function imprimirLineas(lineas: LineaTicket[]) {
+  return llamarAgente('/imprimir', { method: 'POST', body: JSON.stringify({ lineas }) });
+}
+
 function ticketDePrueba(usuario: string): LineaTicket[] {
   const fecha = new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' });
   return [
-    { texto: 'RESTAURARTE', alinear: 'centro', grande: true },
+    ...encabezadoRestaurante(),
     { texto: 'PRUEBA DE IMPRESIÓN', alinear: 'centro', negrita: true },
     { separador: true },
     { texto: 'Fecha:', derecha: fecha },

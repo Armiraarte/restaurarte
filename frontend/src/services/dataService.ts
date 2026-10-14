@@ -405,8 +405,9 @@ const STORAGE_KEYS = {
   MESAS: 'pos_mesas_v3',
   PRODUCTOS: 'pos_productos_v3',
   PRODUCTOS_SEMILLA: 'pos_productos_semilla_v3',
-  // Marca de la limpieza única de registros de prueba (cuentas, ventas, turnos…).
-  REGISTROS_LIMPIOS: 'pos_registros_limpios_v1',
+  // Marca de la limpieza única de registros de prueba (cuentas, ventas, turnos y mesas).
+  // Cambiar la versión vuelve a limpiar una vez cada dispositivo (caja y tablets) al abrir la app.
+  REGISTROS_LIMPIOS: 'pos_registros_limpios_v2',
 };
 
 /** "5" se muestra como "Mesa 5"; un nombre ("Terraza") se muestra tal cual. */
@@ -469,11 +470,10 @@ function getInitialSeed() {
     appVersion: 'v2.4.1 (APK)',
   };
 
-  const mesa: Mesa = { id: 'mesa-1', nombre: '1' };
-
   return {
     productos: PRODUCTOS_INICIALES.map((p) => ({ ...p })),
-    mesas: [mesa],
+    // Sin mesas de ejemplo: se abren por número desde la tablet o se registran en caja.
+    mesas: [] as Mesa[],
     accounts: [] as Account[],
     orders: [] as Order[],
     comandas: [] as Comanda[],
@@ -508,7 +508,7 @@ class POSDataService {
   constructor() {
     this.loadState();
     if (!localStorage.getItem(STORAGE_KEYS.REGISTROS_LIMPIOS)) {
-      this.limpiarRegistros();
+      this.limpiarRegistros({ mesas: true });
       localStorage.setItem(STORAGE_KEYS.REGISTROS_LIMPIOS, '1');
     }
     this.syncBetweenTabs();
@@ -987,6 +987,36 @@ class POSDataService {
   }
 
   /** El mesero inicia sesión en una tablet: queda conectada y se registra la hora. */
+  /**
+   * Devuelve la tablet "tablet-NN" de este dispositivo; si no existe (cuenta nueva), la agrega.
+   * El número viene de la cuenta con la que inició sesión la tablet (BD: tablets.numero).
+   */
+  public asegurarTablet(numero: string): TabletDevice {
+    const nn = String(Number(numero) || 1).padStart(2, '0');
+    const id = `tablet-${nn}`;
+    const existente = this.tablets.find((t) => t.id === id);
+    if (existente) return existente;
+    const nueva: TabletDevice = {
+      id,
+      number: nn,
+      name: `TABLET ${nn}`,
+      location: '',
+      assignedWaiter: '',
+      status: 'desconectada',
+      batteryLevel: 100,
+      isCharging: false,
+      ipAddress: '',
+      lastConnection: '—',
+      lastActivity: 'Sin actividad',
+      activeTablesCount: 0,
+      activeOrdersCount: 0,
+      appVersion: 'PWA',
+    };
+    this.tablets.push(nueva);
+    this.saveState();
+    return nueva;
+  }
+
   public tabletLogin(tabletId: string, waiterName: string): TabletDevice {
     const index = this.tablets.findIndex((t) => t.id === tabletId);
     if (index === -1) throw new Error('Tablet no encontrada.');
@@ -1433,7 +1463,9 @@ class POSDataService {
   }
 
   /** Borra cuentas, órdenes, comandas, pagos, turnos y eventos; conserva menú, mesas y tablets. */
-  public limpiarRegistros() {
+  /** Borra cuentas, comandas, ventas y turnos de este dispositivo; con `mesas`, también las mesas registradas. */
+  public limpiarRegistros({ mesas = false }: { mesas?: boolean } = {}) {
+    if (mesas) this.mesas = [];
     this.accounts = [];
     this.orders = [];
     this.comandas = [];

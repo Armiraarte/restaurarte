@@ -1,4 +1,5 @@
 // Tablets en línea y verificación de conexión: /api/tablets
+import { useCallback, useEffect, useState } from 'react';
 import { getToken } from './authService';
 
 export interface TabletEnLinea {
@@ -53,4 +54,27 @@ export async function listarTabletsEnLinea(): Promise<TabletEnLinea[]> {
 export async function pedirVerificacion(usuarioId: string): Promise<TabletEnLinea> {
   const { tablet } = await pedir<{ tablet: TabletEnLinea }>('POST', `/${encodeURIComponent(usuarioId)}/verificar`);
   return tablet;
+}
+
+/**
+ * Tablets que han iniciado sesión, desde el servidor (las mismas de «Tablets en línea»).
+ * Se vuelve a leer cada 3 s. null mientras carga.
+ */
+export function useTabletsEnLinea(intervaloMs = 3_000) {
+  const [tablets, setTablets] = useState<TabletEnLinea[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const cargar = useCallback(async () => {
+    try {
+      setTablets(await listarTabletsEnLinea());
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudieron cargar las tablets.');
+    }
+  }, []);
+  useEffect(() => {
+    cargar();
+    const id = setInterval(cargar, intervaloMs);
+    return () => clearInterval(id);
+  }, [cargar, intervaloMs]);
+  return { tablets, error };
 }

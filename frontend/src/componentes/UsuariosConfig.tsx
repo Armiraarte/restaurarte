@@ -47,6 +47,8 @@ export const UsuariosConfig: React.FC = () => {
   // Número de la tablet (BD: tablets.numero); se sugiere el siguiente libre.
   const [numeroTablet, setNumeroTablet] = useState('');
   const [siguienteNumero, setSiguienteNumero] = useState('01');
+  // Nombre de una cuenta de tablet: el de la tablet ("Tablet 01"). BD: usuarios.nombre = tablets.nombre
+  const nombreTablet = numeroTablet ? `Tablet ${String(Number(numeroTablet)).padStart(2, '0')}` : '';
   const [mostrarPassword, setMostrarPassword] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,8 +82,8 @@ export const UsuariosConfig: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.nombre.trim() || !form.usuario.trim() || !form.password) {
-      setError(`Completa nombre, usuario y ${acceso === 'pin' ? 'PIN' : 'contraseña'}.`);
+    if ((rol === 'admin' && !form.nombre.trim()) || !form.usuario.trim() || !form.password) {
+      setError(`Completa ${rol === 'admin' ? 'nombre, ' : ''}usuario y ${acceso === 'pin' ? 'PIN' : 'contraseña'}.`);
       return;
     }
     if (acceso === 'pin' && !FORMATO_PIN.test(form.password)) {
@@ -101,7 +103,8 @@ export const UsuariosConfig: React.FC = () => {
     setError(null);
     try {
       const nuevo = await crearUsuario({
-        nombre: form.nombre,
+        // Tablet: el nombre lo forma el servidor con el número ("Tablet 01").
+        nombre: rol === 'tablet' ? nombreTablet : form.nombre,
         usuario: form.usuario,
         password: form.password,
         rol,
@@ -157,15 +160,22 @@ export const UsuariosConfig: React.FC = () => {
           ))}
         </div>
 
-        <label className="block space-y-1.5">
-          <span className="text-xs font-medium text-neutral-700">{rol === 'tablet' ? 'Nombre de la tablet' : 'Nombre completo'}</span>
-          <input
-            value={form.nombre}
-            onChange={cambiar('nombre')}
-            placeholder={rol === 'tablet' ? 'Tablet 05' : 'Ana López'}
-            className={claseInput}
-          />
-        </label>
+        {rol === 'tablet' ? (
+          /* Tablet: el nombre del usuario es el de la tablet y se forma con su número */
+          <div className="space-y-1.5">
+            <span className="text-xs font-medium text-neutral-700">Nombre</span>
+            <div className="flex items-center gap-2 h-10 px-3 rounded-lg bg-sky-50 border border-sky-200 text-sm font-semibold text-sky-900">
+              <Tablet className="w-4 h-4" />
+              {nombreTablet || 'Tablet —'}
+            </div>
+            <span className="block text-[11px] text-neutral-500">Se forma con el número de la tablet.</span>
+          </div>
+        ) : (
+          <label className="block space-y-1.5">
+            <span className="text-xs font-medium text-neutral-700">Nombre completo</span>
+            <input value={form.nombre} onChange={cambiar('nombre')} placeholder="Ana López" className={claseInput} />
+          </label>
+        )}
 
         {/* Solo tablets: número y ubicación (BD: tablets.numero, tablets.ubicacion) */}
         {rol === 'tablet' && (

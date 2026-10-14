@@ -86,7 +86,7 @@ crea `tablets` vinculada a `usuarios`:
 | `id` | Texto, mismo formato que la app: `tablet-01` (se genera del número). |
 | `usuario_id` | Cuenta con la que inicia sesión la tablet → `usuarios.id`. Única: una cuenta por tablet. No se puede borrar un usuario con tablet vinculada (se desactiva con `activo = false`). |
 | `creado_por` | Administrador que la dio de alta → `usuarios.id` (rol `admin`). |
-| `numero` / `nombre` | `01` (único) / `TABLET 01` (se completa si va vacío). |
+| `numero` / `nombre` | `01` (único) / `Tablet 01`: siempre se forma con el número y es también el nombre de su usuario. |
 | `ubicacion` | Salón, terraza, etc. |
 | `mesero` | Mesero en sesión; texto hasta que exista la tabla de meseros. |
 | `sesion_iniciada_en`, `ultima_conexion`, `ip` | Sesión y último latido (`/api/tablets/latido`). |
@@ -129,10 +129,138 @@ Para generar el modelo, la migración y el seeder de la siguiente tabla:
 Completa los campos y relaciones antes de ejecutar la nueva migración. Para
 cambiar una tabla ya creada, agrega una migración nueva.
 
+### Mesas: número o nombre, servicio y total
+
+La migración `2026_10_09_000003_create_mesas_table.php` crea `mesas`; la siguiente,
+`2026_10_09_000004_catalogar_tipos_venta_y_estatus_de_mesas.php`, reemplaza los
+indicadores anteriores por `tipo_venta_id` y `estatus`, conservando los registros.
+`2026_10_09_000005_autoincrementar_id_y_agregar_codigo_a_mesas.php` convierte
+el ID a autoincrementable y copia el número o nombre existente a `codigo`.
+El modelo `App\Models\Mesa` permite crear y actualizar sus registros:
+
+| Columna | Uso |
+| --- | --- |
+| `id` | `BIGINT UNSIGNED AUTO_INCREMENT`, clave primaria. Lo asigna la base; no se envía al crear. |
+| `codigo` | Número (`5`) o nombre (`Terraza`), obligatorio y único. El modelo normaliza `Mesa 05` a `5`. |
+| `nombre` | Nombre existente, conservado por compatibilidad. Al crear solo con código, toma ese mismo valor. |
+| `tipo_venta_id` | Clave foránea a `tipos_venta.id`. Predeterminado: `1` (comer aquí). Editable. |
+| `total` | Importe actual `DECIMAL(12,2)`, inicialmente `0.00`. Editable, sin valores negativos. |
+| `estatus` | Código entero de `0` a `255`, inicialmente `1`. Su significado se definirá después; admite `0`, `1`, `2`, etc. |
+| `creado_en`, `actualizado_en` | Fechas del registro. |
+
+`tipos_venta` es un catálogo independiente con `id`, `codigo`, `nombre` y fechas.
+Incluye `1 = Comer aquí` (`comer_aqui`) y `2 = Para llevar` (`para_llevar`). Se
+pueden agregar otras categorías. `App\Models\TipoVenta` expone `$tipo->mesas`;
+`Mesa` expone `$mesa->tipoVenta`. MySQL impide eliminar un tipo usado por mesas.
+
+Ejemplo desde Laravel:
+
+```php
+$mesa = App\Models\Mesa::create(['codigo' => '5']); // ID asignado automáticamente
+$mesa->update(['total' => '148.50', 'tipo_venta_id' => App\Models\TipoVenta::PARA_LLEVAR]);
+$mesa->update(['tipo_venta_id' => App\Models\TipoVenta::COMER_AQUI]);
+$mesa->update(['estatus' => 2]); // código pendiente de definir
+```
+
+El total representa el importe actual y cada actualización lo reemplaza. El
+modelo admite hasta dos decimales, exige un tipo del catálogo y valida el estatus
+como entero. MySQL también rechaza nombres vacíos, totales negativos y referencias
+a tipos de venta inexistentes. Durante la conversión, `para_llevar = false/true`
+pasa a `tipo_venta_id = 1/2` y `activa = false/true` pasa a `estatus = 0/1`.
+Estos últimos valores conservan el estado previo; no definen los estados futuros.
+No se agregó un catálogo de estatus mientras se decide qué significa cada código.
+`MesaSeeder` registra la mesa encontrada en el navegador de la aplicación:
+`codigo = 1`, nombre `1`, ID autoincrementable, sin cuenta abierta, total `0.00`, tipo de venta `1` y
+estatus `1`. Repetirlo conserva el total, tipo de venta y estatus de una mesa
+ya existente. `POST /api/mesas` recibe `codigo` y `tipo_venta_id`, y devuelve
+`mesa.id` numérico y `mesa.codigo`. También admite el formato anterior
+`nombre`/`paraLlevar`. Al agregar desde la tablet, primero registra en MySQL;
+las cuentas y pedidos todavía se guardan en `localStorage`;
+la actualización automática del total desde los pedidos requiere conectar ese
+flujo a esta tabla.
+
+La migración conserva total, tipo, estatus y fechas. No existen claves foráneas
+que dependan de los IDs antiguos de mesas. Al revertir esta conversión, los IDs
+de texto se reconstruyen como `mesa-<id numérico>`; no recuperan los UUID originales.
+
+### Categorías
+
+La migración `2026_10_10_000007_create_categorias_table.php` crea `categorias`.
+El modelo `App\Models\Categoria` permite registrar y actualizar las categorías.
+
+| Columna | Uso |
+| --- | --- |
+| `id` | `BIGINT UNSIGNED AUTO_INCREMENT`, clave primaria asignada por la base. |
+| `nombre` | Texto de hasta 100 caracteres, obligatorio y único. |
+| `estatus` | Entero de `0` a `255`, inicialmente `1`; el significado de cada código queda pendiente. |
+| `creado_en` | Fecha de creación, automática. |
+| `actualizado_en` | Fecha de última actualización, automática. |
+
+```php
+$categoria = App\Models\Categoria::create(['nombre' => 'Bebidas']);
+$categoria->update(['estatus' => 2]);
+```
+
+La tabla se crea vacía. Las categorías del menú se pueden cargar después;
+la futura tabla de productos usará `categoria_id` para relacionarse con `categorias.id`.
+
+### Productos: análisis para registrarlos
+
+El catálogo de `frontend/src/services/dataService.ts` contiene 28 productos en
+14 categorías. El navegador también tiene 28 productos, sin productos adicionales
+al menú base. La configuración incluye 31 grupos y 114 opciones, cinco grupos
+con precios por presentación o tamaño y un producto con precios por paquete.
+
+El precio base por sí solo no representa todas las ventas. Para conservar la
+configuración actual, la estructura propuesta es:
+
+| Tabla | Datos y relaciones |
+| --- | --- |
+| `categorias` | Tabla creada: ID autoincrementable, nombre único, estatus y fechas. El menú tiene 14 categorías para cargar. |
+| `productos` | ID actual de texto, nombre único, `categoria_id`, precio base `DECIMAL(12,2)`, estatus numérico y fechas. Para paquetes: nombre singular y plural de la pieza. |
+| `producto_grupos` | ID, `producto_id`, nombre, selección de una o varias opciones, orden y banderas de opcional, todas por defecto, descripción con/sin y reparto por cantidad. |
+| `producto_opciones` | ID, `grupo_id`, nombre, orden y precio de venta opcional `DECIMAL(12,2)`. Nombre único dentro del grupo. |
+| `producto_precios_paquete` | ID, `producto_id`, cantidad de piezas y precio del paquete. Cantidad única por producto. |
+
+Los modificadores predeterminados (`defaultModifiers`) también deben conservarse
+si se utilizan: pueden guardarse como una lista JSON de textos en `productos`.
+Los IDs actuales (`p-taco`, `p-burrita`, `b-pepsi`, etc.) deben conservarse para
+relacionar el catálogo con las partidas y evitar duplicar productos al importar.
+La API podrá reconstruir `grupos`, `paquete` y `reparto` con el mismo formato que
+consume el frontend.
+
+Reglas de precio que deben mantenerse:
+
+- Lonche y hamburguesa: las presentaciones cuestan `50.00` o `80.00`. El precio
+  de la opción es el precio final del producto, no un cargo que se suma al base.
+- Ensalada: chica `40.00`, grande `70.00`; papas: media orden `15.00`, completa
+  `30.00`; agua de lima: chica `15.00`, mediana `20.00`, grande `40.00`.
+- Burritas: una pieza `20.00`, dos `35.00`, tres `50.00`. Cada pieza conserva
+  sus propias elecciones de relleno e ingredientes.
+- Alitas: `13.00` por pieza, repartidas entre sabores. El total es la suma de
+  piezas multiplicada por ese precio; elegir sabor no modifica el precio.
+- Ingredientes de selección múltiple pueden iniciar todos seleccionados. Hay
+  grupos opcionales y opciones que se describen como "Con" o "Sin".
+
+En los pedidos se conservará una copia histórica del nombre, precio y opciones:
+editar un producto después no debe cambiar lo que ya se pidió o cobró. La
+estructura del catálogo no sustituye las futuras tablas de pedidos y partidas.
+
+Pendientes identificados en `PENDIENTES_MENU`, antes de completar el registro:
+
+- Confirmar el segundo sabor de alitas (actualmente "Buffalo").
+- Confirmar cómo funciona la opción de queso en quesadillas.
+- Confirmar si "Queso/Cebolla" en enchiladas es una o dos opciones.
+- Confirmar la presentación de Coca-Cola de `30.00`.
+- Confirmar el precio de Coquita (`20.00` o `25.00`); aún no está en el catálogo.
+- Confirmar el nombre exacto de "Limón / Cereza".
+- Identificar a qué bebida corresponde la anotación de `50.00`.
+
 ## 3. Cargar datos con seeders
 
-`DatabaseSeeder` reúne las cargas y ejecuta `UsuarioSeeder` dentro de una
-transacción. El administrador se obtiene de `ADMIN_USUARIO`, `ADMIN_NOMBRE` y
+`DatabaseSeeder` reúne las cargas y ejecuta `UsuarioSeeder`, `TipoVentaSeeder`
+y `MesaSeeder` dentro de una transacción. El administrador se obtiene de
+`ADMIN_USUARIO`, `ADMIN_NOMBRE` y
 `ADMIN_PASSWORD` en `backend/.env`. El modelo convierte la contraseña o PIN
 en un hash y lo excluye de su representación pública.
 

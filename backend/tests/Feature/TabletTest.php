@@ -47,7 +47,7 @@ class TabletTest extends TestCase
 
         $this->assertSame('tablet-01', $tablet->id);
         $this->assertSame('01', $tablet->numero);
-        $this->assertSame('TABLET 01', $tablet->nombre);
+        $this->assertSame('Tablet 01', $tablet->nombre);
         $this->assertTrue($tablet->activa);
         $this->assertTrue($tablet->usuario->is($cuenta));
         $this->assertTrue($cuenta->fresh()->tablet->is($tablet));

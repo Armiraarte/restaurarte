@@ -81,8 +81,9 @@ class ImportarUsuariosJson extends Command
                             'usuario_id' => $existente->id,
                             'creado_por' => $registro,
                             'numero' => $this->numeroLibre($existente->nombre.' '.$existente->usuario),
-                            'nombre' => strtoupper($existente->nombre),
                         ]);
+                        // La cuenta de tablet se llama como su tablet ("Tablet 01").
+                        DB::table('usuarios')->where('id', $existente->id)->update(['nombre' => $tablet->nombre]);
                         $nuevasTablets++;
                         $this->line("  tablet   {$tablet->nombre} (#{$tablet->numero}) → {$existente->usuario}");
                     }

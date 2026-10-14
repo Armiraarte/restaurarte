@@ -1,0 +1,311 @@
+// Menú y pedidos desde MySQL (tablas de Laravel: categorias, producto, complementos,
+// producto_has_complemento, orden y orden_has_detalle). La tabla comanda ya no se usa (se eliminó);
+// lo que va a cocina sale en el ticket de cocina impreso.
+//
+//   GET   /api/menu                         categorías activas con sus productos, precio y complementos
+//   GET   /api/ordenes/:idOrden             la orden con su detalle y total
+//   POST  /api/ordenes/:idOrden/pedido      { items: [{ idProducto, cantidad, sin? }] } → orden_has_detalle + total
+//                                           sin = ids de complementos quitados (solo van en el ticket de cocina)
+//   POST  /api/ordenes/:idOrden/pedir-cuenta  orden.estatus 0 (ABIERTA) → 1 (PAGANDO): la caja hace el cobro
+//   POST  /api/ordenes/:idOrden/cobrar      { recibido } orden.estatus 1 (PAGANDO) → 2 (PAGADO) e imprime el ticket de cobro
+//   POST  /api/ordenes/:idOrden/ticket-cobro  { recibido? } reimprime el ticket de cobro de una orden pagada
+//                                           (sin recibido, p. ej. desde Ventas, no imprime efectivo ni cambio)
+import { Router, type Request, type Response, type NextFunction } from 'express';
+import type { RowDataPacket } from 'mysql2/promise';
+import { requireAuth } from './auth.js';
+import { pool } from './db.js';
+import { mysqlDisponible } from './usuarios.js';
+import { turnoAbierto } from './turnos.js';
+import { imprimirLineas } from './impresion.js';
+import { lineasTicketCobro } from './ticketCobro.js';
+
+function soloRoles(...roles: string[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.usuario || !roles.includes(req.usuario.rol)) {
+      res.status(403).json({ error: 'Sin permiso.' });
+      return;
+    }
+    next();
+  };
+}
+
+function conBase(_req: Request, res: Response, next: NextFunction) {
+  if (!pool || !mysqlDisponible()) {
+    res.status(503).json({ error: 'La base de datos no está disponible.' });
+    return;
+  }
+  next();
+}
+
+/** orden.nombre "5" → "Mesa 5"; un nombre de cliente se deja igual (mismo criterio que el frontend). */
+const etiquetaOrden = (nombre: string) => (/^\d+$/.test(nombre) ? `Mesa ${nombre}` : nombre);
+
+export const pedidosRouter = Router();
+pedidosRouter.use(requireAuth, conBase, soloRoles('tablet', 'admin', 'cajero', 'cocina'));
+
+/* ---------- Menú ---------- */
+
+pedidosRouter.get('/menu', async (_req, res) => {
+  const [categorias] = await pool!.query<RowDataPacket[]>('SELECT id, nombre FROM categorias WHERE estatus = 1 ORDER BY id');
+  const [productos] = await pool!.query<RowDataPacket[]>(
+    'SELECT id, categoria_id, nombre, tamano, precio, imagen FROM producto WHERE estatus = 1 ORDER BY categoria_id, id',
+  );
+  const [complementos] = await pool!.query<RowDataPacket[]>(
+    `SELECT phc.producto_id, c.id, c.nombre
+       FROM producto_has_complemento phc JOIN complementos c ON c.id = phc.complemento_id
+      WHERE c.estatus = 1 ORDER BY c.id`,
+  );
+
+  const complementosDe = new Map<number, { id: number; nombre: string }[]>();
+  for (const c of complementos) {
+    complementosDe.set(c.producto_id, [...(complementosDe.get(c.producto_id) ?? []), { id: c.id, nombre: c.nombre }]);
+  }
+
+  res.json({
+    categorias: categorias.map((cat) => ({
+      id: cat.id,
+      nombre: cat.nombre,
+      productos: productos
+        .filter((p) => p.categoria_id === cat.id)
+        .map((p) => ({
+          id: p.id,
+          nombre: p.nombre,
+          tamano: p.tamano,
+          precio: Number(p.precio),
+          imagen: p.imagen,
+          complementos: complementosDe.get(p.id) ?? [],
+        })),
+    })),
+  });
+});
+
+/* ---------- Órdenes ---------- */
+
+async function ordenConDetalle(idOrden: number) {
+  const [ordenes] = await pool!.query<RowDataPacket[]>(
+    `SELECT o.idOrden, o.codigo, o.nombre, o.total, o.tipo_orden, o.estatus, o.idTurno, o.creado_en,
+            t.nombre AS abierta_por
+       FROM orden o
+       LEFT JOIN sesiones_tablet st ON st.id = o.idSesion_tablet
+       LEFT JOIN tablets t ON t.id = st.tablet_id
+      WHERE o.idOrden = ?`,
+    [idOrden],
+  );
+  if (!ordenes[0]) return null;
+  const [detalle] = await pool!.query<RowDataPacket[]>(
+    `SELECT d.idDetalle_Orden, d.idProducto, c.nombre AS categoria, p.nombre, p.tamano, d.cantidad, d.subtotal, d.creado_en
+       FROM orden_has_detalle d
+       JOIN producto p ON p.id = d.idProducto
+       JOIN categorias c ON c.id = p.categoria_id
+      WHERE d.idOrden = ? ORDER BY d.idDetalle_Orden`,
+    [idOrden],
+  );
+  const o = ordenes[0];
+  return {
+    // Sin sesión de tablet = la abrió la caja.
+    orden: { ...o, total: Number(o.total), etiqueta: etiquetaOrden(o.nombre), abierta_por: o.abierta_por ?? 'Caja' },
+    detalle: detalle.map((d) => ({ ...d, subtotal: Number(d.subtotal) })),
+  };
+}
+
+pedidosRouter.get('/ordenes/:idOrden', async (req, res) => {
+  const datos = await ordenConDetalle(Number(req.params.idOrden));
+  if (!datos) {
+    res.status(404).json({ error: 'La orden no existe.' });
+    return;
+  }
+  res.json(datos);
+});
+
+/** Pedir la cuenta: la orden pasa a PAGANDO (1) para que la caja la cobre. Solo si está abierta y tiene algo pedido. */
+pedidosRouter.post('/ordenes/:idOrden/pedir-cuenta', async (req, res) => {
+  const idOrden = Number(req.params.idOrden);
+  const actual = await ordenConDetalle(idOrden);
+  if (!actual) {
+    res.status(404).json({ error: 'La orden no existe.' });
+    return;
+  }
+  if (actual.detalle.length === 0) {
+    res.status(409).json({ error: 'La orden no tiene productos; no hay cuenta que cobrar.' });
+    return;
+  }
+  if (Number((actual.orden as { estatus?: number }).estatus) === 2) {
+    res.status(409).json({ error: 'Esta orden ya está pagada.' });
+    return;
+  }
+  await pool!.execute('UPDATE orden SET estatus = 1, actualizado_en = ? WHERE idOrden = ? AND estatus = 0', [new Date(), idOrden]);
+  res.json(await ordenConDetalle(idOrden));
+});
+
+/* ---------- Cobro ---------- */
+
+const redondear = (n: number) => Math.round(n * 100) / 100;
+
+/** Imprime el ticket de cobro; si la impresora falla, el cobro ya quedó hecho y solo se avisa. */
+async function imprimirTicketCobro(idOrden: number, recibido: number | null, cobro: string, reimpresion = false) {
+  const datos = await ordenConDetalle(idOrden);
+  if (!datos) return { ok: false, error: 'La orden no existe.' };
+  const o = datos.orden as unknown as { idOrden: number; etiqueta: string; tipo_orden: number; abierta_por: string; total: number };
+  // Para el cliente se junta el mismo producto aunque se haya pedido en varios envíos.
+  const porProducto = new Map<number, { cantidad: number; nombre: string; importe: number }>();
+  for (const d of datos.detalle as unknown as { idProducto: number; categoria: string; nombre: string; tamano: string | null; cantidad: number; subtotal: number }[]) {
+    const p = porProducto.get(d.idProducto) ?? { cantidad: 0, nombre: `${d.categoria} ${d.nombre}${d.tamano ? ` (${d.tamano})` : ''}`, importe: 0 };
+    p.cantidad += d.cantidad;
+    p.importe = redondear(p.importe + d.subtotal);
+    porProducto.set(d.idProducto, p);
+  }
+  try {
+    await imprimirLineas(
+      lineasTicketCobro({
+        idOrden: o.idOrden,
+        etiqueta: o.etiqueta,
+        paraLlevar: o.tipo_orden === 2,
+        abiertaPor: o.abierta_por,
+        cobro,
+        fecha: new Date(),
+        productos: [...porProducto.values()],
+        total: o.total,
+        recibido,
+        cambio: recibido === null ? null : redondear(recibido - o.total),
+        reimpresion,
+      }),
+    );
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'No se pudo imprimir.' };
+  }
+}
+
+/** Cobrar: la orden que pidió la cuenta (PAGANDO) pasa a PAGADO e imprime el ticket de cobro. */
+pedidosRouter.post('/ordenes/:idOrden/cobrar', soloRoles('admin', 'cajero'), async (req, res) => {
+  const idOrden = Number(req.params.idOrden);
+  const recibido = redondear(Number(req.body?.recibido));
+  const actual = await ordenConDetalle(idOrden);
+  if (!actual) {
+    res.status(404).json({ error: 'La orden no existe.' });
+    return;
+  }
+  if (!(await turnoAbierto())) {
+    res.status(409).json({ error: 'Inicia el turno para poder cobrar.', sinTurno: true });
+    return;
+  }
+  const { estatus, total } = actual.orden as unknown as { estatus: number; total: number };
+  if (estatus !== 1) {
+    res.status(409).json({ error: estatus === 2 ? 'Esta orden ya está pagada.' : 'La orden no ha pedido la cuenta.' });
+    return;
+  }
+  if (!Number.isFinite(recibido) || recibido < total) {
+    res.status(400).json({ error: `El monto recibido debe ser de al menos $${total.toFixed(2)}.` });
+    return;
+  }
+  const [resultado] = await pool!.execute<import('mysql2/promise').ResultSetHeader>(
+    'UPDATE orden SET estatus = 2, actualizado_en = ? WHERE idOrden = ? AND estatus = 1',
+    [new Date(), idOrden],
+  );
+  if (resultado.affectedRows === 0) {
+    res.status(409).json({ error: 'Esta orden ya se cobró en otra caja.' });
+    return;
+  }
+  const impresion = await imprimirTicketCobro(idOrden, recibido, req.usuario!.nombre);
+  res.json({ ...(await ordenConDetalle(idOrden)), cobro: { total, recibido, cambio: redondear(recibido - total) }, impresion });
+});
+
+/** Reimprimir el ticket de cobro de una orden ya pagada. */
+pedidosRouter.post('/ordenes/:idOrden/ticket-cobro', soloRoles('admin', 'cajero'), async (req, res) => {
+  const idOrden = Number(req.params.idOrden);
+  const valor = Number(req.body?.recibido);
+  const recibido = req.body?.recibido != null && Number.isFinite(valor) ? redondear(valor) : null;
+  const actual = await ordenConDetalle(idOrden);
+  if (!actual || (actual.orden as unknown as { estatus: number }).estatus !== 2) {
+    res.status(409).json({ error: 'La orden no está pagada.' });
+    return;
+  }
+  res.json({ impresion: await imprimirTicketCobro(idOrden, recibido, req.usuario!.nombre, true) });
+});
+
+/** Envía un pedido a cocina: guarda el detalle (orden_has_detalle) y recalcula el total de la orden. */
+pedidosRouter.post('/ordenes/:idOrden/pedido', async (req, res) => {
+  const idOrden = Number(req.params.idOrden);
+  const items: { idProducto: number; cantidad: number; sin?: number[] }[] = Array.isArray(req.body?.items) ? req.body.items : [];
+  if (!Number.isSafeInteger(idOrden) || idOrden < 1) {
+    res.status(400).json({ error: 'Orden no válida.' });
+    return;
+  }
+  if (
+    items.length === 0 ||
+    items.some(
+      (i) =>
+        !Number.isSafeInteger(i?.idProducto) ||
+        !Number.isSafeInteger(i?.cantidad) ||
+        i.cantidad < 1 ||
+        (i.sin !== undefined && (!Array.isArray(i.sin) || i.sin.some((c) => !Number.isSafeInteger(c)))),
+    )
+  ) {
+    res.status(400).json({ error: 'El pedido necesita al menos un producto con cantidad mayor que cero.' });
+    return;
+  }
+
+  const conexion = await pool!.getConnection();
+  try {
+    await conexion.beginTransaction();
+    // Bloquea la orden para que dos tablets no descuadren el total al mismo tiempo.
+    const [ordenes] = await conexion.query<RowDataPacket[]>('SELECT idOrden, estatus FROM orden WHERE idOrden = ? FOR UPDATE', [idOrden]);
+    if (!ordenes[0]) {
+      await conexion.rollback();
+      res.status(404).json({ error: 'La orden no existe.' });
+      return;
+    }
+    // El mismo bloqueo de fila protege el paso a cobro frente a pedidos de una pantalla desactualizada.
+    const estatus = Number(ordenes[0].estatus);
+    if (estatus !== 0) {
+      await conexion.rollback();
+      res.status(409).json({
+        error: estatus === 2
+          ? 'Esta orden ya se cobró; abre una orden nueva para esa mesa.'
+          : 'Esta orden está en cobro; ya no se pueden agregar productos ni modificar el pedido.',
+        ordenBloqueada: true,
+        estatus,
+      });
+      return;
+    }
+
+    const ids = [...new Set(items.map((i) => i.idProducto))];
+    const [productos] = await conexion.query<RowDataPacket[]>(
+      `SELECT p.id, p.nombre, p.tamano, p.precio, c.nombre AS categoria
+         FROM producto p JOIN categorias c ON c.id = p.categoria_id
+        WHERE p.id IN (?) AND p.estatus = 1`,
+      [ids],
+    );
+    const porId = new Map(productos.map((p) => [p.id as number, p]));
+    const faltante = ids.find((id) => !porId.has(id));
+    if (faltante) {
+      await conexion.rollback();
+      res.status(400).json({ error: `El producto ${faltante} no existe o no está disponible.` });
+      return;
+    }
+
+    const ahora = new Date();
+    for (const item of items) {
+      const p = porId.get(item.idProducto)!;
+      const subtotal = (Math.round(Number(p.precio) * 100) * item.cantidad) / 100;
+      await conexion.execute(
+        'INSERT INTO orden_has_detalle (idOrden, idProducto, cantidad, subtotal, creado_en, actualizado_en) VALUES (?, ?, ?, ?, ?, ?)',
+        [idOrden, item.idProducto, item.cantidad, subtotal.toFixed(2), ahora, ahora],
+      );
+    }
+    await conexion.execute(
+      `UPDATE orden SET total = (SELECT COALESCE(SUM(subtotal), 0) FROM orden_has_detalle WHERE idOrden = ?), actualizado_en = ?
+        WHERE idOrden = ?`,
+      [idOrden, ahora, idOrden],
+    );
+    await conexion.commit();
+
+    res.status(201).json(await ordenConDetalle(idOrden));
+  } catch (err) {
+    await conexion.rollback();
+    console.error('[pedidos] No se pudo registrar el pedido:', err);
+    res.status(500).json({ error: 'No se pudo registrar el pedido.' });
+  } finally {
+    conexion.release();
+  }
+});

@@ -15,7 +15,7 @@ export type TipoAcceso = 'password' | 'pin';
 export interface TabletRegistrada {
   id: string; // "tablet-01"
   numero: string; // "01"
-  nombre: string; // "TABLET 01"
+  nombre: string; // "Tablet 01" (igual que el nombre de su usuario)
   ubicacion: string;
   creadoPor: string; // usuarios.id del administrador que la dio de alta
 }
@@ -50,6 +50,11 @@ const ARCHIVO = path.join(config.dataDir, 'usuarios.json');
 
 const usuarios: Usuario[] = [];
 let usandoMysql = false;
+
+/** true si al arrancar se conectó a MySQL (si no, la API trabaja con data/usuarios.json). */
+export function mysqlDisponible(): boolean {
+  return usandoMysql;
+}
 
 export async function inicializarUsuarios() {
   if (config.admin.password === 'admin123') {
@@ -152,10 +157,12 @@ export async function crearUsuario(
   };
   if (datos.rol === 'tablet' && tablet) {
     const numero = String(Number(tablet.numero)).padStart(2, '0');
+    // Una cuenta de tablet se llama como su tablet: "Tablet 01", "Tablet 02"…
+    nuevo.nombre = `Tablet ${numero}`;
     nuevo.tablet = {
       id: `tablet-${numero}`,
       numero,
-      nombre: `TABLET ${numero}`,
+      nombre: `Tablet ${numero}`,
       ubicacion: tablet.ubicacion.trim(),
       creadoPor: tablet.creadoPor,
     };
