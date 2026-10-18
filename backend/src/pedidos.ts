@@ -24,7 +24,8 @@ import { guardarDetallePedido, itemsValidos, terminoPermitido, type ItemPedido }
 
 // Opciones por renglón; las mismas constantes que OrdenDetalle en Laravel.
 /** Categorías que ofrecen SIN QUESO. */
-const CATEGORIAS_SIN_QUESO = ['Quesadillas', 'Hamburguesas'];
+const CATEGORIAS_SIN_QUESO = ['Quesadillas', 'Hamburguesas', 'Lonches'];
+const CATEGORIAS_CON_QUESO = ['Tacos', 'Sopes', 'Lonches'];
 /** La única categoría con DOBLE / TRIPLE CARNE. */
 const CATEGORIA_CARNE_EXTRA = 'Hamburguesas';
 
@@ -316,15 +317,15 @@ pedidosRouter.post('/ordenes/:idOrden/pedido', async (req, res) => {
     const categoriaDe = (i: (typeof items)[number]) => porId.get(i.idProducto)!.categoria as string;
     const fueraDeLugar =
       items.find((i) => i.sinQueso && !CATEGORIAS_SIN_QUESO.includes(categoriaDe(i))) ??
-      items.find((i) => i.conQueso && !['Tacos', 'Sopes'].includes(categoriaDe(i))) ??
+      items.find((i) => i.conQueso && !CATEGORIAS_CON_QUESO.includes(categoriaDe(i))) ??
       items.find((i) => (i.carneExtra ?? 0) > 0 && categoriaDe(i) !== CATEGORIA_CARNE_EXTRA);
     if (fueraDeLugar) {
       await conexion.rollback();
       res.status(400).json({
         error: fueraDeLugar.sinQueso && !CATEGORIAS_SIN_QUESO.includes(categoriaDe(fueraDeLugar))
-          ? `Solo las quesadillas y hamburguesas se pueden pedir sin queso (${categoriaDe(fueraDeLugar)}).`
-          : fueraDeLugar.conQueso && !['Tacos', 'Sopes'].includes(categoriaDe(fueraDeLugar))
-            ? 'Solo los tacos y sopes usan la opción CON QUESO.'
+          ? `Solo las quesadillas, hamburguesas y lonches se pueden pedir sin queso (${categoriaDe(fueraDeLugar)}).`
+          : fueraDeLugar.conQueso && !CATEGORIAS_CON_QUESO.includes(categoriaDe(fueraDeLugar))
+            ? 'Solo los tacos, sopes y lonches usan la opción CON QUESO.'
             : `Solo las hamburguesas llevan carne extra (${categoriaDe(fueraDeLugar)}).`,
       });
       return;

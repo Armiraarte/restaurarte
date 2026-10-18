@@ -325,6 +325,8 @@ de cada producto. El cobro conserva los importes individuales.
 Tacos y Sopes ofrecen «CON QUESO» fuera de complementos. El Sope de Queso
 es un producto aparte y no necesita ese botón. Quesadillas y Hamburguesas
 ofrecen «SIN QUESO». Estas opciones no añaden cargos al precio.
+Lonches ofrece ambas opciones, «CON QUESO» y «SIN QUESO», con selección
+excluyente y registro en el detalle de la orden y los tickets.
 Para actualizar una base existente, después de respaldarla y antes de publicar
 la API y el frontend, ejecutar desde `backend/`:
 

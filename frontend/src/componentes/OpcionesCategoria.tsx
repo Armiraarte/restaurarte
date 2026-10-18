@@ -303,13 +303,13 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
         )}
 
         {puedeConQueso && (
-          <div {...grupo(1)}>
+          <div {...grupo(puedeSinQueso ? 2 : 1)}>
             <div className="shrink-0 text-sm font-semibold text-neutral-700">
-              {++paso}. Queso <span className="font-normal text-neutral-500">· toca si lo quieren con queso</span>
+              {++paso}. Queso <span className="font-normal text-neutral-500">{puedeSinQueso ? '· elige con queso o sin queso' : '· toca si lo quieren con queso'}</span>
             </div>
             <div className={rejilla}>
               <button
-                onClick={() => setConQueso((v) => !v)}
+                onClick={() => { setConQueso((v) => !v); setSinQueso(false); }}
                 aria-pressed={conQueso}
                 className={`${boton} px-2 border-2 font-black tracking-wide flex items-center justify-center gap-2 transition-colors cursor-pointer ${
                   conQueso ? 'bg-amber-500 border-amber-600 text-neutral-950 shadow-sm' : 'bg-white border-amber-300 text-amber-800 hover:bg-amber-50'
@@ -318,12 +318,23 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
                 {conQueso && <Check className="w-5 h-5" />}
                 CON QUESO
               </button>
+              {puedeSinQueso && (
+                <button
+                  onClick={() => { setSinQueso((v) => !v); setConQueso(false); }}
+                  aria-pressed={sinQueso}
+                  className={`${boton} px-2 border-2 font-black tracking-wide flex items-center justify-center gap-2 cursor-pointer ${
+                    sinQueso ? 'bg-violet-600 border-violet-700 text-white shadow-sm' : 'bg-white border-violet-300 text-violet-700 hover:bg-violet-50'
+                  }`}
+                >
+                  {sinQueso && <Check className="w-5 h-5" />} SIN QUESO
+                </button>
+              )}
             </div>
           </div>
         )}
 
         {/* 4. Queso (solo Quesadillas): ya lo llevan; solo se toca si la piden sin queso y entonces se registra */}
-        {puedeSinQueso && (
+        {puedeSinQueso && !puedeConQueso && (
           <div {...grupo(1)}>
             <div className="shrink-0 text-sm font-semibold text-neutral-700">
               {++paso}. Queso <span className="font-normal text-neutral-500">· ya lleva queso; toca para pedir sin queso</span>

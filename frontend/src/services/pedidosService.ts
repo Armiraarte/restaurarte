@@ -82,8 +82,8 @@ async function pedir<T>(ruta: string, init: RequestInit = {}): Promise<T> {
 /**
  * Quesadillas y Hamburguesas: SIN QUESO se registra en orden_has_detalle.sin_queso.
  */
-export const CATEGORIAS_SIN_QUESO = ['Quesadillas', 'Hamburguesas'];
-export const CATEGORIAS_CON_QUESO = ['Tacos', 'Sopes'];
+export const CATEGORIAS_SIN_QUESO = ['Quesadillas', 'Hamburguesas', 'Lonches'];
+export const CATEGORIAS_CON_QUESO = ['Tacos', 'Sopes', 'Lonches'];
 
 /**
  * Hamburguesas: DOBLE CARNE (1 extra) o TRIPLE CARNE (2 extra); cada carne extra cuesta PRECIO_CARNE_EXTRA

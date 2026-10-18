@@ -97,4 +97,22 @@ class AmpliacionMenuTest extends TestCase
         $this->assertTrue($hamburguesa->sin_queso);
         $this->assertTrue($sope->con_queso);
     }
+
+    public function test_lonches_guarda_con_queso_o_sin_queso_y_rechaza_ambas_juntas(): void
+    {
+        $orden = Orden::create(['nombre' => '10']);
+        $lonche = $this->producto('Lonches');
+        foreach (['con_queso', 'sin_queso'] as $opcion) {
+            $detalle = OrdenDetalle::create([
+                'idOrden' => $orden->idOrden, 'idProducto' => $lonche->id, 'cantidad' => 1, $opcion => true,
+            ])->fresh();
+            $this->assertTrue($detalle->$opcion);
+            $this->assertSame($lonche->precio, $detalle->subtotal);
+        }
+        $this->expectException(InvalidArgumentException::class);
+        OrdenDetalle::create([
+            'idOrden' => $orden->idOrden, 'idProducto' => $lonche->id, 'cantidad' => 1,
+            'sin_queso' => true, 'con_queso' => true,
+        ]);
+    }
 }

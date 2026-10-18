@@ -22,7 +22,7 @@ class OrdenDetalle extends Model
 
     protected $primaryKey = 'idDetalle_Orden';
 
-    public const CATEGORIAS_SIN_QUESO = ['Quesadillas', 'Hamburguesas'];
+    public const CATEGORIAS_SIN_QUESO = ['Quesadillas', 'Hamburguesas', 'Lonches'];
 
     public const CATEGORIA_CARNE_EXTRA = 'Hamburguesas';
 
@@ -64,8 +64,8 @@ class OrdenDetalle extends Model
                 ?? throw new InvalidArgumentException('El producto no existe.');
 
             $categoria = $producto->categoria?->nombre;
-            if ($detalle->con_queso && ! in_array($categoria, ['Tacos', 'Sopes'], true)) {
-                throw new InvalidArgumentException('Solo los tacos y sopes usan la opción CON QUESO.');
+            if ($detalle->con_queso && ! in_array($categoria, ['Tacos', 'Sopes', 'Lonches'], true)) {
+                throw new InvalidArgumentException('Solo los tacos, sopes y lonches usan la opción CON QUESO.');
             }
             if ($detalle->con_queso && $detalle->sin_queso) {
                 throw new InvalidArgumentException('El producto no puede llevar CON QUESO y SIN QUESO a la vez.');
@@ -80,7 +80,7 @@ class OrdenDetalle extends Model
                 throw new InvalidArgumentException('El grupo MIX debe ser un entero mayor que cero.');
             }
             if ($detalle->sin_queso && ! in_array($categoria, self::CATEGORIAS_SIN_QUESO, true)) {
-                throw new InvalidArgumentException('Solo las quesadillas y hamburguesas se pueden pedir sin queso.');
+                throw new InvalidArgumentException('Solo las quesadillas, hamburguesas y lonches se pueden pedir sin queso.');
             }
 
             $carneExtra = $detalle->carne_extra ?? 0;
