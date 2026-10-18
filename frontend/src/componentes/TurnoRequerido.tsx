@@ -84,7 +84,7 @@ export const BannerSinTurno: React.FC = () => {
   const { iniciar, iniciando, error } = useIniciar();
   return (
     <div className="relative z-10 bg-amber-50 border-b border-amber-200">
-      <div className="max-w-7xl mx-auto px-4 lg:px-8 py-2.5 flex flex-wrap items-center justify-between gap-3">
+      <div className="px-4 lg:px-8 py-2.5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-sm text-amber-900">
           <AlertTriangle className="w-4 h-4 shrink-0" />
           <span>

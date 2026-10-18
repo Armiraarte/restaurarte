@@ -57,6 +57,12 @@ function Dibujar-Ticket {
       }
 
       $f = if ($l.grande) { $fuenteGrande } elseif ($l.pequeno) { $fuentePequena } elseif ($l.negrita) { $fuenteNegrita } else { $fuente }
+      # escala: misma fuente con la letra más grande (1.5 = 50% más). Se libera al terminar la línea.
+      $fuenteEscalada = $null
+      if ($l.escala -and [single]$l.escala -ne 1) {
+        $fuenteEscalada = New-Object System.Drawing.Font($f.FontFamily, [single]($f.Size * [single]$l.escala), $f.Style)
+        $f = $fuenteEscalada
+      }
       $texto = [string]$l.texto
       $formato = switch ($l.alinear) { 'centro' { $centro } 'derecha' { $der } default { $izq } }
       $anchoTexto = $util
@@ -70,6 +76,7 @@ function Dibujar-Ticket {
       if (-not $texto) { $alto = $f.GetHeight($g) }
       $g.DrawString($texto, $f, [System.Drawing.Brushes]::Black, $rect, $formato)
       $y += [Math]::Max($alto, $f.GetHeight($g))
+      if ($fuenteEscalada) { $fuenteEscalada.Dispose() }
     }
     return $y
   } finally {

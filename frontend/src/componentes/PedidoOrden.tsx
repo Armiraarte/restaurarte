@@ -34,9 +34,13 @@ interface LineaNueva {
   cantidad: number;
   /** Complementos que el cliente no quiere ("sin Lechuga"). */
   sin: ComplementoMenu[];
+  /** Mezcla de productos de la categoría ("Papa", "Frijol"): se guarda `producto` (el más caro) y en cocina sale la mezcla. */
+  mezcla: string[];
 }
 
 let siguienteLinea = 1;
+/** "Papa con Frijol" si es mezcla; si no, el nombre del producto con su tamaño. */
+const nombreLinea = (l: LineaNueva) => (l.mezcla.length > 1 ? l.mezcla.join(' con ') : nombreProducto(l.producto));
 const textoSin = (sin: ComplementoMenu[]) => (sin.length ? ` · sin ${sin.map((c) => c.nombre.toLowerCase()).join(', ')}` : '');
 
 /** Categorías que se muestran como cuadrícula rápida (Bebidas): sin complementos y con muchos productos. */
@@ -77,14 +81,15 @@ function ticketDe(orden: OrdenBD, lineas: LineaNueva[], ronda: number, origen: s
     productos: lineas.map((l) => ({
       partida_id: String(l.producto.id),
       producto_id: String(l.producto.id),
-      nombre: `${l.categoria} · ${nombreProducto(l.producto)}`,
+      nombre: `${l.categoria} · ${nombreLinea(l)}`,
       categoria: l.categoria,
       cantidad: l.cantidad,
       opciones: [],
+      // Un complemento por renglón: primero los que lleva y luego los que se quitaron.
       descripcion: [
-        l.producto.complementos.filter((c) => !l.sin.some((x) => x.id === c.id)).map((c) => c.nombre).join(', '),
-        l.sin.length ? `Sin ${l.sin.map((c) => c.nombre.toLowerCase()).join(', ')}` : '',
-      ].filter(Boolean),
+        ...l.producto.complementos.filter((c) => !l.sin.some((x) => x.id === c.id)).map((c) => c.nombre),
+        ...l.sin.map((c) => `Sin ${c.nombre.toLowerCase()}`),
+      ],
     })),
     total_piezas: lineas.reduce((acc, l) => acc + l.cantidad, 0),
   };
@@ -174,9 +179,9 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
   }, [alerta]);
 
   /** Desde la pantalla de opciones: siempre un renglón nuevo, aunque sea el mismo producto. */
-  const agregar = (producto: ProductoMenu, categoria: string, cantidad: number, sin: ComplementoMenu[]) => {
+  const agregar = (producto: ProductoMenu, categoria: string, cantidad: number, sin: ComplementoMenu[], mezcla: string[]) => {
     if (!puedeEditar) return;
-    setNuevo((lista) => [...lista, { id: siguienteLinea++, rapida: false, producto, categoria, cantidad, sin }]);
+    setNuevo((lista) => [...lista, { id: siguienteLinea++, rapida: false, producto, categoria, cantidad, sin, mezcla }]);
   };
   /** Toque en la cuadrícula rápida (Bebidas): suma 1 al renglón rápido de ese producto. */
   const agregarRapido = (producto: ProductoMenu, categoria: string) => {
@@ -184,7 +189,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
     setNuevo((lista) =>
       lista.some((l) => l.rapida && l.producto.id === producto.id)
         ? lista.map((l) => (l.rapida && l.producto.id === producto.id ? { ...l, cantidad: l.cantidad + 1 } : l))
-        : [...lista, { id: siguienteLinea++, rapida: true, producto, categoria, cantidad: 1, sin: [] }]
+        : [...lista, { id: siguienteLinea++, rapida: true, producto, categoria, cantidad: 1, sin: [], mezcla: [] }]
     );
   };
   const cambiar = (id: number, delta: number) => {
@@ -220,7 +225,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
       const paraTicket = enviado.filter(vaEnTicket);
       setAlerta({
         titulo: `Pedido enviado a cocina · ${datos.orden.etiqueta}`,
-        detalle: enviado.map((l) => `${l.cantidad} × ${l.categoria} · ${nombreProducto(l.producto)}${textoSin(l.sin)}`),
+        detalle: enviado.map((l) => `${l.cantidad} × ${l.categoria} · ${nombreLinea(l)}${textoSin(l.sin)}`),
         impresion:
           paraTicket.length > 0
             ? { ok: null, texto: 'Imprimiendo ticket de cocina…' }
@@ -364,7 +369,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
         <PedidoEnviado
           orden={orden}
           detalle={detalle}
-          className="w-full max-w-2xl mx-auto"
+          className="w-full"
           onAgregar={() => setPestana('agregar')}
         />
       ) : (
@@ -387,7 +392,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
               categoria={opcionesDe}
               pantallaCompleta={pantallaCompleta}
               onVolver={() => setOpcionesDe(null)}
-              onAgregar={(producto, cantidad, sin) => agregar(producto, opcionesDe.nombre, cantidad, sin)}
+              onAgregar={(producto, cantidad, sin, mezcla) => agregar(producto, opcionesDe.nombre, cantidad, sin, mezcla)}
             />
           ) : categoriaAbierta ? (
             <div className="flex-1 min-h-0 flex flex-col gap-2">
@@ -470,7 +475,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
                   <div key={l.id} className="border-b border-neutral-100 pb-2 last:border-0 space-y-1.5">
                     <div className="flex items-start justify-between gap-2">
                       <span className="font-medium leading-tight">
-                        {nombreProducto(l.producto)}
+                        {nombreLinea(l)}
                         <span className="block text-xs font-normal text-neutral-500">{l.categoria}</span>
                         {l.sin.length > 0 && (
                           <span className="block text-xs font-normal text-rose-700">Sin {l.sin.map((c) => c.nombre.toLowerCase()).join(', ')}</span>

@@ -1,5 +1,6 @@
 // Pantalla de opciones de una categoría (como la de antes), armada con los datos de la base:
 //   1. Elige una  → los productos de la categoría (BD: producto.nombre): Frijol, Jamón, Papa…
+//                   En categorías sin tamaños se pueden tocar varias para mezclarlas ("Papa con Frijol").
 //   2. Tamaño     → solo si el producto tiene tamaños (BD: producto.tamano), con su precio
 //   3. Complementos → todos incluidos; se tocan los que no quieren (BD: producto_has_complemento)
 //   Cantidad y "Agregar a la orden".
@@ -38,12 +39,17 @@ interface Props {
   categoria: CategoriaMenu;
   pantallaCompleta: boolean;
   onVolver: () => void;
-  onAgregar: (producto: ProductoMenu, cantidad: number, sin: ComplementoMenu[]) => void;
+  /** mezcla: los demás productos elegidos junto con `producto` ("Papa con Frijol"); vacío si es uno solo. */
+  onAgregar: (producto: ProductoMenu, cantidad: number, sin: ComplementoMenu[], mezcla: string[]) => void;
 }
 
 export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta, onVolver, onAgregar }) => {
   const nombres = [...new Set(categoria.productos.map((p) => p.nombre))];
-  const [nombre, setNombre] = useState<string | null>(nombres.length === 1 ? nombres[0] : null);
+  // Mezclar solo tiene sentido si ningún producto se vende por tamaño (Ensaladas, Papas…).
+  const permiteMezcla = nombres.length > 1 && categoria.productos.every((p) => p.tamano === null);
+  // Elegidos en orden de toque: el primero es el principal. Sin mezcla siempre hay a lo más uno.
+  const [elegidos, setElegidos] = useState<string[]>(nombres.length === 1 ? [nombres[0]] : []);
+  const nombre = elegidos[0] ?? null;
   const [tamano, setTamano] = useState<string | null>(null);
   const [quitados, setQuitados] = useState<number[]>([]);
   const [cantidad, setCantidad] = useState(1);
@@ -51,15 +57,31 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
 
   const delNombre = categoria.productos.filter((p) => p.nombre === nombre);
   const tamanos = delNombre.filter((p) => p.tamano !== null);
-  const producto = tamanos.length > 0 ? tamanos.find((p) => p.tamano === tamano) : delNombre[0];
-  // Complementos: los del producto elegido (o del primero con ese nombre mientras se elige tamaño).
-  const complementos = (producto ?? delNombre[0])?.complementos ?? [];
+  // En una mezcla se cobra el más caro de los elegidos (y es el que se guarda en la orden).
+  const producto =
+    elegidos.length > 1
+      ? categoria.productos.filter((p) => elegidos.includes(p.nombre)).reduce((a, b) => (b.precio > a.precio ? b : a))
+      : tamanos.length > 0
+        ? tamanos.find((p) => p.tamano === tamano)
+        : delNombre[0];
+  // Complementos: los de todos los elegidos, sin repetir (o del primero con ese nombre mientras se elige tamaño).
+  const complementos = [
+    ...new Map(
+      categoria.productos.filter((p) => elegidos.includes(p.nombre)).flatMap((p) => p.complementos).map((c) => [c.id, c])
+    ).values(),
+  ];
+  const textoElegidos = elegidos.join(' con ');
+
+  const tocarNombre = (n: string) => {
+    if (!permiteMezcla) return setElegidos([n]);
+    setElegidos((lista) => (lista.includes(n) ? lista.filter((x) => x !== n) : [...lista, n]));
+  };
 
   // Al cambiar de producto se reinician tamaño y complementos (todos incluidos).
   useEffect(() => {
     setTamano(null);
     setQuitados([]);
-  }, [nombre]);
+  }, [elegidos.join('|')]);
 
   useEffect(() => {
     if (!agregado) return;
@@ -79,9 +101,9 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
   const agregar = () => {
     if (!producto) return;
     const sin = complementos.filter((c) => quitados.includes(c.id));
-    onAgregar(producto, cantidad, sin);
-    setAgregado(`${cantidad} × ${producto.nombre}${producto.tamano ? ` (${producto.tamano})` : ''}`);
-    setNombre(nombres.length === 1 ? nombres[0] : null);
+    onAgregar(producto, cantidad, sin, elegidos.length > 1 ? elegidos : []);
+    setAgregado(`${cantidad} × ${elegidos.length > 1 ? textoElegidos : producto.nombre}${producto.tamano ? ` (${producto.tamano})` : ''}`);
+    setElegidos(nombres.length === 1 ? [nombres[0]] : []);
     setTamano(null);
     setQuitados([]);
     setCantidad(1);
@@ -118,20 +140,28 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
         {nombres.length > 1 && (
           <div {...grupo(nombres.length)}>
             <div className="shrink-0 text-sm font-semibold text-neutral-700">
-              {++paso}. {etiquetaEleccion} <span className="font-normal text-neutral-500">· elige una</span>
+              {++paso}. {etiquetaEleccion}{' '}
+              <span className="font-normal text-neutral-500">
+                {permiteMezcla ? '· elige una o toca varias para mezclar' : '· elige una'}
+              </span>
+              {elegidos.length > 1 && <span className="ml-2 font-semibold text-orange-800">→ {textoElegidos}</span>}
             </div>
             <div className={rejilla}>
               {nombres.map((n) => {
                 const precios = categoria.productos.filter((p) => p.nombre === n).map((p) => p.precio);
+                const activo = elegidos.includes(n);
                 return (
                   <button
                     key={n}
-                    onClick={() => setNombre(n)}
-                    aria-pressed={nombre === n}
+                    onClick={() => tocarNombre(n)}
+                    aria-pressed={activo}
                     className={`relative ${boton} px-2 border-2 font-semibold flex flex-col items-center justify-center transition-colors cursor-pointer ${
-                      nombre === n ? BOTON_UNA.on : BOTON_UNA.off
+                      activo ? BOTON_UNA.on : BOTON_UNA.off
                     }`}
                   >
+                    {activo && elegidos.length > 1 && (
+                      <span className="absolute top-1 left-1.5 text-xs font-mono font-bold text-orange-700">{elegidos.indexOf(n) + 1}</span>
+                    )}
                     {n}
                     {precioDesde !== precioHasta && <span className="text-sm font-mono font-normal">{dinero(Math.min(...precios))}</span>}
                   </button>

@@ -1,18 +1,18 @@
 {
   "id": "/",
-  "name": "RESTAURARTE — Caja",
-  "short_name": "Caja",
-  "description": "Caja central del restaurante: cuentas, comandas, cobros y turnos.",
+  "name": "SOFT RESTAURANTE",
+  "short_name": "SOFT RESTAURANTE",
+  "description": "Sistema de Cenaduría Los Diablitos: cuentas, comandas, cobros y turnos de caja.",
   "lang": "es",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#f5f5f5",
-  "theme_color": "#f59e0b",
+  "background_color": "#fff4e4",
+  "theme_color": "#ff7518",
   "icons": [
-    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "/icons/cenaduria-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/cenaduria-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/cenaduria-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

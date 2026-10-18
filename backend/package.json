@@ -7,7 +7,8 @@
     "dev": "tsx watch --env-file-if-exists=../.env src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test:impresion": "node --import tsx --test tests-node/impresion.test.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

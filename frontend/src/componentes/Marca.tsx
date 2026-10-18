@@ -1,6 +1,6 @@
 // Identidad de la caja web:
 //   MarcaDeAgua → logo completo de Cenaduría Los Diablitos, fijo al fondo y difuminado (public/images/logo-completo-800.jpg)
-//   PieDePagina → logo del software Restaurarte y «Hecho por ARMIRARTE» (public/images/restaurarte-recortado.png)
+//   PieDePagina → logo del software Restaurarte y «Hecho por ARMIRARTE», fijo abajo (public/images/restaurarte-recortado.png)
 // Las imágenes tienen fondo blanco: mix-blend-multiply (en la capa que se mezcla con la página) lo vuelve
 // transparente sobre el fondo crema.
 import React from 'react';
@@ -27,7 +27,7 @@ export const EncabezadoTicketRestaurante: React.FC = () => (
   </div>
 );
 
-export const MarcaDeAgua: React.FC<{ destacada?: boolean }> = ({ destacada = false }) => (
+export const MarcaDeAgua: React.FC = () => (
   <div
     aria-hidden="true"
     className="pointer-events-none select-none fixed inset-0 z-0 flex items-center justify-center p-8 mix-blend-multiply"
@@ -35,14 +35,14 @@ export const MarcaDeAgua: React.FC<{ destacada?: boolean }> = ({ destacada = fal
     <img
       src="/images/logo-completo-800.jpg"
       alt=""
-      className={`w-[min(70vw,56rem)] max-h-[70vh] object-contain ${destacada ? 'opacity-[0.18]' : 'opacity-[0.08] blur-[1px]'}`}
+      className="w-[min(70vw,56rem)] max-h-[70vh] object-contain opacity-[0.08] blur-[1px]"
     />
   </div>
 );
 
 export const PieDePagina: React.FC = () => (
-  <footer className="relative z-10 border-t border-neutral-200 bg-white/70 backdrop-blur-sm">
-    <div className="max-w-7xl mx-auto px-4 lg:px-8 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs text-neutral-500">
+  <footer className="sticky bottom-0 z-30 border-t border-neutral-200 bg-white/70 backdrop-blur-sm">
+    <div className="px-4 lg:px-8 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs text-neutral-500">
       <div className="flex items-center gap-3">
         <img src="/images/restaurarte-recortado.png" alt="Restaurarte · Soft Restaurant" className="h-10 w-auto mix-blend-multiply" />
       </div>

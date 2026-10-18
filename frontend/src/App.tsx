@@ -17,7 +17,7 @@ import { CobroModal } from './componentes/CobroModal';
 import { SalesTicketModal } from './componentes/SalesTicketModal';
 import { TabletsView } from './componentes/TabletsView';
 import { SimulationPanel } from './componentes/SimulationPanel';
-import { LoginView } from './componentes/LoginView';
+import { InicioSesion } from './componentes/InicioSesion';
 import { MesasView } from './componentes/MesasView';
 import { ConfiguracionView } from './componentes/ConfiguracionView';
 import { InicioView } from './componentes/InicioView';
@@ -63,7 +63,7 @@ export default function App() {
   }
 
   if (!usuario) {
-    return <LoginView onLoginSuccess={setUsuario} />;
+    return <InicioSesion app="caja" onEntrar={setUsuario} />;
   }
 
   // Las cuentas de tipo tablet no usan la caja: van a la app de meseros.
@@ -197,7 +197,7 @@ function PosDashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () =>
       <AnimarTurno>{sinTurno && !avisoTurnoVisto && <AvisoIniciarTurno onCerrar={() => setAvisoTurnoVisto(true)} />}</AnimarTurno>
 
       {/* 2. Main Content Area */}
-      <main className="relative z-10 flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+      <main className="relative z-10 flex-1 w-full px-4 lg:px-8 py-4 sm:py-6 lg:py-8">
         {verConfiguracion && <ConfiguracionView onVolver={() => setEnConfiguracion(false)} />}
 
         {!verConfiguracion && currentTab === 'inicio' && (

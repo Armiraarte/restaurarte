@@ -4,14 +4,10 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertTriangle,
-  Eye,
-  EyeOff,
   Hash,
   Loader2,
-  Lock,
   LogOut,
   Minus,
-  Monitor,
   Plus,
   User,
 } from 'lucide-react';
@@ -19,18 +15,15 @@ import { Account, ProductCatalogItem, TabletDevice } from '../types/pos';
 import { posDataService } from '../services/dataService';
 import { SelectorTipoOrden } from './AppTabletCuenta';
 import { PedidoOrden } from './PedidoOrden';
-import { BotonInstalarPwa } from './InstalarPwa';
-import { login, logout as cerrarSesionCuenta, obtenerSesion, Rol, Usuario } from '../services/authService';
+import { InicioSesion } from './InicioSesion';
+import { logout as cerrarSesionCuenta, obtenerSesion, ROLES_APP_MESEROS, Usuario } from '../services/authService';
 import { salirDeLinea } from '../services/tabletsService';
 import { esOrdenActiva, etiquetaMesaRegistrada, listarMesasTurno, MesaRegistrada, registrarMesa } from '../services/mesasService';
 import { useEnVivo } from '../services/enVivo';
 import { cerrarSesionTablet, iniciarSesionTablet, SinTurnoError } from '../services/turnosService';
 import { IndicadorTurno } from './IndicadorTurno';
 import { AvisoVerificacion, useLatidoTablet } from './VerificacionConexion';
-import { LogoRestaurante, MarcaDeAgua } from './Marca';
-
-// Cuentas que pueden abrir la app de meseros (se crean en Configuración → Usuarios).
-const ROLES_TABLET: Rol[] = ['tablet', 'admin'];
+import { MarcaDeAgua } from './Marca';
 
 const SESION_KEY = 'tablet_sesion'; // sin prefijo pos_ para no disparar la sincronización
 
@@ -78,7 +71,7 @@ export default function AppTablet() {
       obtenerSesion()
         .then((u) => {
           if (cancelado) return;
-          setCuenta(u && ROLES_TABLET.includes(u.rol) ? u : null);
+          setCuenta(u && ROLES_APP_MESEROS.includes(u.rol) ? u : null);
           setVerificandoCuenta(false);
         })
         .catch(() => {
@@ -166,7 +159,7 @@ export default function AppTablet() {
   if (verificandoCuenta) {
     pantalla = <div className="h-dvh" />;
   } else if (!cuenta) {
-    pantalla = <LoginCuentaTablet onLogin={setCuenta} />;
+    pantalla = <InicioSesion app="meseros" onEntrar={setCuenta} />;
   } else if (turno === 'sinTurno' || turno === 'error') {
     pantalla = (
       <div className="h-dvh flex items-center justify-center p-4">
@@ -199,125 +192,12 @@ export default function AppTablet() {
   }
 
   return (
-    // Cristal: las tarjetas son translúcidas y dejan ver el logo de la cenaduría del fondo.
-    <div className="cristal relative h-dvh overflow-hidden bg-neutral-100">
-      <MarcaDeAgua destacada={!cuenta} />
+    // Cristal: con sesión, las tarjetas son translúcidas y dejan ver el logo de la cenaduría del fondo.
+    // El inicio de sesión lleva su propio panel de marca, con tarjetas sólidas y sin marca de agua.
+    <div className={`${cuenta ? 'cristal ' : ''}relative h-dvh overflow-hidden bg-neutral-100`}>
+      {cuenta && <MarcaDeAgua />}
       <div className="relative z-10 h-full">{pantalla}</div>
       <AvisoVerificacion fase={faseVerificacion} />
-    </div>
-  );
-}
-
-/* ---------- Inicio de sesión ---------- */
-
-/** Paso 1: usuario y contraseña/PIN de una cuenta creada en Configuración → Usuarios. */
-function LoginCuentaTablet({ onLogin }: { onLogin: (u: Usuario) => void }) {
-  const [usuario, setUsuario] = useState('');
-  const [password, setPassword] = useState('');
-  const [mostrar, setMostrar] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [cargando, setCargando] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!usuario.trim() || !password) {
-      setError('Ingresa tu usuario y tu contraseña o PIN.');
-      return;
-    }
-    setCargando(true);
-    setError(null);
-    try {
-      const u = await login(usuario, password);
-      if (!ROLES_TABLET.includes(u.rol)) {
-        cerrarSesionCuenta();
-        throw new Error('Esta cuenta no tiene acceso a la app de meseros.');
-      }
-      onLogin(u);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo iniciar sesión.');
-      setCargando(false);
-    }
-  };
-
-  const claseInput =
-    'w-full h-14 bg-white/60 border-2 border-neutral-200 rounded-xl pl-11 pr-4 text-lg text-neutral-900 placeholder:text-neutral-500 focus:outline-none focus:border-amber-400 select-text';
-
-  return (
-    <div className="h-dvh overflow-hidden text-neutral-900 flex items-center justify-center p-4 select-none">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-md max-h-full overflow-y-auto bg-white/15 border border-white/60 rounded-2xl p-6 sm:p-8 space-y-5 shadow-lg shadow-infernal/10"
-      >
-        <div className="space-y-3 text-center">
-          <LogoRestaurante className="mx-auto w-full max-w-[320px]" />
-          <h1 className="text-sm font-semibold text-infernal">App de meseros · Iniciar sesión</h1>
-        </div>
-
-        <label className="block space-y-2">
-          <span className="text-sm font-semibold text-neutral-700">Usuario</span>
-          <div className="relative">
-            <User className="w-5 h-5 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              value={usuario}
-              onChange={(e) => setUsuario(e.target.value)}
-              autoFocus
-              autoCapitalize="none"
-              autoComplete="username"
-              placeholder="usuario"
-              className={claseInput}
-            />
-          </div>
-        </label>
-
-        <label className="block space-y-2">
-          <span className="text-sm font-semibold text-neutral-700">Contraseña o PIN</span>
-          <div className="relative">
-            <Lock className="w-5 h-5 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type={mostrar ? 'text' : 'password'}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-              placeholder="••••"
-              className={`${claseInput} pr-12`}
-            />
-            <button
-              type="button"
-              onClick={() => setMostrar((v) => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-neutral-500 hover:text-neutral-700 cursor-pointer"
-              aria-label={mostrar ? 'Ocultar' : 'Mostrar'}
-            >
-              {mostrar ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-            </button>
-          </div>
-        </label>
-
-        {error && (
-          <div className="flex items-center gap-2 text-sm text-rose-700 bg-rose-50 border border-rose-200 px-3 py-2 rounded-lg">
-            <AlertTriangle className="w-4 h-4 shrink-0" />
-            {error}
-          </div>
-        )}
-
-        <button
-          type="submit"
-          disabled={cargando}
-          className="w-full h-14 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-neutral-950 text-lg font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
-        >
-          {cargando && <Loader2 className="w-5 h-5 animate-spin" />}
-          {cargando ? 'Verificando…' : 'Entrar'}
-        </button>
-
-        <BotonInstalarPwa nombreApp="de meseros" />
-
-        <a
-          href="/"
-          className="flex items-center justify-center gap-1.5 text-sm text-neutral-500 hover:text-neutral-800 transition-colors"
-        >
-          <Monitor className="w-4 h-4" />
-          Ir al inicio de sesión de caja
-        </a>
-      </form>
     </div>
   );
 }

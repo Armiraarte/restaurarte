@@ -15,7 +15,7 @@ export const Header: React.FC<HeaderProps> = ({ usuario, onLogout, onOpenConfig,
   return (
     <header className="sticky top-0 z-30 bg-white border-b border-neutral-200 text-neutral-900">
       {/* Tres columnas: logo a la izquierda, turno al centro y usuario a la derecha */}
-      <div className="max-w-7xl mx-auto px-4 lg:px-8 py-3 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+      <div className="px-4 lg:px-8 py-3 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
         {/* Logo de la cenaduría (public/images/icono-160.png) */}
         <div className="flex items-center gap-2.5 justify-self-start min-w-0">
           <img

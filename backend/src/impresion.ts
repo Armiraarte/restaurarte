@@ -16,6 +16,7 @@ export interface LineaTicket {
   negrita?: boolean;
   grande?: boolean;
   pequeno?: boolean;
+  escala?: number; // multiplica el tamaño de la letra (1.5 = 50% más grande)
   separador?: boolean;
 }
 
@@ -42,15 +43,19 @@ async function llamarAgente(ruta: string, init?: RequestInit) {
 }
 
 /** Manda líneas ya armadas a la impresora (por el agente de impresión). */
-export function imprimirLineas(lineas: LineaTicket[]) {
-  return llamarAgente('/imprimir', { method: 'POST', body: JSON.stringify({ lineas }) });
+export type DestinoImpresion = 'cocina' | 'caja';
+const esDestino = (destino: unknown): destino is DestinoImpresion => destino === 'cocina' || destino === 'caja';
+
+export function imprimirLineas(lineas: LineaTicket[], destino: DestinoImpresion = 'caja') {
+  return llamarAgente('/imprimir', { method: 'POST', body: JSON.stringify({ lineas, destino }) });
 }
 
-function ticketDePrueba(usuario: string): LineaTicket[] {
+function ticketDePrueba(usuario: string, destino: DestinoImpresion): LineaTicket[] {
   const fecha = new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' });
   return [
     ...encabezadoRestaurante(),
     { texto: 'PRUEBA DE IMPRESIÓN', alinear: 'centro', negrita: true },
+    { texto: destino === 'cocina' ? 'COCINA' : 'CAJA', alinear: 'centro', negrita: true },
     { separador: true },
     { texto: 'Fecha:', derecha: fecha },
     { texto: 'Usuario:', derecha: usuario },
@@ -77,6 +82,24 @@ impresionRouter.get('/estado', async (_req, res) => {
   }
 });
 
+impresionRouter.put('/asignacion', async (req, res) => {
+  if (!['admin', 'cajero'].includes(req.usuario!.rol)) {
+    res.status(403).json({ error: 'Solo administración o caja pueden asignar impresoras.' });
+    return;
+  }
+  const { destino, impresora } = req.body ?? {};
+  if (!esDestino(destino) || typeof impresora !== 'string' || !impresora.trim()) {
+    res.status(400).json({ error: 'Selecciona una impresora y un destino válido: cocina o caja.' });
+    return;
+  }
+  try {
+    const estado = await llamarAgente('/asignacion', { method: 'PUT', body: JSON.stringify({ destino, impresora }) });
+    res.json({ agente: true, ...estado });
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
 /** Ticket de cocina: recibe el JSON (ver ticketCocina.ts), lo valida y lo imprime. */
 impresionRouter.post('/cocina', async (req, res) => {
   const ticket = req.body?.ticket;
@@ -86,10 +109,7 @@ impresionRouter.post('/cocina', async (req, res) => {
     return;
   }
   try {
-    const data = await llamarAgente('/imprimir', {
-      method: 'POST',
-      body: JSON.stringify({ lineas: lineasTicketCocina(ticket as TicketCocina) }),
-    });
+    const data = await imprimirLineas(lineasTicketCocina(ticket as TicketCocina), 'cocina');
     res.json(data);
   } catch (err: any) {
     res.status(err.status || 500).json({ error: err.message });
@@ -97,11 +117,13 @@ impresionRouter.post('/cocina', async (req, res) => {
 });
 
 impresionRouter.post('/prueba', async (req, res) => {
+  const destino = req.body?.destino ?? 'caja';
+  if (!esDestino(destino)) {
+    res.status(400).json({ error: 'El destino debe ser cocina o caja.' });
+    return;
+  }
   try {
-    const data = await llamarAgente('/imprimir', {
-      method: 'POST',
-      body: JSON.stringify({ lineas: ticketDePrueba(req.usuario!.nombre) }),
-    });
+    const data = await imprimirLineas(ticketDePrueba(req.usuario!.nombre, destino), destino);
     res.json(data);
   } catch (err: any) {
     res.status(err.status || 500).json({ error: err.message });

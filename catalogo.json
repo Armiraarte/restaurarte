@@ -1,0 +1,877 @@
+{
+  "complementos": [
+    {
+      "id": 1,
+      "nombre": "Crema"
+    },
+    {
+      "id": 2,
+      "nombre": "Salsa"
+    },
+    {
+      "id": 3,
+      "nombre": "Lechuga"
+    },
+    {
+      "id": 4,
+      "nombre": "Aderezo"
+    },
+    {
+      "id": 5,
+      "nombre": "Cebolla"
+    },
+    {
+      "id": 6,
+      "nombre": "Jitomate"
+    },
+    {
+      "id": 7,
+      "nombre": "Chile"
+    },
+    {
+      "id": 8,
+      "nombre": "Repollo"
+    },
+    {
+      "id": 9,
+      "nombre": "Queso"
+    },
+    {
+      "id": 10,
+      "nombre": "Catsup"
+    },
+    {
+      "id": 11,
+      "nombre": "Pepino"
+    }
+  ],
+  "categorias": [
+    {
+      "id": 1,
+      "nombre": "Tacos Dorados",
+      "productos": [
+        {
+          "id": 1,
+          "nombre": "Papa",
+          "tamano": null,
+          "precio": "10.00",
+          "complementos": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema"
+          ]
+        },
+        {
+          "id": 2,
+          "nombre": "Frijol",
+          "tamano": null,
+          "precio": "10.00",
+          "complementos": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema"
+          ]
+        },
+        {
+          "id": 3,
+          "nombre": "Jamón",
+          "tamano": null,
+          "precio": "10.00",
+          "complementos": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema"
+          ]
+        },
+        {
+          "id": 4,
+          "nombre": "Salchicha",
+          "tamano": null,
+          "precio": "10.00",
+          "complementos": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema"
+          ]
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "nombre": "Tacos",
+      "productos": [
+        {
+          "id": 5,
+          "nombre": "Barbacoa",
+          "tamano": null,
+          "precio": "18.00",
+          "complementos": [
+            "Queso",
+            "Cebolla",
+            "Salsa"
+          ]
+        },
+        {
+          "id": 6,
+          "nombre": "Chicharrón",
+          "tamano": null,
+          "precio": "18.00",
+          "complementos": [
+            "Queso",
+            "Cebolla",
+            "Salsa"
+          ]
+        },
+        {
+          "id": 7,
+          "nombre": "Pollo",
+          "tamano": null,
+          "precio": "18.00",
+          "complementos": [
+            "Queso",
+            "Cebolla",
+            "Salsa"
+          ]
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "nombre": "Quesadillas",
+      "productos": [
+        {
+          "id": 8,
+          "nombre": "Papa",
+          "tamano": null,
+          "precio": "15.00",
+          "complementos": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema"
+          ]
+        },
+        {
+          "id": 9,
+          "nombre": "Frijol",
+          "tamano": null,
+          "precio": "15.00",
+          "complementos": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema"
+          ]
+        },
+        {
+          "id": 10,
+          "nombre": "Picadillo",
+          "tamano": null,
+          "precio": "15.00",
+          "complementos": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema"
+          ]
+        },
+        {
+          "id": 11,
+          "nombre": "Pollo",
+          "tamano": null,
+          "precio": "15.00",
+          "complementos": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema"
+          ]
+        },
+        {
+          "id": 12,
+          "nombre": "Queso",
+          "tamano": null,
+          "precio": "15.00",
+          "complementos": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema"
+          ]
+        },
+        {
+          "id": 13,
+          "nombre": "Jamón",
+          "tamano": null,
+          "precio": "15.00",
+          "complementos": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema"
+          ]
+        },
+        {
+          "id": 14,
+          "nombre": "Chicharrón",
+          "tamano": null,
+          "precio": "15.00",
+          "complementos": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema"
+          ]
+        },
+        {
+          "id": 15,
+          "nombre": "Jalapeño",
+          "tamano": null,
+          "precio": "15.00",
+          "complementos": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema"
+          ]
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "nombre": "Sopes",
+      "productos": [
+        {
+          "id": 16,
+          "nombre": "Papa",
+          "tamano": null,
+          "precio": "15.00",
+          "complementos": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema",
+            "Queso"
+          ]
+        },
+        {
+          "id": 17,
+          "nombre": "Frijol",
+          "tamano": null,
+          "precio": "15.00",
+          "complementos": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema",
+            "Queso"
+          ]
+        },
+        {
+          "id": 18,
+          "nombre": "Picadillo",
+          "tamano": null,
+          "precio": "15.00",
+          "complementos": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema",
+            "Queso"
+          ]
+        },
+        {
+          "id": 19,
+          "nombre": "Pollo",
+          "tamano": null,
+          "precio": "15.00",
+          "complementos": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema",
+            "Queso"
+          ]
+        },
+        {
+          "id": 20,
+          "nombre": "Chicharrón",
+          "tamano": null,
+          "precio": "15.00",
+          "complementos": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema",
+            "Queso"
+          ]
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "nombre": "Enchiladas",
+      "productos": [
+        {
+          "id": 21,
+          "nombre": "Papa",
+          "tamano": null,
+          "precio": "15.00",
+          "complementos": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema",
+            "Queso"
+          ]
+        },
+        {
+          "id": 22,
+          "nombre": "Frijol",
+          "tamano": null,
+          "precio": "15.00",
+          "complementos": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema",
+            "Queso"
+          ]
+        },
+        {
+          "id": 23,
+          "nombre": "Picadillo",
+          "tamano": null,
+          "precio": "15.00",
+          "complementos": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema",
+            "Queso"
+          ]
+        },
+        {
+          "id": 24,
+          "nombre": "Pollo",
+          "tamano": null,
+          "precio": "15.00",
+          "complementos": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema",
+            "Queso"
+          ]
+        },
+        {
+          "id": 25,
+          "nombre": "Queso/Cebolla",
+          "tamano": null,
+          "precio": "15.00",
+          "complementos": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema",
+            "Queso"
+          ]
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "nombre": "Tostadas",
+      "productos": [
+        {
+          "id": 26,
+          "nombre": "Frijol",
+          "tamano": null,
+          "precio": "15.00",
+          "complementos": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema",
+            "Queso"
+          ]
+        },
+        {
+          "id": 27,
+          "nombre": "Jamón",
+          "tamano": null,
+          "precio": "15.00",
+          "complementos": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema",
+            "Queso"
+          ]
+        },
+        {
+          "id": 28,
+          "nombre": "Pierna",
+          "tamano": null,
+          "precio": "15.00",
+          "complementos": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema",
+            "Queso"
+          ]
+        },
+        {
+          "id": 29,
+          "nombre": "Pollo",
+          "tamano": null,
+          "precio": "15.00",
+          "complementos": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema",
+            "Queso"
+          ]
+        },
+        {
+          "id": 30,
+          "nombre": "Mixta",
+          "tamano": null,
+          "precio": "15.00",
+          "complementos": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema",
+            "Queso"
+          ]
+        },
+        {
+          "id": 31,
+          "nombre": "Cuerito",
+          "tamano": null,
+          "precio": "15.00",
+          "complementos": [
+            "Repollo",
+            "Lechuga",
+            "Salsa",
+            "Crema",
+            "Queso"
+          ]
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "nombre": "Burritas",
+      "productos": [
+        {
+          "id": 32,
+          "nombre": "Pierna",
+          "tamano": null,
+          "precio": "20.00",
+          "complementos": [
+            "Lechuga",
+            "Jitomate",
+            "Cebolla",
+            "Chile",
+            "Aderezo"
+          ]
+        },
+        {
+          "id": 33,
+          "nombre": "Chicharrón",
+          "tamano": null,
+          "precio": "20.00",
+          "complementos": [
+            "Lechuga",
+            "Jitomate",
+            "Cebolla",
+            "Chile",
+            "Aderezo"
+          ]
+        },
+        {
+          "id": 34,
+          "nombre": "Milanesa",
+          "tamano": null,
+          "precio": "20.00",
+          "complementos": [
+            "Lechuga",
+            "Jitomate",
+            "Cebolla",
+            "Chile",
+            "Aderezo"
+          ]
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "nombre": "Lonches",
+      "productos": [
+        {
+          "id": 35,
+          "nombre": "Pierna",
+          "tamano": null,
+          "precio": "50.00",
+          "complementos": [
+            "Catsup",
+            "Aderezo",
+            "Lechuga",
+            "Jitomate",
+            "Cebolla",
+            "Chile"
+          ]
+        },
+        {
+          "id": 36,
+          "nombre": "Milanesa",
+          "tamano": null,
+          "precio": "50.00",
+          "complementos": [
+            "Catsup",
+            "Aderezo",
+            "Lechuga",
+            "Jitomate",
+            "Cebolla",
+            "Chile"
+          ]
+        },
+        {
+          "id": 37,
+          "nombre": "Jamón",
+          "tamano": null,
+          "precio": "50.00",
+          "complementos": [
+            "Catsup",
+            "Aderezo",
+            "Lechuga",
+            "Jitomate",
+            "Cebolla",
+            "Chile"
+          ]
+        },
+        {
+          "id": 38,
+          "nombre": "Barbacoa",
+          "tamano": null,
+          "precio": "50.00",
+          "complementos": [
+            "Catsup",
+            "Aderezo",
+            "Lechuga",
+            "Jitomate",
+            "Cebolla",
+            "Chile"
+          ]
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "nombre": "Hamburguesas",
+      "productos": [
+        {
+          "id": 39,
+          "nombre": "Pollo",
+          "tamano": null,
+          "precio": "50.00",
+          "complementos": [
+            "Lechuga",
+            "Jitomate",
+            "Cebolla",
+            "Chile",
+            "Catsup"
+          ]
+        },
+        {
+          "id": 40,
+          "nombre": "Res",
+          "tamano": null,
+          "precio": "50.00",
+          "complementos": [
+            "Lechuga",
+            "Jitomate",
+            "Cebolla",
+            "Chile",
+            "Catsup"
+          ]
+        },
+        {
+          "id": 41,
+          "nombre": "Milanesa",
+          "tamano": null,
+          "precio": "50.00",
+          "complementos": [
+            "Lechuga",
+            "Jitomate",
+            "Cebolla",
+            "Chile",
+            "Catsup"
+          ]
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "nombre": "Ensaladas",
+      "productos": [
+        {
+          "id": 42,
+          "nombre": "Milanesa",
+          "tamano": "Chica",
+          "precio": "40.00",
+          "complementos": [
+            "Jitomate",
+            "Pepino",
+            "Chile",
+            "Cebolla"
+          ]
+        },
+        {
+          "id": 43,
+          "nombre": "Milanesa",
+          "tamano": "Grande",
+          "precio": "70.00",
+          "complementos": [
+            "Jitomate",
+            "Pepino",
+            "Chile",
+            "Cebolla"
+          ]
+        },
+        {
+          "id": 44,
+          "nombre": "Pollo a la plancha",
+          "tamano": "Chica",
+          "precio": "40.00",
+          "complementos": [
+            "Jitomate",
+            "Pepino",
+            "Chile",
+            "Cebolla"
+          ]
+        },
+        {
+          "id": 45,
+          "nombre": "Pollo a la plancha",
+          "tamano": "Grande",
+          "precio": "70.00",
+          "complementos": [
+            "Jitomate",
+            "Pepino",
+            "Chile",
+            "Cebolla"
+          ]
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "nombre": "Papas a la Francesa",
+      "productos": [
+        {
+          "id": 46,
+          "nombre": "Papas a la Francesa",
+          "tamano": "Media orden",
+          "precio": "15.00",
+          "complementos": []
+        },
+        {
+          "id": 47,
+          "nombre": "Papas a la Francesa",
+          "tamano": "Orden completa",
+          "precio": "30.00",
+          "complementos": []
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "nombre": "Alitas",
+      "productos": [
+        {
+          "id": 48,
+          "nombre": "Mango Habanero",
+          "tamano": null,
+          "precio": "13.00",
+          "complementos": []
+        },
+        {
+          "id": 49,
+          "nombre": "Buffalo",
+          "tamano": null,
+          "precio": "13.00",
+          "complementos": []
+        },
+        {
+          "id": 50,
+          "nombre": "BBQ",
+          "tamano": null,
+          "precio": "13.00",
+          "complementos": []
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "nombre": "Salchichas",
+      "productos": [
+        {
+          "id": 51,
+          "nombre": "Entera",
+          "tamano": null,
+          "precio": "10.00",
+          "complementos": [
+            "Repollo",
+            "Salsa",
+            "Crema"
+          ]
+        },
+        {
+          "id": 52,
+          "nombre": "Picada",
+          "tamano": null,
+          "precio": "10.00",
+          "complementos": [
+            "Repollo",
+            "Salsa",
+            "Crema"
+          ]
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "nombre": "Bebidas",
+      "productos": [
+        {
+          "id": 53,
+          "nombre": "7UP",
+          "tamano": null,
+          "precio": "20.00",
+          "complementos": []
+        },
+        {
+          "id": 54,
+          "nombre": "Agua de Lima",
+          "tamano": "Chica",
+          "precio": "15.00",
+          "complementos": []
+        },
+        {
+          "id": 55,
+          "nombre": "Agua de Lima",
+          "tamano": "Mediana",
+          "precio": "20.00",
+          "complementos": []
+        },
+        {
+          "id": 56,
+          "nombre": "Agua de Lima",
+          "tamano": "Grande",
+          "precio": "40.00",
+          "complementos": []
+        },
+        {
+          "id": 57,
+          "nombre": "Agua Mineral",
+          "tamano": null,
+          "precio": "30.00",
+          "complementos": []
+        },
+        {
+          "id": 58,
+          "nombre": "Agua Natural",
+          "tamano": null,
+          "precio": "20.00",
+          "complementos": []
+        },
+        {
+          "id": 59,
+          "nombre": "Coca 1/2",
+          "tamano": null,
+          "precio": "25.00",
+          "complementos": []
+        },
+        {
+          "id": 60,
+          "nombre": "Coca Light",
+          "tamano": null,
+          "precio": "30.00",
+          "complementos": []
+        },
+        {
+          "id": 61,
+          "nombre": "Coca Zero",
+          "tamano": null,
+          "precio": "30.00",
+          "complementos": []
+        },
+        {
+          "id": 62,
+          "nombre": "Coca-Cola",
+          "tamano": null,
+          "precio": "30.00",
+          "complementos": []
+        },
+        {
+          "id": 63,
+          "nombre": "Jumex Durazno",
+          "tamano": null,
+          "precio": "30.00",
+          "complementos": []
+        },
+        {
+          "id": 64,
+          "nombre": "Jumex Manzana",
+          "tamano": null,
+          "precio": "30.00",
+          "complementos": []
+        },
+        {
+          "id": 65,
+          "nombre": "Limón / Cereza",
+          "tamano": null,
+          "precio": "30.00",
+          "complementos": []
+        },
+        {
+          "id": 66,
+          "nombre": "Manzanita",
+          "tamano": null,
+          "precio": "20.00",
+          "complementos": []
+        },
+        {
+          "id": 67,
+          "nombre": "Mirinda",
+          "tamano": null,
+          "precio": "20.00",
+          "complementos": []
+        },
+        {
+          "id": 68,
+          "nombre": "Pepsi",
+          "tamano": null,
+          "precio": "20.00",
+          "complementos": []
+        },
+        {
+          "id": 69,
+          "nombre": "Sangría",
+          "tamano": null,
+          "precio": "20.00",
+          "complementos": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 {
-  "name": "POS Caja Central - Sistema de Restaurante",
-  "description": "Sistema principal de caja para restaurante: control de cuentas abiertas, seguimiento de comandas, cobro multimetodo y gestion de turnos de caja.",
+  "name": "SOFT RESTAURANTE",
+  "description": "Sistema de Cenaduría Los Diablitos: cuentas, comandas, cobros y turnos de caja.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

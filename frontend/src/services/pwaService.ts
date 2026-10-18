@@ -99,6 +99,24 @@ async function revisarVersion() {
   }
 }
 
+/**
+ * App de meseros abierta como página de Chrome: por http en la red local, Chrome solo crea un acceso directo
+ * (no la instala de verdad) y la abre con sus barras. Con el primer toque se pone en pantalla completa y
+ * solo se ve la app. Si se sale (gesto de atrás), el siguiente toque la vuelve a poner.
+ * Solo en pantallas táctiles y cuando no está instalada como app.
+ */
+export function pantallaCompletaAlTocar() {
+  const raiz = document.documentElement;
+  if (typeof raiz.requestFullscreen !== 'function' || !window.matchMedia('(pointer: coarse)').matches) return;
+  // click y no pointerdown: en pantallas táctiles el navegador da permiso de pantalla completa al soltar el dedo.
+  document.addEventListener('click', () => {
+    if (document.fullscreenElement || esStandalone()) return;
+    raiz.requestFullscreen({ navigationUI: 'hide' }).catch(() => {
+      // el navegador no lo permitió: se queda como página normal
+    });
+  });
+}
+
 /** Se llama una sola vez al arrancar, antes de montar React, para no perder el evento de instalación. */
 export function iniciarPwa() {
   window.addEventListener('beforeinstallprompt', (e) => {

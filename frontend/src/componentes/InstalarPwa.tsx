@@ -2,8 +2,14 @@ import React, { useState } from 'react';
 import { CheckCircle2, Download, RefreshCw, X } from 'lucide-react';
 import { instalarPwa, useInstalacionPwa, useVersionNueva } from '../services/pwaService';
 
-/** Botón para instalar la app; si el navegador no tiene diálogo, muestra los pasos a mano. */
-export const BotonInstalarPwa: React.FC<{ nombreApp: string }> = ({ nombreApp }) => {
+/**
+ * Botón para instalar la app; si el navegador no tiene diálogo, muestra los pasos a mano.
+ * variante: 'oscuro' (relleno negro) o 'contorno' (secundario, para no competir con el botón principal).
+ */
+export const BotonInstalarPwa: React.FC<{ nombreApp: string; variante?: 'oscuro' | 'contorno' }> = ({
+  nombreApp,
+  variante = 'oscuro',
+}) => {
   const estado = useInstalacionPwa();
   const [verPasos, setVerPasos] = useState(false);
 
@@ -26,7 +32,11 @@ export const BotonInstalarPwa: React.FC<{ nombreApp: string }> = ({ nombreApp })
       <button
         type="button"
         onClick={handleClick}
-        className="w-full flex items-center justify-center gap-2 bg-neutral-900 hover:bg-neutral-800 text-white font-semibold text-sm py-3 rounded-xl transition-colors cursor-pointer"
+        className={`w-full flex items-center justify-center gap-2 font-semibold py-3 rounded-xl transition-colors cursor-pointer ${
+          variante === 'contorno'
+            ? 'bg-white hover:bg-neutral-50 border-2 border-neutral-300 text-neutral-800 text-base'
+            : 'bg-neutral-900 hover:bg-neutral-800 text-white text-sm'
+        }`}
       >
         <Download className="w-5 h-5" />
         <span>Instalar app {nombreApp}</span>

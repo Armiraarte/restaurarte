@@ -299,6 +299,9 @@ turnosRouter.post('/sesion-tablet', soloRoles('tablet'), async (req, res) => {
       nueva = true;
     }
     await conexion.commit();
+    // La tablet llama aquí cada vez que recibe un aviso de "turno". Si la sesión ya estaba abierta no
+    // cambió nada: no se avisa, o la tablet respondería a su propio aviso en bucle (3 vueltas por segundo).
+    if (!nueva) res.locals.sinCambios = true;
     res.status(nueva ? 201 : 200).json({ turno, sesion, nueva });
   } catch (err) {
     await conexion.rollback();

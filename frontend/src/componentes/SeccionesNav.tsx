@@ -77,7 +77,7 @@ export const SeccionesNav: React.FC<SeccionesNavProps> = ({
 
   return (
     <nav aria-label="Secciones" className="relative z-10 bg-white border-b border-neutral-200">
-      <div className="max-w-7xl mx-auto px-4 lg:px-8 py-3 grid grid-cols-3 md:grid-cols-6 gap-2 md:gap-3">
+      <div className="px-4 lg:px-8 py-3 grid grid-cols-3 md:grid-cols-6 gap-2 md:gap-3">
         {secciones.map(({ id, label, icon: Icon, badge, alerta }) => {
           const activo = currentTab === id;
           const color = COLORES[id];

@@ -24,13 +24,17 @@ export function emitirEvento(...tipos: TipoEvento[]) {
   }
 }
 
-/** Middleware: después de cualquier escritura que salió bien (POST/PATCH/PUT/DELETE con 2xx), avisa. */
+/**
+ * Middleware: después de cualquier escritura que salió bien (POST/PATCH/PUT/DELETE con 2xx), avisa.
+ * Si la ruta no cambió nada, marca `res.locals.sinCambios = true` y no se avisa: así una pantalla que
+ * reacciona a un aviso con una escritura no se dispara a sí misma en bucle.
+ */
 export const avisarCambios =
   (...tipos: TipoEvento[]) =>
   (req: Request, res: Response, next: NextFunction) => {
     if (req.method !== 'GET') {
       res.on('finish', () => {
-        if (res.statusCode < 400) emitirEvento(...tipos);
+        if (res.statusCode < 400 && !res.locals.sinCambios) emitirEvento(...tipos);
       });
     }
     next();

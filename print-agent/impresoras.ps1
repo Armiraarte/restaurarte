@@ -7,17 +7,23 @@ function Normalizar([string]$s) { ($s -replace '\s', '').ToLowerInvariant() }
 $puertos = @{}
 foreach ($p in Get-PrinterPort) { $puertos[$p.Name] = $p.Description }
 
-$dispositivos = @(Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue |
-  Where-Object { $_.Status -eq 'OK' -and $_.FriendlyName } |
-  ForEach-Object { Normalizar $_.FriendlyName })
+$presentes = @(Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'OK' })
+$idsPresentes = @($presentes | ForEach-Object { $_.InstanceId })
+$dispositivos = @($presentes | Where-Object { $_.FriendlyName } | ForEach-Object { Normalizar $_.FriendlyName })
 
 $resultado = foreach ($imp in Get-CimInstance Win32_Printer) {
   $esUsb = $imp.PortName -like 'USB*'
   $conectada = -not $imp.WorkOffline
   if ($esUsb) {
     # El puerto USB guarda el nombre del dispositivo; si ese dispositivo no está presente, está desconectada.
-    $desc = $puertos[$imp.PortName]
-    $conectada = $conectada -and [bool]$desc -and ($dispositivos -contains (Normalizar $desc))
+    $registro = Get-ItemProperty -LiteralPath "HKLM:\SYSTEM\CurrentControlSet\Control\Print\Monitors\USB Monitor\Ports\$($imp.PortName)" -ErrorAction SilentlyContinue
+    $id = $registro.'Device Id'
+    if ($id) {
+      $conectada = $conectada -and ($idsPresentes -contains $id)
+    } else {
+      $desc = $puertos[$imp.PortName]
+      $conectada = $conectada -and [bool]$desc -and ($dispositivos -contains (Normalizar $desc))
+    }
   }
   [pscustomobject]@{
     nombre        = $imp.Name

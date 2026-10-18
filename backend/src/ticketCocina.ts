@@ -73,28 +73,33 @@ function fechaHora(iso: string): string {
 }
 
 /**
- * Formato impreso (impresora térmica de 80 mm), compacto para ahorrar papel:
+ * Formato impreso (impresora térmica de 80 mm), todo alineado a la izquierda:
+ *   [logo]
  *   Orden cocina #00004-2
- *   Mesa 1                     Tablet 01
+ *   Mesa 1
+ *   Tablet 01
  *   10/10/2026 09:05 a.m.
  *   ------------------------------------
- *   Tacos Dorados · Frijol            x2
- *     Crema, Salsa, Queso
- *     Sin lechuga
+ *   2x Tacos Dorados · Frijol
+ *     - Crema
+ *     - Salsa
+ *     - Sin lechuga
  * Sin precios: cocina solo necesita qué preparar.
  */
 export function lineasTicketCocina(t: TicketCocina): LineaTicket[] {
   const lineas: LineaTicket[] = [
-    ...encabezadoRestaurante(),
+    ...encabezadoRestaurante({ anchoMm: 35, alinear: 'izquierda' }), // logo 30% más chico que en los demás tickets
     { texto: `Orden cocina ${t.orden_cocina}`, grande: true },
-    { texto: t.para_llevar ? `${t.mesa} · PARA LLEVAR` : t.mesa, derecha: t.tablet, negrita: true },
+    { texto: t.para_llevar ? `${t.mesa} · PARA LLEVAR` : t.mesa, negrita: true },
+    ...(t.tablet ? [{ texto: t.tablet }] : []),
     { texto: fechaHora(t.enviada_en) },
     { separador: true },
   ];
 
+  // Productos y complementos con letra 50% más grande para leerlos de lejos en cocina.
   for (const p of t.productos) {
-    lineas.push({ texto: p.nombre, derecha: `x${p.cantidad}`, negrita: true });
-    for (const d of p.descripcion) lineas.push({ texto: `  ${d}` });
+    lineas.push({ texto: `${p.cantidad}x ${p.nombre}`, negrita: true, escala: 1.5 });
+    for (const d of p.descripcion) lineas.push({ texto: `  - ${d}`, escala: 1.5 });
     if (p.notas) lineas.push({ texto: `  NOTA: ${p.notas}`, negrita: true });
   }
 

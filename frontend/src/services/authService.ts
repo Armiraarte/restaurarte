@@ -9,6 +9,9 @@ export interface Usuario {
   tablet?: { id: string; numero: string; nombre: string; ubicacion: string };
 }
 
+/** Cuentas que pueden abrir la app de meseros (/tablet). Las demás entran por la caja. */
+export const ROLES_APP_MESEROS: Rol[] = ['tablet', 'admin'];
+
 const TOKEN_KEY = 'pos_token';
 
 export function getToken(): string | null {

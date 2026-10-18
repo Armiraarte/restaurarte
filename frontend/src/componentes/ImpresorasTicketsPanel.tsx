@@ -1,27 +1,39 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { Loader2, Plug, Printer, RefreshCw, Unplug } from 'lucide-react';
-import { EstadoImpresion, imprimirPrueba, obtenerEstadoImpresion } from '../services/impresionService';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Banknote, Check, ChefHat, Loader2, Plug, Printer, RefreshCw, Unplug } from 'lucide-react';
+import { asignarImpresora, DestinoImpresion, EstadoImpresion, imprimirPrueba, obtenerEstadoImpresion } from '../services/impresionService';
 
 const INTERVALO_REVISION_MS = 30_000;
 
 type Aviso = { tipo: 'ok' | 'error'; texto: string } | null;
+const DESTINOS = [
+  { id: 'cocina' as const, nombre: 'Cocina', Icono: ChefHat },
+  { id: 'caja' as const, nombre: 'Caja', Icono: Banknote },
+];
 
 export const ImpresorasTicketsPanel: React.FC = () => {
   const [estado, setEstado] = useState<EstadoImpresion | null>(null);
   const [revisando, setRevisando] = useState(false);
-  const [imprimiendo, setImprimiendo] = useState(false);
+  const [imprimiendo, setImprimiendo] = useState<DestinoImpresion | null>(null);
+  const [guardando, setGuardando] = useState<{ destino: DestinoImpresion; impresora: string } | null>(null);
+  const guardandoRef = useRef(false);
+  const revision = useRef(0);
   const [aviso, setAviso] = useState<Aviso>(null);
   const [ultimaRevision, setUltimaRevision] = useState<string | null>(null);
 
   const revisar = useCallback(async () => {
+    if (guardandoRef.current) return;
+    const actual = ++revision.current;
     setRevisando(true);
     try {
-      setEstado(await obtenerEstadoImpresion());
+      const nuevo = await obtenerEstadoImpresion();
+      if (actual === revision.current) setEstado(nuevo);
     } catch (err) {
-      setEstado({ agente: false, error: (err as Error).message });
+      if (actual === revision.current) setEstado({ agente: false, error: (err as Error).message });
     } finally {
-      setRevisando(false);
-      setUltimaRevision(new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      if (actual === revision.current) {
+        setRevisando(false);
+        setUltimaRevision(new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      }
     }
   }, []);
 
@@ -31,25 +43,44 @@ export const ImpresorasTicketsPanel: React.FC = () => {
     return () => clearInterval(id);
   }, [revisar]);
 
-  const handlePrueba = async () => {
-    setImprimiendo(true);
+  const handlePrueba = async (destino: DestinoImpresion) => {
+    setImprimiendo(destino);
     setAviso(null);
     try {
-      const { impresora } = await imprimirPrueba();
-      setAviso({ tipo: 'ok', texto: `Ticket de prueba enviado a ${impresora}.` });
+      const { impresora } = await imprimirPrueba(destino);
+      setAviso({ tipo: 'ok', texto: `Prueba de ${destino} enviada a ${impresora}.` });
     } catch (err) {
       setAviso({ tipo: 'error', texto: (err as Error).message });
     } finally {
-      setImprimiendo(false);
+      setImprimiendo(null);
       revisar();
     }
   };
 
-  const ticket = estado?.ticket ?? null;
-  // Solo impresoras físicas (USB) y la elegida para tickets; se omiten las virtuales (PDF, OneNote, etc.).
+  const handleAsignar = async (destino: DestinoImpresion, impresora: string) => {
+    guardandoRef.current = true;
+    ++revision.current;
+    setRevisando(false);
+    setGuardando({ destino, impresora });
+    setAviso(null);
+    try {
+      setEstado(await asignarImpresora(destino, impresora));
+      setAviso({ tipo: 'ok', texto: `${impresora} asignada a ${destino}.` });
+    } catch (err) {
+      setAviso({ tipo: 'error', texto: (err as Error).message });
+    } finally {
+      guardandoRef.current = false;
+      setGuardando(null);
+    }
+  };
+
+  const nombres = {
+    cocina: estado?.asignaciones?.cocina ?? null,
+    caja: estado?.asignaciones ? estado.asignaciones.caja : estado?.ticket?.nombre ?? null,
+  };
+  // Se muestran las impresoras USB y las asignadas a los dos destinos.
   const impresoras = (estado?.impresoras ?? [])
-    .filter((i) => i.usb || i.nombre === ticket?.nombre)
-    .sort((a, b) => Number(b.nombre === ticket?.nombre) - Number(a.nombre === ticket?.nombre));
+    .filter((i) => i.usb || Object.values(nombres).includes(i.nombre));
   const conectadas = impresoras.filter((i) => i.conectada).length;
   const desconectadas = impresoras.length - conectadas;
 
@@ -79,25 +110,48 @@ export const ImpresorasTicketsPanel: React.FC = () => {
         <div className="flex flex-wrap gap-2 self-start sm:self-auto">
           <button
             onClick={revisar}
-            disabled={revisando}
+            disabled={revisando || !!guardando}
             className="px-3.5 py-1.5 text-xs font-semibold text-sky-800 bg-sky-50 border border-sky-200 rounded-lg hover:bg-sky-100 disabled:opacity-50 transition-colors cursor-pointer flex items-center gap-1.5"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${revisando ? 'animate-spin' : ''}`} />
             Volver a revisar
           </button>
-          <button
-            onClick={handlePrueba}
-            disabled={imprimiendo || !ticket?.conectada}
-            className="px-3.5 py-1.5 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer flex items-center gap-1.5"
-          >
-            {imprimiendo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Printer className="w-3.5 h-3.5" />}
-            Prueba de impresión
-          </button>
         </div>
       </div>
 
+      {estado?.agente && (
+        <div className="space-y-2">
+          <p className="text-xs text-neutral-600">Los pedidos se imprimen en cocina; los cobros y cortes, en caja.</p>
+          <p className="text-xs text-neutral-500">Cada impresora puede asignarse a una sola función. Al cambiarla, se desmarca la anterior.</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {DESTINOS.map(({ id, nombre, Icono }) => {
+              const seleccionada = estado.destinos?.[id] ?? estado.impresoras?.find((i) => i.nombre === nombres[id]);
+              return (
+                <div key={id} className="rounded-xl border border-neutral-200 bg-neutral-50 p-3 flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 text-sm font-semibold text-neutral-900"><Icono className="w-4 h-4" /> {nombre}</div>
+                    <div className="mt-1 text-xs text-neutral-600 break-words">{nombres[id] ?? 'Sin asignar'}</div>
+                    {nombres[id] && !seleccionada?.conectada && <div className="mt-1 text-xs text-rose-700">Impresora no disponible</div>}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handlePrueba(id)}
+                    disabled={!!imprimiendo || !!guardando || !seleccionada?.conectada}
+                    className="flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    {imprimiendo === id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Printer className="w-3.5 h-3.5" />}
+                    Probar {id}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {aviso && (
         <div
+          role={aviso.tipo === 'error' ? 'alert' : 'status'}
           className={`text-xs px-3 py-2 rounded-lg border ${
             aviso.tipo === 'ok'
               ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
@@ -121,9 +175,9 @@ export const ImpresorasTicketsPanel: React.FC = () => {
           No se detectó ninguna impresora de tickets.
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {impresoras.map((imp) => {
-            const enUso = imp.nombre === ticket?.nombre;
+            const usos = DESTINOS.filter(({ id }) => nombres[id] === imp.nombre).map(({ nombre }) => nombre);
             return (
               <div
                 key={imp.nombre}
@@ -134,7 +188,7 @@ export const ImpresorasTicketsPanel: React.FC = () => {
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="text-[10px] uppercase tracking-wider text-neutral-500">
-                      {enUso ? 'En uso para tickets' : 'Impresora'}
+                      {usos.length ? usos.join(' · ') : 'Sin asignación'}
                     </div>
                     <div className="text-sm font-bold text-neutral-900 truncate" title={imp.nombre}>
                       {imp.nombre}
@@ -159,6 +213,28 @@ export const ImpresorasTicketsPanel: React.FC = () => {
                   <div>
                     Puerto: <span className="font-mono text-neutral-900">{imp.puerto}</span>
                   </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {DESTINOS.map(({ id, Icono }) => {
+                    const asignada = nombres[id] === imp.nombre;
+                    const pendiente = guardando?.destino === id && guardando.impresora === imp.nombre;
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        aria-label={`Asignar ${imp.nombre} a ${id}`}
+                        aria-pressed={asignada}
+                        onClick={() => handleAsignar(id, imp.nombre)}
+                        disabled={asignada || !!guardando || !!imprimiendo}
+                        className={`flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2.5 text-xs font-semibold transition-colors disabled:cursor-default cursor-pointer ${
+                          asignada ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-neutral-200 bg-white text-neutral-700 hover:border-amber-400 hover:bg-amber-50 disabled:opacity-50'
+                        }`}
+                      >
+                        {pendiente ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : asignada ? <Check className="w-4 h-4 shrink-0" /> : <Icono className="w-4 h-4 shrink-0" />}
+                        {pendiente ? 'Guardando…' : asignada ? `Asignada a ${id}` : `Asignar a ${id}`}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             );

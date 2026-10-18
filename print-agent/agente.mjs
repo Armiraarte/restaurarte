@@ -1,22 +1,32 @@
 // Agente de impresión: corre en la PC de Windows donde está conectada la impresora.
 // Docker no puede ver impresoras USB en Windows, así que el backend le pide a este agente que imprima.
 //
-//   GET  /impresoras  -> impresoras de Windows y cuál se usa para tickets
-//   POST /imprimir    -> { lineas: [...] } imprime un ticket
+//   GET /impresoras -> impresoras y asignaciones de cocina/caja
+//   PUT /asignacion -> { destino, impresora } guarda la asignación
+//   POST /imprimir -> { lineas: [...], destino: 'cocina' | 'caja' }
 //
 // Variables: PRINT_AGENT_PORT (9101), IMPRESORA_TICKETS (nombre exacto; si no, se busca una térmica),
 // PRINT_AGENT_TOKEN (opcional; si se define, el backend debe mandarlo en el header X-Agent-Token).
 import http from 'node:http';
 import { execFile } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { writeFile, rm, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { parseEnv } from 'node:util';
+import { AsignacionesImpresoras, esDestino } from './asignaciones.mjs';
 
-const PUERTO = Number(process.env.PRINT_AGENT_PORT) || 9101;
-const TOKEN = process.env.PRINT_AGENT_TOKEN || '';
 const DIR = import.meta.dirname;
-// Nombres típicos de impresoras térmicas de tickets.
-const PATRON_TERMICA = /tsp|star|epson tm|tm-t|pos|ticket|thermal|termica|xprinter|80mm|58mm/i;
+let variables = {};
+try {
+  variables = parseEnv(readFileSync(path.join(DIR, '../.env'), 'utf8'));
+} catch (err) {
+  if (err.code !== 'ENOENT') throw err;
+}
+const variable = (nombre) => process.env[nombre] ?? variables[nombre] ?? '';
+const PUERTO = Number(variable('PRINT_AGENT_PORT')) || 9101;
+const TOKEN = variable('PRINT_AGENT_TOKEN');
+const asignaciones = new AsignacionesImpresoras(path.join(DIR, 'data/asignaciones.json'), variable('IMPRESORA_TICKETS'));
 
 function powershell(script, args = []) {
   return new Promise((resolve, reject) => {
@@ -33,26 +43,19 @@ function powershell(script, args = []) {
 }
 
 async function listarImpresoras() {
-  const impresoras = JSON.parse(await powershell('impresoras.ps1'));
-  const elegida =
-    (process.env.IMPRESORA_TICKETS && impresoras.find((i) => i.nombre === process.env.IMPRESORA_TICKETS)) ||
-    impresoras.find((i) => PATRON_TERMICA.test(`${i.nombre} ${i.driver}`)) ||
-    null;
-  return { impresoras, ticket: elegida };
+  return asignaciones.estado(JSON.parse(await powershell('impresoras.ps1')));
 }
 
-async function imprimir(lineas) {
-  const { ticket } = await listarImpresoras();
-  if (!ticket) throw Object.assign(new Error('No se detectó ninguna impresora de tickets en Windows.'), { status: 404 });
-  if (!ticket.conectada) {
-    throw Object.assign(new Error(`La impresora "${ticket.nombre}" está instalada pero no está conectada.`), { status: 409 });
-  }
+async function imprimir(lineas, destino) {
+  const { impresoras } = await listarImpresoras();
+  const ticket = asignaciones.elegir(destino, impresoras);
 
   const dir = await mkdtemp(path.join(tmpdir(), 'ticket-'));
   const archivo = path.join(dir, 'ticket.json');
   try {
     await writeFile(archivo, JSON.stringify({ impresora: ticket.nombre, anchoMm: 72, lineas }), 'utf8');
-    await powershell('imprimir.ps1', ['-Archivo', archivo]);
+    const script = /axiohm|apos/i.test(`${ticket.nombre} ${ticket.driver}`) ? 'imprimir-raw.ps1' : 'imprimir.ps1';
+    await powershell(script, ['-Archivo', archivo]);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -65,12 +68,20 @@ function responder(res, status, data) {
 }
 
 async function leerJson(req) {
-  let cuerpo = '';
+  const partes = [];
+  let bytes = 0;
   for await (const parte of req) {
-    cuerpo += parte;
-    if (cuerpo.length > 1_000_000) throw Object.assign(new Error('Ticket demasiado grande.'), { status: 413 });
+    bytes += parte.length;
+    if (bytes > 1_000_000) throw Object.assign(new Error('Ticket demasiado grande.'), { status: 413 });
+    partes.push(parte);
   }
-  return JSON.parse(cuerpo || '{}');
+  try {
+    const datos = JSON.parse(Buffer.concat(partes).toString('utf8') || '{}');
+    if (!datos || typeof datos !== 'object' || Array.isArray(datos)) throw new Error('Se esperaba un objeto.');
+    return datos;
+  } catch {
+    throw Object.assign(new Error('El cuerpo debe ser JSON válido.'), { status: 400 });
+  }
 }
 
 const servidor = http.createServer(async (req, res) => {
@@ -81,12 +92,20 @@ const servidor = http.createServer(async (req, res) => {
       return responder(res, 200, await listarImpresoras());
     }
 
+    if (req.method === 'PUT' && req.url === '/asignacion') {
+      const { destino, impresora } = await leerJson(req);
+      if (!esDestino(destino)) return responder(res, 400, { error: 'El destino debe ser cocina o caja.' });
+      const { impresoras } = await listarImpresoras();
+      return responder(res, 200, await asignaciones.asignar(destino, impresora, impresoras));
+    }
+
     if (req.method === 'POST' && req.url === '/imprimir') {
-      const { lineas } = await leerJson(req);
+      const { lineas, destino = 'caja' } = await leerJson(req);
+      if (!esDestino(destino)) return responder(res, 400, { error: 'El destino debe ser cocina o caja.' });
       if (!Array.isArray(lineas) || lineas.length === 0) return responder(res, 400, { error: 'El ticket no tiene líneas.' });
-      const impresora = await imprimir(lineas);
-      console.log(`[agente] Ticket enviado a "${impresora.nombre}"`);
-      return responder(res, 200, { ok: true, impresora: impresora.nombre });
+      const impresora = await imprimir(lineas, destino);
+      console.log(`[agente] Ticket de ${destino} enviado a "${impresora.nombre}"`);
+      return responder(res, 200, { ok: true, impresora: impresora.nombre, destino });
     }
 
     responder(res, 404, { error: 'Ruta no encontrada.' });

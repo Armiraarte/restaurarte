@@ -9,6 +9,7 @@ coverage/
 
 # Datos que guarda la API en disco (usuarios creados desde Configuración)
 backend/data/
+print-agent/data/
 
 # Herramientas locales y dependencias de Laravel
 .tools/
