@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 import { AlertTriangle, Clock, Home, Loader2, ShoppingBag, Tablet, X } from 'lucide-react';
 import { DetalleOrdenBD, ESTATUS_ORDEN, obtenerOrden, OrdenBD } from '../services/pedidosService';
 import { useEnVivo } from '../services/enVivo';
-import { COLOR_ESTATUS_ORDEN } from './PedidoEnviado';
+import { COLOR_ESTATUS_ORDEN, EtiquetaCarneExtra, EtiquetaNoQueso } from './PedidoEnviado';
 
 const dinero = (n: number) => `$${n.toFixed(2)}`;
 const hora = (fecha: string) => new Date(fecha).toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' });
@@ -38,21 +38,28 @@ export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones }) 
   }, [cargar]);
   useEnVivo(['ordenes'], cargar);
 
-  // Un renglón por producto, agrupado por categoría.
+  // Un renglón por producto, agrupado por categoría (NO QUESO y DOBLE / TRIPLE CARNE van en su propio renglón).
   const categorias = useMemo(() => {
-    const porProducto = new Map<number, { nombre: string; categoria: string; cantidad: number; importe: number }>();
+    const porProducto = new Map<
+      string,
+      { clave: string; nombre: string; sinQueso: boolean; carneExtra: number; categoria: string; cantidad: number; importe: number }
+    >();
     for (const d of detalle) {
-      const p = porProducto.get(d.idProducto) ?? {
+      const clave = `${d.idProducto}-${d.sin_queso ? 1 : 0}-${d.carne_extra}`;
+      const p = porProducto.get(clave) ?? {
+        clave,
         nombre: d.tamano ? `${d.nombre} (${d.tamano})` : d.nombre,
+        sinQueso: d.sin_queso,
+        carneExtra: d.carne_extra,
         categoria: d.categoria,
         cantidad: 0,
         importe: 0,
       };
       p.cantidad += d.cantidad;
       p.importe = Math.round((p.importe + d.subtotal) * 100) / 100;
-      porProducto.set(d.idProducto, p);
+      porProducto.set(clave, p);
     }
-    const grupos = new Map<string, (typeof porProducto extends Map<number, infer V> ? V : never)[]>();
+    const grupos = new Map<string, (typeof porProducto extends Map<string, infer V> ? V : never)[]>();
     for (const p of porProducto.values()) grupos.set(p.categoria, [...(grupos.get(p.categoria) ?? []), p]);
     return [...grupos.entries()];
   }, [detalle]);
@@ -124,12 +131,16 @@ export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones }) 
               <div key={categoria} className="py-3">
                 <div className="text-sm font-bold uppercase tracking-widest text-amber-600 mb-2">{categoria}</div>
                 {productos.map((p) => (
-                  <div key={p.nombre} className="flex items-center gap-3 py-2 border-b border-neutral-100 last:border-0">
+                  <div key={p.clave} className="flex items-center gap-3 py-2 border-b border-neutral-100 last:border-0">
                     <span className="shrink-0 min-w-10 h-10 px-2 rounded-xl bg-amber-100 text-amber-900 font-mono font-bold text-xl flex items-center justify-center">
                       {p.cantidad}
                     </span>
                     <span className="flex-1 min-w-0">
-                      <span className="block text-xl font-semibold leading-tight truncate">{p.nombre}</span>
+                      <span className="flex items-center gap-2 min-w-0">
+                        <span className="text-xl font-semibold leading-tight truncate">{p.nombre}</span>
+                        {p.sinQueso && <EtiquetaNoQueso />}
+                        {p.carneExtra > 0 && <EtiquetaCarneExtra carneExtra={p.carneExtra} />}
+                      </span>
                       <span className="block text-sm text-neutral-500 font-mono">{dinero(p.importe / p.cantidad)} c/u</span>
                     </span>
                     <span className="shrink-0 font-mono font-bold text-xl">{dinero(p.importe)}</span>

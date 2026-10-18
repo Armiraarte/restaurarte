@@ -12,6 +12,8 @@ import {
   enviarPedido,
   pedirCuenta,
   nombreProducto,
+  PRECIO_CARNE_EXTRA,
+  textoCarneExtra,
   obtenerMenu,
   obtenerOrden,
   OrdenBD,
@@ -19,7 +21,7 @@ import {
 } from '../services/pedidosService';
 import { imprimirTicketCocina } from '../services/ticketCocinaService';
 import { COLORES_CATEGORIA, iconoCategoria, NEON_CATEGORIA } from './iconosCategoria';
-import { OpcionesCategoria } from './OpcionesCategoria';
+import { ExtrasLinea, OpcionesCategoria } from './OpcionesCategoria';
 import { PedidoEnviado } from './PedidoEnviado';
 import { useEnVivo } from '../services/enVivo';
 import { useCadaTantoVisible } from '../services/sincronizacion';
@@ -38,12 +40,21 @@ interface LineaNueva {
   sin: ComplementoMenu[];
   /** Mezcla de productos de la categoría ("Papa", "Frijol"): se guarda `producto` (el más caro) y en cocina sale la mezcla. */
   mezcla: string[];
+  /** Solo Quesadillas: la pidieron sin queso (se guarda en la orden). Puede faltar en borradores viejos. */
+  sinQueso?: boolean;
+  /** Solo Hamburguesas: 1 = DOBLE CARNE, 2 = TRIPLE CARNE (+$20 por carne extra). Puede faltar en borradores viejos. */
+  carneExtra?: number;
 }
 
 let siguienteLinea = 1;
 /** "Papa con Frijol" si es mezcla; si no, el nombre del producto con su tamaño. */
 const nombreLinea = (l: LineaNueva) => (l.mezcla.length > 1 ? l.mezcla.join(' con ') : nombreProducto(l.producto));
-const textoSin = (sin: ComplementoMenu[]) => (sin.length ? ` · sin ${sin.map((c) => c.nombre.toLowerCase()).join(', ')}` : '');
+const textoSin = (l: LineaNueva) =>
+  `${l.sinQueso ? ' · NO QUESO' : ''}${l.carneExtra ? ` · ${textoCarneExtra(l.carneExtra)}` : ''}${
+    l.sin.length ? ` · sin ${l.sin.map((c) => c.nombre.toLowerCase()).join(', ')}` : ''
+  }`;
+/** Precio de una pieza con sus carnes extra (el servidor lo calcula igual al guardar). */
+const precioLinea = (l: LineaNueva) => l.producto.precio + (l.carneExtra ?? 0) * PRECIO_CARNE_EXTRA;
 
 /** Categorías que se muestran como cuadrícula rápida (Bebidas): sin complementos y con muchos productos. */
 const esCuadricula = (c: CategoriaMenu) =>
@@ -87,13 +98,17 @@ function ticketDe(orden: OrdenBD, lineas: LineaNueva[], ronda: number, origen: s
       categoria: l.categoria,
       cantidad: l.cantidad,
       opciones: [],
+      // Quesadilla sin queso: primero «NO QUESO» (con queso no se escribe, ya se sabe).
       // Complementos: si lleva todos, solo «TODO»; si se quitó alguno, solo lo que no quiere («Sin lechuga»).
-      descripcion:
-        l.producto.complementos.length === 0
+      descripcion: [
+        ...(l.sinQueso ? ['NO QUESO'] : []),
+        ...(l.carneExtra ? [textoCarneExtra(l.carneExtra)] : []),
+        ...(l.producto.complementos.length === 0
           ? []
           : l.sin.length === 0
             ? ['TODO']
-            : l.sin.map((c) => `Sin ${c.nombre.toLowerCase()}`),
+            : l.sin.map((c) => `Sin ${c.nombre.toLowerCase()}`)),
+      ],
     })),
     total_piezas: lineas.reduce((acc, l) => acc + l.cantidad, 0),
   };
@@ -192,9 +207,19 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
   }, [alerta]);
 
   /** Desde la pantalla de opciones: siempre un renglón nuevo, aunque sea el mismo producto. */
-  const agregar = (producto: ProductoMenu, categoria: string, cantidad: number, sin: ComplementoMenu[], mezcla: string[]) => {
+  const agregar = (
+    producto: ProductoMenu,
+    categoria: string,
+    cantidad: number,
+    sin: ComplementoMenu[],
+    mezcla: string[],
+    { sinQueso, carneExtra }: ExtrasLinea
+  ) => {
     if (!puedeEditar) return;
-    setNuevo((lista) => [...lista, { id: siguienteLinea++, rapida: false, producto, categoria, cantidad, sin, mezcla }]);
+    setNuevo((lista) => [
+      ...lista,
+      { id: siguienteLinea++, rapida: false, producto, categoria, cantidad, sin, mezcla, sinQueso, carneExtra },
+    ]);
   };
   /** Toque en la cuadrícula rápida (Bebidas): suma 1 al renglón rápido de ese producto. */
   const agregarRapido = (producto: ProductoMenu, categoria: string) => {
@@ -216,7 +241,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
     else setOpcionesDe(categoria); // las demás: pantalla de opciones
   };
 
-  const totalNuevo = nuevo.reduce((acc, l) => acc + l.producto.precio * l.cantidad, 0);
+  const totalNuevo = nuevo.reduce((acc, l) => acc + precioLinea(l) * l.cantidad, 0);
   const rondasPrevias = new Set(detalle.map((d) => d.creado_en)).size;
 
   const enviar = async () => {
@@ -227,7 +252,13 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
     try {
       const datos = await enviarPedido(
         idOrden,
-        enviado.map((l) => ({ idProducto: l.producto.id, cantidad: l.cantidad, sin: l.sin.map((c) => c.id) }))
+        enviado.map((l) => ({
+          idProducto: l.producto.id,
+          cantidad: l.cantidad,
+          sin: l.sin.map((c) => c.id),
+          ...(l.sinQueso && { sinQueso: true }),
+          ...(l.carneExtra && { carneExtra: l.carneExtra }),
+        }))
       );
       actualizarOrden(datos);
       setNuevo([]);
@@ -238,7 +269,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
       const paraTicket = enviado.filter(vaEnTicket);
       setAlerta({
         titulo: `Pedido enviado a cocina · ${datos.orden.etiqueta}`,
-        detalle: enviado.map((l) => `${l.cantidad} × ${l.categoria} · ${nombreLinea(l)}${textoSin(l.sin)}`),
+        detalle: enviado.map((l) => `${l.cantidad} × ${l.categoria} · ${nombreLinea(l)}${textoSin(l)}`),
         impresion:
           paraTicket.length > 0
             ? { ok: null, texto: 'Imprimiendo ticket de cocina…' }
@@ -408,7 +439,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
               categoria={opcionesDe}
               pantallaCompleta={pantallaCompleta}
               onVolver={() => setOpcionesDe(null)}
-              onAgregar={(producto, cantidad, sin, mezcla) => agregar(producto, opcionesDe.nombre, cantidad, sin, mezcla)}
+              onAgregar={(producto, cantidad, sin, mezcla, extras) => agregar(producto, opcionesDe.nombre, cantidad, sin, mezcla, extras)}
             />
           ) : categoriaAbierta ? (
             <div className="flex-1 min-h-0 flex flex-col gap-2">
@@ -493,11 +524,15 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
                       <span className="font-medium leading-tight">
                         {nombreLinea(l)}
                         <span className="block text-xs font-normal text-neutral-500">{l.categoria}</span>
+                        {l.sinQueso && <span className="block text-xs font-black tracking-wide text-violet-700">NO QUESO</span>}
+                        {!!l.carneExtra && (
+                          <span className="block text-xs font-black tracking-wide text-red-700">{textoCarneExtra(l.carneExtra)}</span>
+                        )}
                         {l.sin.length > 0 && (
                           <span className="block text-xs font-normal text-rose-700">Sin {l.sin.map((c) => c.nombre.toLowerCase()).join(', ')}</span>
                         )}
                       </span>
-                      <span className="font-mono text-sm">{dinero(l.producto.precio * l.cantidad)}</span>
+                      <span className="font-mono text-sm">{dinero(precioLinea(l) * l.cantidad)}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <button

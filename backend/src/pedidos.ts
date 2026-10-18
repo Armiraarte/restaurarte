@@ -4,8 +4,10 @@
 //
 //   GET   /api/menu                         categorías activas con sus productos, precio y complementos
 //   GET   /api/ordenes/:idOrden             la orden con su detalle y total
-//   POST  /api/ordenes/:idOrden/pedido      { items: [{ idProducto, cantidad, sin? }] } → orden_has_detalle + total
+//   POST  /api/ordenes/:idOrden/pedido      { items: [{ idProducto, cantidad, sin?, sinQueso?, carneExtra? }] } → orden_has_detalle + total
 //                                           sin = ids de complementos quitados (solo van en el ticket de cocina)
+//                                           sinQueso = solo Quesadillas: NO QUESO (orden_has_detalle.sin_queso)
+//                                           carneExtra = solo Hamburguesas: 1 doble, 2 triple; +$20 c/u por pieza
 //   POST  /api/ordenes/:idOrden/pedir-cuenta  orden.estatus 0 (ABIERTA) → 1 (PAGANDO): la caja hace el cobro
 //   POST  /api/ordenes/:idOrden/cobrar      { recibido } orden.estatus 1 (PAGANDO) → 2 (PAGADO) e imprime el ticket de cobro
 //   POST  /api/ordenes/:idOrden/ticket-cobro  { recibido? } reimprime el ticket de cobro de una orden pagada
@@ -18,6 +20,19 @@ import { mysqlDisponible } from './usuarios.js';
 import { turnoAbierto } from './turnos.js';
 import { imprimirLineas } from './impresion.js';
 import { lineasTicketCobro } from './ticketCobro.js';
+
+// Opciones por renglón; las mismas constantes que OrdenDetalle en Laravel.
+/** La única categoría que se puede pedir NO QUESO. */
+const CATEGORIA_SIN_QUESO = 'Quesadillas';
+/** La única categoría con DOBLE / TRIPLE CARNE. */
+const CATEGORIA_CARNE_EXTRA = 'Hamburguesas';
+/** Precio de cada carne extra por pieza. */
+const PRECIO_CARNE_EXTRA = 20;
+/** Hasta triple carne: la normal más dos extra. */
+const MAX_CARNE_EXTRA = 2;
+
+/** Texto de la carne extra para tickets: 1 → DOBLE CARNE, 2 → TRIPLE CARNE. */
+const textoCarneExtra = (n: number) => (n === 1 ? 'DOBLE CARNE' : n === 2 ? 'TRIPLE CARNE' : '');
 
 function soloRoles(...roles: string[]) {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -93,7 +108,7 @@ async function ordenConDetalle(idOrden: number) {
   );
   if (!ordenes[0]) return null;
   const [detalle] = await pool!.query<RowDataPacket[]>(
-    `SELECT d.idDetalle_Orden, d.idProducto, c.nombre AS categoria, p.nombre, p.tamano, d.cantidad, d.subtotal, d.creado_en
+    `SELECT d.idDetalle_Orden, d.idProducto, c.nombre AS categoria, p.nombre, p.tamano, d.cantidad, d.sin_queso, d.carne_extra, d.subtotal, d.creado_en
        FROM orden_has_detalle d
        JOIN producto p ON p.id = d.idProducto
        JOIN categorias c ON c.id = p.categoria_id
@@ -104,7 +119,12 @@ async function ordenConDetalle(idOrden: number) {
   return {
     // Sin sesión de tablet = la abrió la caja.
     orden: { ...o, total: Number(o.total), etiqueta: etiquetaOrden(o.nombre), abierta_por: o.abierta_por ?? 'Caja' },
-    detalle: detalle.map((d) => ({ ...d, subtotal: Number(d.subtotal) })),
+    detalle: detalle.map((d) => ({
+      ...d,
+      sin_queso: Boolean(d.sin_queso),
+      carne_extra: Number(d.carne_extra),
+      subtotal: Number(d.subtotal),
+    })),
   };
 }
 
@@ -146,13 +166,21 @@ async function imprimirTicketCobro(idOrden: number, recibido: number | null, cob
   const datos = await ordenConDetalle(idOrden);
   if (!datos) return { ok: false, error: 'La orden no existe.' };
   const o = datos.orden as unknown as { idOrden: number; etiqueta: string; tipo_orden: number; abierta_por: string; total: number };
-  // Para el cliente se junta el mismo producto aunque se haya pedido en varios envíos.
-  const porProducto = new Map<number, { cantidad: number; nombre: string; importe: number }>();
-  for (const d of datos.detalle as unknown as { idProducto: number; categoria: string; nombre: string; tamano: string | null; cantidad: number; subtotal: number }[]) {
-    const p = porProducto.get(d.idProducto) ?? { cantidad: 0, nombre: `${d.categoria} ${d.nombre}${d.tamano ? ` (${d.tamano})` : ''}`, importe: 0 };
+  // Para el cliente se junta el mismo producto aunque se haya pedido en varios envíos
+  // (las quesadillas sin queso van en su propio renglón).
+  const porProducto = new Map<string, { cantidad: number; nombre: string; importe: number }>();
+  type Renglon = { idProducto: number; categoria: string; nombre: string; tamano: string | null; cantidad: number; sin_queso: boolean; carne_extra: number; subtotal: number };
+  for (const d of datos.detalle as unknown as Renglon[]) {
+    const clave = `${d.idProducto}-${d.sin_queso ? 1 : 0}-${d.carne_extra}`;
+    const opciones = [d.sin_queso ? 'NO QUESO' : '', textoCarneExtra(d.carne_extra)].filter(Boolean).join(' ');
+    const p = porProducto.get(clave) ?? {
+      cantidad: 0,
+      nombre: `${d.categoria} ${d.nombre}${d.tamano ? ` (${d.tamano})` : ''}${opciones ? ` ${opciones}` : ''}`,
+      importe: 0,
+    };
     p.cantidad += d.cantidad;
     p.importe = redondear(p.importe + d.subtotal);
-    porProducto.set(d.idProducto, p);
+    porProducto.set(clave, p);
   }
   try {
     await imprimirLineas(
@@ -226,7 +254,9 @@ pedidosRouter.post('/ordenes/:idOrden/ticket-cobro', soloRoles('admin', 'cajero'
 /** Envía un pedido a cocina: guarda el detalle (orden_has_detalle) y recalcula el total de la orden. */
 pedidosRouter.post('/ordenes/:idOrden/pedido', async (req, res) => {
   const idOrden = Number(req.params.idOrden);
-  const items: { idProducto: number; cantidad: number; sin?: number[] }[] = Array.isArray(req.body?.items) ? req.body.items : [];
+  const items: { idProducto: number; cantidad: number; sin?: number[]; sinQueso?: boolean; carneExtra?: number }[] = Array.isArray(req.body?.items)
+    ? req.body.items
+    : [];
   if (!Number.isSafeInteger(idOrden) || idOrden < 1) {
     res.status(400).json({ error: 'Orden no válida.' });
     return;
@@ -238,7 +268,9 @@ pedidosRouter.post('/ordenes/:idOrden/pedido', async (req, res) => {
         !Number.isSafeInteger(i?.idProducto) ||
         !Number.isSafeInteger(i?.cantidad) ||
         i.cantidad < 1 ||
-        (i.sin !== undefined && (!Array.isArray(i.sin) || i.sin.some((c) => !Number.isSafeInteger(c)))),
+        (i.sin !== undefined && (!Array.isArray(i.sin) || i.sin.some((c) => !Number.isSafeInteger(c)))) ||
+        (i.sinQueso !== undefined && typeof i.sinQueso !== 'boolean') ||
+        (i.carneExtra !== undefined && (!Number.isSafeInteger(i.carneExtra) || i.carneExtra < 0 || i.carneExtra > MAX_CARNE_EXTRA)),
     )
   ) {
     res.status(400).json({ error: 'El pedido necesita al menos un producto con cantidad mayor que cero.' });
@@ -284,13 +316,33 @@ pedidosRouter.post('/ordenes/:idOrden/pedido', async (req, res) => {
       return;
     }
 
+    // Cada opción solo en su categoría: NO QUESO en quesadillas (llevan queso sin registrarlo),
+    // DOBLE / TRIPLE CARNE en hamburguesas.
+    const categoriaDe = (i: (typeof items)[number]) => porId.get(i.idProducto)!.categoria as string;
+    const fueraDeLugar =
+      items.find((i) => i.sinQueso && categoriaDe(i) !== CATEGORIA_SIN_QUESO) ??
+      items.find((i) => (i.carneExtra ?? 0) > 0 && categoriaDe(i) !== CATEGORIA_CARNE_EXTRA);
+    if (fueraDeLugar) {
+      await conexion.rollback();
+      res.status(400).json({
+        error: fueraDeLugar.sinQueso && categoriaDe(fueraDeLugar) !== CATEGORIA_SIN_QUESO
+          ? `Solo las quesadillas se pueden pedir sin queso (${categoriaDe(fueraDeLugar)}).`
+          : `Solo las hamburguesas llevan carne extra (${categoriaDe(fueraDeLugar)}).`,
+      });
+      return;
+    }
+
     const ahora = new Date();
     for (const item of items) {
       const p = porId.get(item.idProducto)!;
-      const subtotal = (Math.round(Number(p.precio) * 100) * item.cantidad) / 100;
+      const carneExtra = item.carneExtra ?? 0;
+      // Precio por pieza: el del producto más cada carne extra (en centavos para no acumular decimales).
+      const centavosPieza = Math.round(Number(p.precio) * 100) + carneExtra * PRECIO_CARNE_EXTRA * 100;
+      const subtotal = (centavosPieza * item.cantidad) / 100;
       await conexion.execute(
-        'INSERT INTO orden_has_detalle (idOrden, idProducto, cantidad, subtotal, creado_en, actualizado_en) VALUES (?, ?, ?, ?, ?, ?)',
-        [idOrden, item.idProducto, item.cantidad, subtotal.toFixed(2), ahora, ahora],
+        `INSERT INTO orden_has_detalle (idOrden, idProducto, cantidad, sin_queso, carne_extra, subtotal, creado_en, actualizado_en)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [idOrden, item.idProducto, item.cantidad, item.sinQueso ? 1 : 0, carneExtra, subtotal.toFixed(2), ahora, ahora],
       );
     }
     await conexion.execute(

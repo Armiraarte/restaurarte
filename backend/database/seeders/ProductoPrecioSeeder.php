@@ -24,7 +24,12 @@ class ProductoPrecioSeeder extends Seeder
         'Burritas' => '20.00', // una pieza
         'Lonches' => '50.00', // sin papas
         'Hamburguesas' => '50.00', // sola
-        'Ensaladas' => ['Milanesa|Chica' => '40.00', 'Milanesa|Grande' => '70.00', 'Pollo a la plancha|Chica' => '40.00', 'Pollo a la plancha|Grande' => '70.00'],
+        'Ensaladas' => [
+            'Milanesa|Chica' => '40.00', 'Milanesa|Grande' => '70.00',
+            'Pollo a la plancha|Chica' => '40.00', 'Pollo a la plancha|Grande' => '70.00',
+            'Sin carne|Chica' => '40.00', 'Sin carne|Grande' => '70.00',
+            'Pierna|Chica' => '40.00', 'Pierna|Grande' => '70.00',
+        ],
         'Papas a la Francesa' => ['Papas a la Francesa|Media orden' => '15.00', 'Papas a la Francesa|Orden completa' => '30.00'],
         'Alitas' => '13.00', // por pieza
         'Salchichas' => '10.00',

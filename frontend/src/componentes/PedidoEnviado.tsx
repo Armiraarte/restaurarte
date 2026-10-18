@@ -2,12 +2,14 @@
 // lo que ya se mandó a cocina, una tarjeta por envío con su hora, piezas y subtotal.
 //   orden             → estatus (0 abierta, 1 pagando, 2 pagado), creado_en, abierta_por, total
 //   orden_has_detalle → producto, cantidad y subtotal de cada renglón
-// (Los complementos quitados, «sin lechuga», solo van en el ticket de cocina: no se guardan en la base.)
+// (Los complementos quitados, «sin lechuga», solo van en el ticket de cocina: no se guardan en la base.
+// Las excepciones se guardan: quesadillas NO QUESO (orden_has_detalle.sin_queso) y hamburguesas
+// DOBLE / TRIPLE CARNE (orden_has_detalle.carne_extra).)
 // Los envíos se acomodan según el ancho del componente (container queries): una columna en el historial
 // de la tablet y dos o tres en la caja.
 import React from 'react';
 import { Clock, LucideIcon, Plus, Receipt, Send, Tablet } from 'lucide-react';
-import { DetalleOrdenBD, ESTATUS_ORDEN, OrdenBD } from '../services/pedidosService';
+import { DetalleOrdenBD, ESTATUS_ORDEN, OrdenBD, textoCarneExtra } from '../services/pedidosService';
 import { iconoCategoria } from './iconosCategoria';
 
 export const COLOR_ESTATUS_ORDEN: Record<number, string> = {
@@ -20,10 +22,26 @@ const dinero = (n: number) => `$${n.toFixed(2)}`;
 const hora = (fecha: string) => new Date(fecha).toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' });
 const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`;
 
+/** Quesadilla pedida sin queso (orden_has_detalle.sin_queso). La usan también la cuenta de caja y la tablet. */
+export const EtiquetaNoQueso: React.FC = () => (
+  <span className="shrink-0 rounded-md border border-violet-300 bg-violet-100 px-1.5 py-0.5 text-[11px] font-black tracking-wide text-violet-800">
+    NO QUESO
+  </span>
+);
+
+/** Hamburguesa con DOBLE o TRIPLE CARNE (orden_has_detalle.carne_extra). */
+export const EtiquetaCarneExtra: React.FC<{ carneExtra: number }> = ({ carneExtra }) => (
+  <span className="shrink-0 rounded-md border border-red-300 bg-red-100 px-1.5 py-0.5 text-[11px] font-black tracking-wide text-red-800">
+    {textoCarneExtra(carneExtra)}
+  </span>
+);
+
 interface Renglon {
   clave: number;
   cantidad: number;
   producto: string; // "Frijol" / "Milanesa (Grande)"
+  sinQueso: boolean; // solo Quesadillas
+  carneExtra: number; // solo Hamburguesas: 1 doble, 2 triple
   categoria: string;
   subtotal: number;
 }
@@ -51,6 +69,8 @@ export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, className = '',
       clave: d.idDetalle_Orden,
       cantidad: d.cantidad,
       producto: d.tamano ? `${d.nombre} (${d.tamano})` : d.nombre,
+      sinQueso: d.sin_queso,
+      carneExtra: d.carne_extra,
       categoria: d.categoria,
       subtotal: d.subtotal,
     };
@@ -139,7 +159,11 @@ export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, className = '',
                           {r.cantidad}×
                         </span>
                         <span className="min-w-0">
-                          <span className="block font-semibold text-neutral-900 truncate">{r.producto}</span>
+                          <span className="flex items-center gap-1.5 min-w-0">
+                            <span className="font-semibold text-neutral-900 truncate">{r.producto}</span>
+                            {r.sinQueso && <EtiquetaNoQueso />}
+                            {r.carneExtra > 0 && <EtiquetaCarneExtra carneExtra={r.carneExtra} />}
+                          </span>
                           <span className="flex items-center gap-1 text-sm text-neutral-500">
                             <Icono className="w-3.5 h-3.5 shrink-0" />
                             <span className="truncate">{r.categoria}</span>

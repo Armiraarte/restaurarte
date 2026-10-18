@@ -25,14 +25,14 @@ class ProductoSeederTest extends TestCase
     {
         $this->cargar();
 
-        $this->assertSame(69, Producto::count());
+        $this->assertSame(74, Producto::count());
         $dorados = Categoria::where('nombre', 'Tacos Dorados')->firstOrFail();
         $this->assertSame(['Papa', 'Frijol', 'Jamón', 'Salchicha'], $dorados->productos()->orderBy('id')->pluck('nombre')->all());
         $this->assertNull(Producto::where('nombre', 'Frijol')->firstOrFail()->tamano);
 
         $lima = Producto::where('nombre', 'Agua de Lima')->orderBy('id')->pluck('tamano')->all();
         $this->assertSame(['Chica', 'Mediana', 'Grande'], $lima);
-        $this->assertSame(9, Producto::whereNotNull('tamano')->count());
+        $this->assertSame(13, Producto::whereNotNull('tamano')->count());
     }
 
     public function test_carga_los_complementos_sin_repetir(): void
@@ -48,7 +48,7 @@ class ProductoSeederTest extends TestCase
         $this->cargar();
         $this->cargar();
 
-        $this->assertSame(69, Producto::count());
+        $this->assertSame(74, Producto::count());
         $this->assertSame(12, Complemento::count());
     }
 

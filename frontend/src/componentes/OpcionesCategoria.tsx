@@ -3,10 +3,23 @@
 //                   En categorías sin tamaños se pueden tocar varias para mezclarlas ("Papa con Frijol").
 //   2. Tamaño     → solo si el producto tiene tamaños (BD: producto.tamano), con su precio
 //   3. Complementos → todos incluidos; se tocan los que no quieren (BD: producto_has_complemento)
+//   4. Queso      → solo Quesadillas: llevan queso sin registrarlo; NO QUESO sí se registra
+//                   (BD: orden_has_detalle.sin_queso)
+//   4. Carne      → solo Hamburguesas: DOBLE CARNE / TRIPLE CARNE, +$20 por carne extra
+//                   (BD: orden_has_detalle.carne_extra)
 //   Cantidad y "Agregar a la orden".
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Check, Minus, Plus } from 'lucide-react';
-import { CategoriaMenu, ComplementoMenu, ProductoMenu } from '../services/pedidosService';
+import {
+  CATEGORIA_CARNE_EXTRA,
+  CATEGORIA_SIN_QUESO,
+  CategoriaMenu,
+  ComplementoMenu,
+  MAX_CARNE_EXTRA,
+  PRECIO_CARNE_EXTRA,
+  ProductoMenu,
+  textoCarneExtra,
+} from '../services/pedidosService';
 
 /** Cómo se llama la elección principal en cada categoría (igual que el menú anterior). */
 const NOMBRE_ELECCION: Record<string, string> = {
@@ -39,8 +52,16 @@ interface Props {
   categoria: CategoriaMenu;
   pantallaCompleta: boolean;
   onVolver: () => void;
-  /** mezcla: los demás productos elegidos junto con `producto` ("Papa con Frijol"); vacío si es uno solo. */
-  onAgregar: (producto: ProductoMenu, cantidad: number, sin: ComplementoMenu[], mezcla: string[]) => void;
+  /**
+   * mezcla: los demás productos elegidos junto con `producto` ("Papa con Frijol"); vacío si es uno solo.
+   * extras.sinQueso: solo Quesadillas, NO QUESO. extras.carneExtra: solo Hamburguesas, 1 doble y 2 triple.
+   */
+  onAgregar: (producto: ProductoMenu, cantidad: number, sin: ComplementoMenu[], mezcla: string[], extras: ExtrasLinea) => void;
+}
+
+export interface ExtrasLinea {
+  sinQueso: boolean;
+  carneExtra: number;
 }
 
 export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta, onVolver, onAgregar }) => {
@@ -52,6 +73,10 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
   const nombre = elegidos[0] ?? null;
   const [tamano, setTamano] = useState<string | null>(null);
   const [quitados, setQuitados] = useState<number[]>([]);
+  // Quesadillas: llevan queso sin registrarlo; solo se marca (y se registra) cuando la piden sin queso.
+  const [sinQueso, setSinQueso] = useState(false);
+  // Hamburguesas: cada toque suma una carne (DOBLE, luego TRIPLE) y el siguiente la quita.
+  const [carneExtra, setCarneExtra] = useState(0);
   const [cantidad, setCantidad] = useState(1);
   const [agregado, setAgregado] = useState<string | null>(null);
 
@@ -71,6 +96,12 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
     ).values(),
   ];
   const textoElegidos = elegidos.join(' con ');
+  // La de queso ya es queso: ahí no aplica.
+  const puedeSinQueso = categoria.nombre === CATEGORIA_SIN_QUESO && !!nombre && !elegidos.includes('Queso');
+  const puedeCarneExtra = categoria.nombre === CATEGORIA_CARNE_EXTRA && !!nombre;
+  const carnesExtra = puedeCarneExtra ? carneExtra : 0;
+  // Precio de una pieza con sus carnes extra.
+  const precioPieza = (producto?.precio ?? 0) + carnesExtra * PRECIO_CARNE_EXTRA;
 
   const tocarNombre = (n: string) => {
     if (!permiteMezcla) return setElegidos([n]);
@@ -81,6 +112,8 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
   useEffect(() => {
     setTamano(null);
     setQuitados([]);
+    setSinQueso(false);
+    setCarneExtra(0);
   }, [elegidos.join('|')]);
 
   useEffect(() => {
@@ -101,11 +134,18 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
   const agregar = () => {
     if (!producto) return;
     const sin = complementos.filter((c) => quitados.includes(c.id));
-    onAgregar(producto, cantidad, sin, elegidos.length > 1 ? elegidos : []);
-    setAgregado(`${cantidad} × ${elegidos.length > 1 ? textoElegidos : producto.nombre}${producto.tamano ? ` (${producto.tamano})` : ''}`);
+    const quesoFuera = puedeSinQueso && sinQueso;
+    onAgregar(producto, cantidad, sin, elegidos.length > 1 ? elegidos : [], { sinQueso: quesoFuera, carneExtra: carnesExtra });
+    setAgregado(
+      `${cantidad} × ${elegidos.length > 1 ? textoElegidos : producto.nombre}${producto.tamano ? ` (${producto.tamano})` : ''}${
+        quesoFuera ? ' · NO QUESO' : ''
+      }${carnesExtra ? ` · ${textoCarneExtra(carnesExtra)}` : ''}`
+    );
     setElegidos(nombres.length === 1 ? [nombres[0]] : []);
     setTamano(null);
     setQuitados([]);
+    setSinQueso(false);
+    setCarneExtra(0);
     setCantidad(1);
   };
 
@@ -229,6 +269,58 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
             </div>
           </div>
         )}
+
+        {/* 4. Queso (solo Quesadillas): ya lo llevan; solo se toca si la piden sin queso y entonces se registra */}
+        {puedeSinQueso && (
+          <div {...grupo(1)}>
+            <div className="shrink-0 text-sm font-semibold text-neutral-700">
+              {++paso}. Queso <span className="font-normal text-neutral-500">· ya lleva queso; tócalo solo si la piden sin queso</span>
+            </div>
+            <div className={rejilla}>
+              <button
+                onClick={() => setSinQueso((v) => !v)}
+                aria-pressed={sinQueso}
+                className={`${boton} px-2 border-2 font-black tracking-wide flex items-center justify-center gap-2 transition-colors cursor-pointer ${
+                  sinQueso ? 'bg-violet-600 border-violet-700 text-white shadow-sm' : 'bg-white border-violet-300 text-violet-700 hover:bg-violet-50'
+                }`}
+              >
+                {sinQueso && <Check className="w-5 h-5" />}
+                NO QUESO
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 4. Carne (solo Hamburguesas): un toque DOBLE CARNE, otro TRIPLE CARNE, otro la quita; +$20 por carne extra */}
+        {puedeCarneExtra && (
+          <div {...grupo(1)}>
+            <div className="shrink-0 text-sm font-semibold text-neutral-700">
+              {++paso}. Carne{' '}
+              <span className="font-normal text-neutral-500">
+                · toca para doble carne y otra vez para triple (+{dinero(PRECIO_CARNE_EXTRA)} c/u)
+              </span>
+            </div>
+            <div className={rejilla}>
+              <button
+                onClick={() => setCarneExtra((n) => (n + 1) % (MAX_CARNE_EXTRA + 1))}
+                aria-pressed={carneExtra > 0}
+                className={`${boton} px-2 border-2 font-black tracking-wide flex flex-col items-center justify-center transition-colors cursor-pointer ${
+                  carneExtra > 0 ? 'bg-red-700 border-red-800 text-white shadow-sm' : 'bg-white border-red-200 text-red-800 hover:bg-red-50'
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  {carneExtra > 0 && <Check className="w-5 h-5" />}
+                  {carneExtra === 2 ? 'TRIPLE CARNE' : 'DOBLE CARNE'}
+                </span>
+                <span className="text-sm font-mono font-semibold">
+                  {carneExtra === 0
+                    ? `+${dinero(PRECIO_CARNE_EXTRA)}`
+                    : `${carneExtra + 1} carnes · +${dinero(carneExtra * PRECIO_CARNE_EXTRA)}`}
+                </span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Cantidad */}
@@ -259,7 +351,7 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
         className="w-full h-14 shrink-0 rounded-2xl bg-amber-500 hover:bg-amber-400 disabled:bg-neutral-200 disabled:text-neutral-500 disabled:cursor-not-allowed text-neutral-950 text-lg font-bold flex items-center justify-center gap-2 cursor-pointer"
       >
         <Plus className="w-5 h-5" />
-        {faltante ?? `Agregar a la orden · ${dinero((producto?.precio ?? 0) * cantidad)}`}
+        {faltante ?? `Agregar a la orden · ${dinero(precioPieza * cantidad)}`}
       </button>
 
       {agregado && (

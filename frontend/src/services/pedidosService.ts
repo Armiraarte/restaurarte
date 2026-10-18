@@ -43,6 +43,10 @@ export interface DetalleOrdenBD {
   nombre: string;
   tamano: string | null;
   cantidad: number;
+  /** Solo Quesadillas: la pidieron sin queso (llevan queso sin registrarlo). */
+  sin_queso: boolean;
+  /** Solo Hamburguesas: 1 = DOBLE CARNE, 2 = TRIPLE CARNE (ya incluida en subtotal). */
+  carne_extra: number;
   subtotal: number;
   creado_en: string;
 }
@@ -62,6 +66,21 @@ async function pedir<T>(ruta: string, init: RequestInit = {}): Promise<T> {
   return data as T;
 }
 
+/**
+ * La única categoría que se puede pedir sin queso: las quesadillas llevan queso sin registrarlo y,
+ * si las piden sin queso, se registra en el renglón (orden_has_detalle.sin_queso).
+ */
+export const CATEGORIA_SIN_QUESO = 'Quesadillas';
+
+/**
+ * Hamburguesas: DOBLE CARNE (1 extra) o TRIPLE CARNE (2 extra); cada carne extra cuesta PRECIO_CARNE_EXTRA
+ * por pieza (orden_has_detalle.carne_extra; el servidor ya la incluye en el subtotal).
+ */
+export const CATEGORIA_CARNE_EXTRA = 'Hamburguesas';
+export const PRECIO_CARNE_EXTRA = 20;
+export const MAX_CARNE_EXTRA = 2;
+export const textoCarneExtra = (n: number | undefined) => (n === 1 ? 'DOBLE CARNE' : n === 2 ? 'TRIPLE CARNE' : '');
+
 /** Categorías activas con sus productos (precio y complementos). */
 export const obtenerMenu = () => pedir<{ categorias: CategoriaMenu[] }>('/menu').then((d) => d.categorias);
 
@@ -69,7 +88,10 @@ export const obtenerMenu = () => pedir<{ categorias: CategoriaMenu[] }>('/menu')
 export const obtenerOrden = (idOrden: number) => pedir<{ orden: OrdenBD; detalle: DetalleOrdenBD[] }>(`/ordenes/${idOrden}`);
 
 /** Manda productos a cocina: guarda el detalle (orden_has_detalle) y recalcula el total. */
-export const enviarPedido = (idOrden: number, items: { idProducto: number; cantidad: number; sin?: number[] }[]) =>
+export const enviarPedido = (
+  idOrden: number,
+  items: { idProducto: number; cantidad: number; sin?: number[]; sinQueso?: boolean; carneExtra?: number }[]
+) =>
   pedir<{ orden: OrdenBD; detalle: DetalleOrdenBD[] }>(`/ordenes/${idOrden}/pedido`, { method: 'POST', body: JSON.stringify({ items }) });
 
 /** Pide la cuenta: la orden pasa a PAGANDO (estatus 1) y la caja hace el cobro. */

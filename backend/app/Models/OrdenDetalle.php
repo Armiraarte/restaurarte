@@ -8,7 +8,9 @@ use InvalidArgumentException;
 
 /**
  * Renglón del detalle de una orden (tabla orden_has_detalle): producto y cantidad.
- * Si no se indica subtotal, se calcula como cantidad × producto.precio al guardarlo.
+ * Si no se indica subtotal, se calcula como cantidad × (producto.precio + carnes extra) al guardarlo.
+ * sin_queso:   solo Quesadillas; llevan queso sin registrarlo y se marca cuando las piden NO QUESO.
+ * carne_extra: solo Hamburguesas; 1 = DOBLE CARNE, 2 = TRIPLE CARNE, cada una a PRECIO_CARNE_EXTRA.
  */
 class OrdenDetalle extends Model
 {
@@ -20,7 +22,17 @@ class OrdenDetalle extends Model
 
     protected $primaryKey = 'idDetalle_Orden';
 
-    protected $fillable = ['idOrden', 'idProducto', 'cantidad', 'subtotal'];
+    public const CATEGORIA_SIN_QUESO = 'Quesadillas';
+
+    public const CATEGORIA_CARNE_EXTRA = 'Hamburguesas';
+
+    /** Precio de cada carne extra por pieza (igual que PRECIO_CARNE_EXTRA en backend/src/pedidos.ts). */
+    public const PRECIO_CARNE_EXTRA = 20;
+
+    /** Hasta triple carne: la normal más dos extra. */
+    public const MAX_CARNE_EXTRA = 2;
+
+    protected $fillable = ['idOrden', 'idProducto', 'cantidad', 'sin_queso', 'carne_extra', 'subtotal'];
 
     protected function casts(): array
     {
@@ -29,6 +41,8 @@ class OrdenDetalle extends Model
             'idOrden' => 'integer',
             'idProducto' => 'integer',
             'cantidad' => 'integer',
+            'sin_queso' => 'boolean',
+            'carne_extra' => 'integer',
             'subtotal' => 'decimal:2',
             'creado_en' => 'datetime',
             'actualizado_en' => 'datetime',
@@ -45,9 +59,24 @@ class OrdenDetalle extends Model
             $producto = Producto::find($detalle->idProducto)
                 ?? throw new InvalidArgumentException('El producto no existe.');
 
-            // Subtotal = cantidad × precio del producto en este momento (se guarda y ya no cambia con el precio).
-            if ($detalle->subtotal === null || $detalle->isDirty(['cantidad', 'idProducto'])) {
-                $detalle->subtotal = number_format($detalle->cantidad * (float) $producto->precio, 2, '.', '');
+            $categoria = $producto->categoria?->nombre;
+            if ($detalle->sin_queso && $categoria !== self::CATEGORIA_SIN_QUESO) {
+                throw new InvalidArgumentException('Solo las quesadillas se pueden pedir sin queso.');
+            }
+
+            $carneExtra = $detalle->carne_extra ?? 0;
+            if (filter_var($carneExtra, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0, 'max_range' => self::MAX_CARNE_EXTRA]]) === false) {
+                throw new InvalidArgumentException('La carne extra va de 0 a '.self::MAX_CARNE_EXTRA.'.');
+            }
+            if ($carneExtra > 0 && $categoria !== self::CATEGORIA_CARNE_EXTRA) {
+                throw new InvalidArgumentException('Solo las hamburguesas llevan carne extra.');
+            }
+
+            // Subtotal = cantidad × (precio del producto + carnes extra) en este momento
+            // (se guarda y ya no cambia con el precio).
+            if ($detalle->subtotal === null || $detalle->isDirty(['cantidad', 'idProducto', 'carne_extra'])) {
+                $porPieza = (float) $producto->precio + $carneExtra * self::PRECIO_CARNE_EXTRA;
+                $detalle->subtotal = number_format($detalle->cantidad * $porPieza, 2, '.', '');
             }
 
             $subtotal = (string) $detalle->getAttributes()['subtotal'];
