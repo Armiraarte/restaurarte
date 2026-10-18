@@ -54,18 +54,21 @@ function desconectarSiNadieEscucha() {
   tokenFuente = null;
 }
 
+/** Fuera de un componente: llama a `fn` con cada aviso de esos tipos. Devuelve la función para dejar de escuchar. */
+export function escucharEnVivo(tipos: TipoEvento[], fn: () => void): () => void {
+  const oyente = { tipos, fn };
+  oyentes.add(oyente);
+  conectar();
+  return () => {
+    oyentes.delete(oyente);
+    desconectarSiNadieEscucha();
+  };
+}
+
 /** Llama a `alCambiar` cada vez que el servidor avisa un cambio de esos tipos. */
 export function useEnVivo(tipos: TipoEvento[], alCambiar: () => void) {
   const ref = useRef(alCambiar);
   ref.current = alCambiar;
   const clave = tipos.join(',');
-  useEffect(() => {
-    const oyente = { tipos: clave.split(',') as TipoEvento[], fn: () => ref.current() };
-    oyentes.add(oyente);
-    conectar();
-    return () => {
-      oyentes.delete(oyente);
-      desconectarSiNadieEscucha();
-    };
-  }, [clave]);
+  useEffect(() => escucharEnVivo(clave.split(',') as TipoEvento[], () => ref.current()), [clave]);
 }

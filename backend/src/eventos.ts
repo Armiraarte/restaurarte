@@ -8,9 +8,7 @@
 //   turno   → se inició/cerró el turno o una sesión de tablet
 // EventSource no permite mandar el header Authorization, por eso el token va en la URL.
 import { Router, type NextFunction, type Request, type Response } from 'express';
-import jwt from 'jsonwebtoken';
-import { config } from './config.js';
-import { buscarPorId } from './usuarios.js';
+import { usuarioDelToken } from './auth.js';
 
 export type TipoEvento = 'ordenes' | 'turno';
 
@@ -44,11 +42,9 @@ export const eventosRouter = Router();
 
 eventosRouter.get('/', (req, res) => {
   const token = typeof req.query.token === 'string' ? req.query.token : '';
-  try {
-    const payload = jwt.verify(token, config.jwtSecret) as jwt.JwtPayload;
-    if (!payload.sub || !buscarPorId(payload.sub)) throw new Error('Usuario no encontrado');
-  } catch {
-    res.status(401).json({ error: 'Sesión inválida o expirada.' });
+  const resultado = usuarioDelToken(token);
+  if ('error' in resultado) {
+    res.status(401).json(resultado);
     return;
   }
 

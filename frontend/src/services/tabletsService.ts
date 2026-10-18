@@ -1,6 +1,7 @@
 // Tablets en línea y verificación de conexión: /api/tablets
 import { useCallback, useEffect, useState } from 'react';
-import { getToken } from './authService';
+import { getToken, revisarSesionReemplazada } from './authService';
+import { cadaTantoVisible } from './sincronizacion';
 
 export interface TabletEnLinea {
   usuarioId: string;
@@ -27,6 +28,7 @@ async function pedir<T>(metodo: 'GET' | 'POST', ruta: string, cuerpo?: unknown):
   } catch {
     throw new Error('No se pudo conectar con el servidor.');
   }
+  await revisarSesionReemplazada(res);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'No se pudo completar la operación.');
   return data as T;
@@ -73,8 +75,8 @@ export function useTabletsEnLinea(intervaloMs = 3_000) {
   }, []);
   useEffect(() => {
     cargar();
-    const id = setInterval(cargar, intervaloMs);
-    return () => clearInterval(id);
+    // Solo mientras la pantalla está a la vista (en una tablet con la pantalla apagada no se consulta).
+    return cadaTantoVisible(cargar, intervaloMs);
   }, [cargar, intervaloMs]);
   return { tablets, error };
 }

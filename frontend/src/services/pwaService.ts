@@ -24,6 +24,19 @@ function avisar() {
   oyentes.forEach((fn) => fn());
 }
 
+/** Mantiene la instalación y la escala de texto de acuerdo con el acceso elegido. */
+export function configurarAppPwa(esTablet: boolean) {
+  const manifiesto = document.getElementById('manifest');
+  const ruta = esTablet ? '/manifest-tablet.webmanifest' : '/manifest.webmanifest';
+  if (manifiesto && manifiesto.getAttribute('href') !== ruta) {
+    // El permiso pendiente pertenece al manifiesto anterior; no debe instalar la otra app.
+    eventoInstalacion = null;
+    manifiesto.setAttribute('href', ruta);
+    avisar();
+  }
+  document.documentElement.classList.toggle('app-tablet', esTablet);
+}
+
 function esStandalone(): boolean {
   return (
     window.matchMedia('(display-mode: standalone)').matches ||
@@ -100,8 +113,8 @@ async function revisarVersion() {
 }
 
 /**
- * App de meseros abierta como página de Chrome: por http en la red local, Chrome solo crea un acceso directo
- * (no la instala de verdad) y la abre con sus barras. Con el primer toque se pone en pantalla completa y
+ * App abierta como página de Chrome: por http en la red local, Chrome puede crear un acceso directo
+ * que se abre con sus barras. Con el primer toque se pone en pantalla completa y
  * solo se ve la app. Si se sale (gesto de atrás), el siguiente toque la vuelve a poner.
  * Solo en pantallas táctiles y cuando no está instalada como app.
  */

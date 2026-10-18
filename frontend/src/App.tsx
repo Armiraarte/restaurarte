@@ -27,6 +27,8 @@ import { useTabletsEnLinea } from './services/tabletsService';
 import { AvisoIniciarTurno, BannerSinTurno, SeccionSinTurno } from './componentes/TurnoRequerido';
 import { AnimatePresence as AnimarTurno } from 'framer-motion';
 import { esOrdenActiva, etiquetaMesaRegistrada } from './services/mesasService';
+import { navegarApp } from './services/appNavigation';
+import { LimiteDeErrores } from './componentes/AlertasErrores';
 
 export default function App() {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
@@ -58,6 +60,10 @@ export default function App() {
     setUsuario(null);
   };
 
+  useEffect(() => {
+    if (usuario?.rol === 'tablet') navegarApp('meseros', { reemplazar: true });
+  }, [usuario]);
+
   if (verificandoSesion) {
     return <div className="min-h-screen bg-neutral-100" />;
   }
@@ -68,7 +74,6 @@ export default function App() {
 
   // Las cuentas de tipo tablet no usan la caja: van a la app de meseros.
   if (usuario.rol === 'tablet') {
-    window.location.replace('/tablet');
     return <div className="min-h-screen bg-neutral-100" />;
   }
 
@@ -201,42 +206,44 @@ function PosDashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () =>
 
           {/* 2. Main Content Area */}
           <main className="relative z-10 flex-1 w-full px-4 lg:px-8 py-4 sm:py-6 lg:py-8">
-            {verConfiguracion && <ConfiguracionView onVolver={() => setEnConfiguracion(false)} />}
+            {/* Si una sección falla, se ve el problema ahí mismo y el menú sigue funcionando. */}
+            <LimiteDeErrores key={verConfiguracion ? 'configuracion' : currentTab}>
+              {verConfiguracion && <ConfiguracionView onVolver={() => setEnConfiguracion(false)} />}
 
-            {!verConfiguracion && currentTab === 'inicio' && (
-              <InicioView
-                nombreUsuario={usuario.nombre}
-                ordenesActivas={ordenesActivas.length}
-                ordenesConPedido={mesasOcupadas}
-                ordenesPorCobrar={ordenesPagando}
-                ordenesCobradas={ordenesPagadas}
-                hayTurno={!!turnoCaja}
-                tabletsConectadas={tabletsConectadas}
-                tabletsTotal={tabletsTotal}
-                onNavigate={irASeccion}
-                onOpenSimulador={() => setIsSimuladorOpen(true)}
-              />
-            )}
+              {!verConfiguracion && currentTab === 'inicio' && (
+                <InicioView
+                  nombreUsuario={usuario.nombre}
+                  ordenesActivas={ordenesActivas.length}
+                  ordenesConPedido={mesasOcupadas}
+                  ordenesPorCobrar={ordenesPagando}
+                  ordenesCobradas={ordenesPagadas}
+                  hayTurno={!!turnoCaja}
+                  tabletsConectadas={tabletsConectadas}
+                  tabletsTotal={tabletsTotal}
+                  onNavigate={irASeccion}
+                  onOpenSimulador={() => setIsSimuladorOpen(true)}
+                />
+              )}
 
-            {!verConfiguracion && currentTab === 'tablets' && (
-              <TabletsView events={recentEvents} esAdmin={usuario.rol === 'admin'} />
-            )}
+              {!verConfiguracion && currentTab === 'tablets' && (
+                <TabletsView events={recentEvents} esAdmin={usuario.rol === 'admin'} />
+              )}
 
-            {!verConfiguracion && currentTab === 'cajas' && (
-              // Órdenes que pidieron la cuenta (orden.estatus = 1, PAGANDO)
-              sinTurno ? <SeccionSinTurno seccion="Cajas" /> : <CajasView />
-            )}
+              {!verConfiguracion && currentTab === 'cajas' && (
+                // Órdenes que pidieron la cuenta (orden.estatus = 1, PAGANDO)
+                sinTurno ? <SeccionSinTurno seccion="Cajas" /> : <CajasView />
+              )}
 
-            {/* Órdenes cobradas del turno abierto (orden.estatus = 2, PAGADO) */}
-            {!verConfiguracion && currentTab === 'ventas' && (sinTurno ? <SeccionSinTurno seccion="Ventas" /> : <VentasView />)}
+              {/* Órdenes cobradas del turno abierto (orden.estatus = 2, PAGADO) */}
+              {!verConfiguracion && currentTab === 'ventas' && (sinTurno ? <SeccionSinTurno seccion="Ventas" /> : <VentasView />)}
 
-            {/* Turno actual, corte de turno e historial de cortes */}
-            {!verConfiguracion && currentTab === 'turnos' && <TurnosView onIrA={irASeccion} />}
+              {/* Turno actual, corte de turno e historial de cortes */}
+              {!verConfiguracion && currentTab === 'turnos' && <TurnosView onIrA={irASeccion} />}
 
-            {!verConfiguracion && currentTab === 'mesas' && (
-              sinTurno ? <SeccionSinTurno seccion="Órdenes" /> : <MesasView nombreUsuario={usuario.nombre} />
-            )}
-
+              {!verConfiguracion && currentTab === 'mesas' && (
+                sinTurno ? <SeccionSinTurno seccion="Órdenes" /> : <MesasView nombreUsuario={usuario.nombre} />
+              )}
+            </LimiteDeErrores>
           </main>
         </div>
       </div>

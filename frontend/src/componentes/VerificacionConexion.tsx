@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CheckCircle2, Wifi } from 'lucide-react';
 import { confirmarVerificacion, enviarLatido } from '../services/tabletsService';
+import { SesionReemplazadaError } from '../services/authService';
 
 const INTERVALO_LATIDO_MS = 3_000;
 const DURACION_VERIFICANDO_MS = 1_800;
@@ -10,11 +11,21 @@ const DURACION_VERIFICADA_MS = 2_500;
 
 type Fase = 'verificando' | 'verificada' | null;
 
-/** Mientras la tablet tiene sesión, avisa al servidor que sigue en línea y atiende las verificaciones. */
-export function useLatidoTablet(activo: boolean, tablet: string | null, mesero: string | null): Fase {
+/**
+ * Mientras la tablet tiene sesión, avisa al servidor que sigue en línea y atiende las verificaciones.
+ * Si se entró con la misma cuenta en otro dispositivo, llama a `onSesionReemplazada` con el aviso del servidor.
+ */
+export function useLatidoTablet(
+  activo: boolean,
+  tablet: string | null,
+  mesero: string | null,
+  onSesionReemplazada: (aviso: string) => void,
+): Fase {
   const [fase, setFase] = useState<Fase>(null);
   const datos = useRef({ tablet, mesero });
   datos.current = { tablet, mesero };
+  const alReemplazar = useRef(onSesionReemplazada);
+  alReemplazar.current = onSesionReemplazada;
   const atendiendo = useRef(false);
 
   useEffect(() => {
@@ -46,7 +57,11 @@ export function useLatidoTablet(activo: boolean, tablet: string | null, mesero: 
             );
           }, DURACION_VERIFICANDO_MS),
         );
-      } catch {
+      } catch (err) {
+        if (err instanceof SesionReemplazadaError) {
+          if (!cancelado) alReemplazar.current(err.message);
+          return;
+        }
         // sin conexión: se reintenta en el siguiente latido
       }
     };

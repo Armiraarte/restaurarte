@@ -22,6 +22,8 @@ import { COLORES_CATEGORIA, iconoCategoria, NEON_CATEGORIA } from './iconosCateg
 import { OpcionesCategoria } from './OpcionesCategoria';
 import { PedidoEnviado } from './PedidoEnviado';
 import { useEnVivo } from '../services/enVivo';
+import { useCadaTantoVisible } from '../services/sincronizacion';
+import { guardarBorrador, leerBorrador } from '../services/borradorPedido';
 import { TicketCocina } from '../types/ticketCocina';
 
 interface LineaNueva {
@@ -106,7 +108,14 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
   const [categoriaAbierta, setCategoriaAbierta] = useState<CategoriaMenu | null>(null);
   // Pantalla de opciones de una categoría (como la de antes): elige uno, tamaño, complementos y cantidad.
   const [opcionesDe, setOpcionesDe] = useState<CategoriaMenu | null>(null);
-  const [nuevo, setNuevo] = useState<LineaNueva[]>([]);
+  // Lo agregado y aún no enviado se guarda en el dispositivo: si se sale a ÓRDENES, al volver sigue aquí.
+  const [nuevo, setNuevo] = useState<LineaNueva[]>(() => {
+    const guardado = leerBorrador<LineaNueva>(idOrden);
+    // Los renglones recuperados conservan su id: los que se agreguen siguen después.
+    siguienteLinea = Math.max(siguienteLinea, ...guardado.map((l) => l.id + 1));
+    return guardado;
+  });
+  useEffect(() => guardarBorrador(idOrden, nuevo), [idOrden, nuevo]);
   // Pestañas: PEDIDO (lo ya enviado) y AGREGAR (menú + nuevo pedido).
   const [pestana, setPestana] = useState<'pedido' | 'agregar'>('pedido');
   // Tablet: lo ya enviado se ve en una ventana desde el botón de historial.
@@ -118,10 +127,15 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
   const bloqueada = orden !== null && orden.estatus !== 0;
   const puedeEditar = orden?.estatus === 0 && !enviando && !pidiendoCuenta;
 
+  const textoOrden = useRef('');
   const actualizarOrden = useCallback((datos: { orden: OrdenBD; detalle: DetalleOrdenBD[] }) => {
     // Una respuesta anterior al cobro no puede volver a abrir la edición.
     const actual = ultimaOrden.current;
     if (actual?.idOrden === datos.orden.idOrden && actual.estatus > datos.orden.estatus) return;
+    // Igual que la última: no se vuelve a dibujar el menú (la tablet relee la orden cada pocos segundos).
+    const texto = JSON.stringify(datos);
+    if (texto === textoOrden.current) return;
+    textoOrden.current = texto;
     ultimaOrden.current = datos.orden;
     setOrden(datos.orden);
     setDetalle(datos.detalle);
@@ -169,10 +183,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
     }
   }, [idOrden, actualizarOrden]);
   useEnVivo(['ordenes'], refrescar);
-  useEffect(() => {
-    const id = setInterval(refrescar, 5_000);
-    return () => clearInterval(id);
-  }, [refrescar]);
+  useCadaTantoVisible(refrescar, 5_000);
 
   useEffect(() => {
     if (!alerta) return;
@@ -274,12 +285,15 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
       {/* Barra de la orden */}
       <div className="flex items-center justify-between gap-3 shrink-0">
         <div className="flex items-center gap-2">
-          <button
-            onClick={onVolver}
-            className={`${pantallaCompleta ? 'h-14 px-5 text-lg' : 'h-12 px-4'} rounded-xl bg-white border border-neutral-200 hover:border-neutral-300 flex items-center gap-2 font-medium cursor-pointer`}
-          >
-            <ArrowLeft className={pantallaCompleta ? 'w-6 h-6' : 'w-5 h-5'} /> Órdenes
-          </button>
+          {/* En la tablet, el botón ÓRDENES va arriba, en el encabezado (AppTablet). */}
+          {!pantallaCompleta && (
+            <button
+              onClick={onVolver}
+              className="h-12 px-4 rounded-xl bg-white border border-neutral-200 hover:border-neutral-300 flex items-center gap-2 font-medium cursor-pointer"
+            >
+              <ArrowLeft className="w-5 h-5" /> Órdenes
+            </button>
+          )}
           <span
             title={paraLlevar ? 'Para llevar' : 'Comer aquí'}
             className={`${pantallaCompleta ? 'w-14 h-14' : 'w-12 h-12'} rounded-xl border-2 flex items-center justify-center ${

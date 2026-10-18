@@ -1,29 +1,34 @@
 // App exclusiva de las tablets de los meseros (se abre en /tablet).
 // Más adelante se moverá a su propio proyecto como PWA.
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertTriangle,
+  ArrowLeft,
   Hash,
   Loader2,
   LogOut,
   Minus,
   Plus,
+  Send,
   User,
 } from 'lucide-react';
+import { piezasSinEnviar } from '../services/borradorPedido';
 import { Account, ProductCatalogItem, TabletDevice } from '../types/pos';
 import { posDataService } from '../services/dataService';
 import { SelectorTipoOrden } from './AppTabletCuenta';
 import { PedidoOrden } from './PedidoOrden';
 import { InicioSesion } from './InicioSesion';
-import { logout as cerrarSesionCuenta, obtenerSesion, ROLES_APP_MESEROS, Usuario } from '../services/authService';
+import { logout as cerrarSesionCuenta, obtenerSesion, ROLES_APP_MESEROS, tomarAvisoSesion, Usuario } from '../services/authService';
 import { salirDeLinea } from '../services/tabletsService';
 import { esOrdenActiva, etiquetaMesaRegistrada, listarMesasTurno, MesaRegistrada, registrarMesa } from '../services/mesasService';
 import { useEnVivo } from '../services/enVivo';
+import { useCadaTantoVisible } from '../services/sincronizacion';
 import { cerrarSesionTablet, iniciarSesionTablet, SinTurnoError } from '../services/turnosService';
 import { IndicadorTurno } from './IndicadorTurno';
 import { AvisoVerificacion, useLatidoTablet } from './VerificacionConexion';
 import { MarcaDeAgua } from './Marca';
+import { LimiteDeErrores } from './AlertasErrores';
 
 const SESION_KEY = 'tablet_sesion'; // sin prefijo pos_ para no disparar la sincronización
 
@@ -61,6 +66,8 @@ export default function AppTablet() {
   // Cuenta con la que se inició sesión en esta tablet (usuario y contraseña/PIN del backend).
   const [cuenta, setCuenta] = useState<Usuario | null>(null);
   const [verificandoCuenta, setVerificandoCuenta] = useState(true);
+  // Por qué se volvió al inicio de sesión sin cerrarla aquí (se entró con la cuenta en otro dispositivo).
+  const [avisoInicio, setAvisoInicio] = useState<string | null>(null);
 
   // Si el servidor no responde al abrir (se reinició, Wi-Fi inestable), NO se pierde la sesión:
   // se sigue en «verificando» y se reintenta cada 3 s. Solo un 401 (sesión inválida) manda al login.
@@ -72,6 +79,7 @@ export default function AppTablet() {
         .then((u) => {
           if (cancelado) return;
           setCuenta(u && ROLES_APP_MESEROS.includes(u.rol) ? u : null);
+          if (!u) setAvisoInicio(tomarAvisoSesion());
           setVerificandoCuenta(false);
         })
         .catch(() => {
@@ -88,7 +96,14 @@ export default function AppTablet() {
   const sesionActiva = tablet && tablet.status === 'conectada';
 
   // Mientras haya cuenta, la tablet avisa a caja que está en línea y atiende "Verificar conexión".
-  const faseVerificacion = useLatidoTablet(!!cuenta, sesionActiva ? tablet.number : null, null);
+  // Si se entró con esta cuenta en otro dispositivo, aquí se sale sin cerrar nada en el servidor:
+  // la sesión del turno ya es del otro dispositivo.
+  const faseVerificacion = useLatidoTablet(!!cuenta, sesionActiva ? tablet.number : null, null, (aviso) => {
+    handleLogout();
+    cerrarSesionCuenta();
+    setCuenta(null);
+    setAvisoInicio(aviso);
+  });
 
   // Al iniciar sesión con la cuenta, la tablet entra directo: su número sale de la cuenta (tablets.numero)
   // y quien atiende es la propia tablet ("Tablet 01"); ya no se elige mesero.
@@ -159,7 +174,16 @@ export default function AppTablet() {
   if (verificandoCuenta) {
     pantalla = <div className="h-dvh" />;
   } else if (!cuenta) {
-    pantalla = <InicioSesion app="meseros" onEntrar={setCuenta} />;
+    pantalla = (
+      <InicioSesion
+        app="meseros"
+        aviso={avisoInicio}
+        onEntrar={(u) => {
+          setAvisoInicio(null);
+          setCuenta(u);
+        }}
+      />
+    );
   } else if (turno === 'sinTurno' || turno === 'error') {
     pantalla = (
       <div className="h-dvh flex items-center justify-center p-4">
@@ -225,9 +249,16 @@ function PantallaMesero({
   // Órdenes activas (ABIERTA o PAGANDO) del turno abierto: es lo único que se dibuja; las cobradas van a Ventas.
   const [mesas, setMesas] = useState<MesaRegistrada[] | null>(null);
   const [errorMesas, setErrorMesas] = useState<string | null>(null);
+  const textoMesas = useRef('');
   const cargarMesas = useCallback(async () => {
     try {
-      setMesas((await listarMesasTurno()).mesas.filter(esOrdenActiva));
+      const activas = (await listarMesasTurno()).mesas.filter(esOrdenActiva);
+      // Si nada cambió no se vuelve a dibujar la lista (ahorra trabajo a la tablet cada pocos segundos).
+      const texto = JSON.stringify(activas);
+      if (texto !== textoMesas.current) {
+        textoMesas.current = texto;
+        setMesas(activas);
+      }
       setErrorMesas(null);
     } catch (err) {
       setErrorMesas(err instanceof Error ? err.message : 'No se pudieron cargar las mesas.');
@@ -235,10 +266,10 @@ function PantallaMesero({
   }, []);
   useEffect(() => {
     cargarMesas();
-    // Respaldo: se vuelve a leer cada pocos segundos (lo normal es el aviso en vivo de abajo).
-    const id = setInterval(cargarMesas, 5_000);
-    return () => clearInterval(id);
   }, [cargarMesas]);
+  // Respaldo: se vuelve a leer cada pocos segundos mientras la tablet está a la vista
+  // (lo normal es el aviso en vivo de abajo).
+  useCadaTantoVisible(cargarMesas, 5_000);
   useEnVivo(['ordenes'], cargarMesas);
 
   // Siguiente número consecutivo: el mayor número de mesa activa en el turno + 1 (o 1 si no hay).
@@ -253,6 +284,10 @@ function PantallaMesero({
   };
 
   const abrirMesaRegistrada = (mesa: MesaRegistrada) => setOrdenAbierta(mesa.id);
+  const volverAOrdenes = () => {
+    setOrdenAbierta(null);
+    cargarMesas();
+  };
 
   return (
     // Ocupa exactamente la pantalla (100dvh): sin scroll de página; solo se desplaza el recuadro que no quepa.
@@ -272,13 +307,27 @@ function PantallaMesero({
             </div>
           </div>
           <div className="flex items-center gap-[8px] shrink-0">
+            {/* Con una orden abierta: volver a la lista. Lo que no se envió queda guardado (services/borradorPedido.ts). */}
+            {ordenAbierta !== null && (
+              <button
+                onClick={volverAOrdenes}
+                className="neon-solido neon-azul h-[56px] px-[24px] rounded-[12px] flex items-center gap-[8px] text-[18px] font-bold tracking-wide cursor-pointer"
+              >
+                <ArrowLeft className="w-[24px] h-[24px]" />
+                ÓRDENES
+              </button>
+            )}
             {/* Agregar mesa (o cuenta a nombre de un cliente) */}
             <button
               onClick={() => setAgregandoMesa(true)}
-              className="neon-solido neon-fresco h-[56px] px-[24px] rounded-[12px] flex items-center gap-[8px] text-[18px] font-bold cursor-pointer"
+              aria-label="Agregar orden"
+              className={`neon-solido neon-fresco h-[56px] rounded-[12px] flex items-center gap-[8px] text-[18px] font-bold cursor-pointer ${
+                ordenAbierta !== null ? 'px-[16px] sm:px-[24px]' : 'px-[24px]'
+              }`}
             >
               <Plus className="w-[24px] h-[24px]" />
-              Agregar orden
+              {/* En tablets angostas, con ÓRDENES a la vista, solo el ícono para que quepa el encabezado */}
+              <span className={ordenAbierta !== null ? 'hidden sm:inline' : undefined}>Agregar orden</span>
             </button>
             <button
               onClick={onLogout}
@@ -293,20 +342,18 @@ function PantallaMesero({
       </header>
 
       <main className="flex-1 min-h-0 p-3">
-        {ordenAbierta !== null ? (
-          // Pedido desde la base: menú (producto), envío a cocina (orden_has_detalle) y total.
-          <PedidoOrden
-            idOrden={ordenAbierta}
-            origen={nombreTablet}
-            pantallaCompleta
-            onVolver={() => {
-              setOrdenAbierta(null);
-              cargarMesas();
-            }}
-          />
-        ) : (
-          <VistaMesas mesas={mesas} error={errorMesas} onAbrir={abrirMesaRegistrada} />
-        )}
+        {/* Si la pantalla falla, se ve el problema y se puede volver a las órdenes sin cerrar la app. */}
+        <LimiteDeErrores
+          key={ordenAbierta ?? 'mesas'}
+          salida={ordenAbierta !== null ? { texto: 'Volver a las órdenes', accion: () => setOrdenAbierta(null) } : undefined}
+        >
+          {ordenAbierta !== null ? (
+            // Pedido desde la base: menú (producto), envío a cocina (orden_has_detalle) y total.
+            <PedidoOrden idOrden={ordenAbierta} origen={nombreTablet} pantallaCompleta onVolver={volverAOrdenes} />
+          ) : (
+            <VistaMesas mesas={mesas} error={errorMesas} onAbrir={abrirMesaRegistrada} />
+          )}
+        </LimiteDeErrores>
       </main>
 
       <AnimatePresence>
@@ -364,6 +411,8 @@ function VistaMesas({
           // BD: orden.total (suma de orden_has_detalle).
           const total = Number(mesa.total);
           const pidio = mesa.estatus === 1; // orden.estatus 1 = PAGANDO (pidió la cuenta)
+          // Productos agregados en esta tablet que todavía no se envían a cocina (borrador guardado).
+          const sinEnviar = pidio ? 0 : piezasSinEnviar(mesa.id);
           return (
             <button
               key={mesa.id}
@@ -385,6 +434,12 @@ function VistaMesas({
                 <div className={`text-xs font-medium ${pidio ? 'text-amber-800' : 'text-sky-800'}`}>
                   {pidio ? 'Cuenta pedida' : total > 0 ? 'Con pedido' : 'Sin pedido'} · ${total.toFixed(2)}
                 </div>
+                {sinEnviar > 0 && (
+                  <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-orange-500 px-2 py-0.5 text-[11px] font-bold text-white">
+                    <Send className="w-3 h-3" />
+                    {sinEnviar} sin enviar
+                  </div>
+                )}
               </div>
             </button>
           );

@@ -65,6 +65,17 @@ npm run dev
 
 En desarrollo, Vite reenvía `/api` a `http://localhost:4000`. El backend lee el `.env` de la raíz; si no existe, el usuario es `admin` / `admin123`.
 
+## App de la tableta
+
+Abre `/tablet` desde la dirección de esta PC en la red local. En el acceso de
+**Meseros**, el botón **Instalar app de meseros** usa el manifiesto de la tableta
+y arranca en `/tablet`. Elegir Meseros o Caja cambia de pantalla sin recargar
+el documento, para conservar la ventana de la app y la pantalla completa.
+En dispositivos táctiles abiertos como acceso directo del navegador, el primer
+toque activa la pantalla completa cuando el navegador lo permite. La instalación
+PWA requiere un origen seguro (HTTPS o localhost); una IP local con HTTP puede
+abrirse como acceso directo.
+
 ## Impresión de tickets en Windows
 
 El agente corre en la PC donde está conectada la impresora. Lee el `.env` de la

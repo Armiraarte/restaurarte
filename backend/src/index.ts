@@ -3,6 +3,7 @@ import { config } from './config.js';
 import { authRouter } from './auth.js';
 import { impresionRouter } from './impresion.js';
 import { inicializarUsuarios } from './usuarios.js';
+import { inicializarSesionesTablet } from './sesionesTablet.js';
 import { usuariosRouter } from './usuariosRouter.js';
 import { tabletsRouter } from './tablets.js';
 import { mesasRouter } from './mesas.js';
@@ -29,6 +30,7 @@ app.use('/api/turnos', avisarCambios('turno', 'ordenes'), turnosRouter);
 app.use('/api', avisarCambios('ordenes'), pedidosRouter);
 
 await inicializarUsuarios();
+await inicializarSesionesTablet();
 
 app.listen({ port: config.port, host: config.host }, () => {
   console.log(`[backend] API escuchando en http://${config.host ?? 'localhost'}:${config.port}`);

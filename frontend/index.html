@@ -4,8 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>SOFT RESTAURANTE</title>
-    <!-- PWA: en /tablet, main.tsx cambia el manifiesto por manifest-tablet.webmanifest -->
-    <link id="manifest" rel="manifest" href="/manifest.webmanifest" />
+    <!-- El navegador recibe el manifiesto correcto antes de cargar React o permitir instalar. -->
+    <link id="manifest" rel="manifest" />
+    <script>
+      document.getElementById('manifest').setAttribute('href',
+        /^\/tablet(?:\/|$)/.test(window.location.pathname)
+          ? '/manifest-tablet.webmanifest'
+          : '/manifest.webmanifest');
+    </script>
     <meta name="theme-color" content="#ff7518" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icons/cenaduria-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/cenaduria-apple-touch-180.png" />

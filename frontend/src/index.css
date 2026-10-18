@@ -111,10 +111,23 @@
     overflow: hidden;
   }
   /* Menú de la tablet (pantalla de pedido): todo el diseño usa rem, así que este tamaño base escala
-     textos, botones y espacios a la vez para que todo quepa en pantalla. Mesas e inicio de sesión
-     no lo usan y conservan su tamaño normal. Ajusta los tres valores para hacerlo más grande o más chico. */
+     textos, botones y espacios a la vez para que todo quepa en pantalla. Mesas no lo usa y conserva
+     su tamaño normal. Ajusta los tres valores para hacerlo más grande o más chico. */
   html.app-tablet.app-tablet-menu {
     font-size: clamp(11px, min(1.55vh, 1.2vw), 15px);
+  }
+  /* Inicio de sesión (selector y formulario): igual que el menú, este tamaño base hace que quepa completo
+     en la pantalla, sin scroll, en cualquier tablet. Horizontal ocupa ~47rem de alto (con el mensaje de
+     error) y vertical ~65rem, porque lleva la marca arriba. La línea con vh es para navegadores sin dvh. */
+  html.inicio-sesion {
+    font-size: clamp(10px, min(2.05vh, 1.6vw), 16px);
+    font-size: clamp(10px, min(2.05dvh, 1.6vw), 16px);
+  }
+  @media (orientation: portrait) {
+    html.inicio-sesion {
+      font-size: clamp(10px, 1.5vh, 16px);
+      font-size: clamp(10px, 1.5dvh, 16px);
+    }
   }
 
   body {
@@ -167,6 +180,7 @@
 .neon-magenta { --neon: #e0249a; }
 .neon-violeta { --neon: #8b3dff; }
 .neon-lima { --neon: #7cc800; }
+.neon-azul { --neon: #1d6fe0; }
 
 .neon {
   border-color: var(--neon, #ff7518) !important;
@@ -208,6 +222,49 @@
 .neon-solido:disabled {
   filter: grayscale(0.4);
   box-shadow: none;
+}
+
+/*
+ * TABLETS (pantalla táctil, sin mouse): versión ligera de los efectos, para tablets modestas.
+ * Cada elemento con backdrop-filter (cristal, neón, backdrop-blur-*) es una capa aparte que la GPU vuelve a
+ * pintar en cada scroll y animación; con muchas tarjetas la tablet se queda sin memoria y cierra la app.
+ * Lo mismo, en menor medida, con los filtros de los íconos y las sombras grandes difuminadas.
+ * Se ve casi igual: la marca de agua del fondo está al 8 %, así que el desenfoque apenas se notaba.
+ * En la PC (con mouse) se conserva el cristal completo.
+ */
+@media (hover: none) {
+  .cristal .bg-white,
+  .neon,
+  [class*='backdrop-blur'] {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+  .cristal .bg-white {
+    background-color: rgb(255 255 255 / 0.82);
+  }
+  .cristal :is(.rounded-xl, .rounded-2xl).bg-white {
+    box-shadow: 0 4px 12px -6px rgb(120 11 11 / 0.2);
+  }
+  .neon {
+    background-color: color-mix(in srgb, var(--neon, #ff7518) 7%, rgb(255 255 255 / 0.85)) !important;
+  }
+  .neon,
+  .neon:hover {
+    box-shadow:
+      0 0 3px color-mix(in srgb, var(--neon, #ff7518) 60%, transparent),
+      0 0 10px color-mix(in srgb, var(--neon, #ff7518) 30%, transparent);
+  }
+  .neon :is(svg) {
+    filter: none;
+  }
+  .neon-solido,
+  .neon-solido:hover {
+    text-shadow: none;
+    box-shadow: 0 0 10px color-mix(in srgb, var(--neon, #ff7518) 50%, transparent);
+  }
+  .neon-solido:disabled {
+    box-shadow: none;
+  }
 }
 
 @media print {

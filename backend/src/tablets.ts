@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { requireAuth } from './auth.js';
 import { registrarConexionTablet } from './usuarios.js';
+import { liberarSesionTablet } from './sesionesTablet.js';
 
 /** IP real de la tablet: detrás de nginx o del proxy de Vite llega en X-Forwarded-For. */
 function ipDe(req: Request): string {
@@ -123,9 +124,10 @@ tabletsRouter.post('/:usuarioId/verificar', soloRoles('admin'), (req, res) => {
   res.status(202).json({ tablet: aRespuesta(t, Date.now()) });
 });
 
-/** La tablet cerró sesión: deja de aparecer en línea. */
+/** La tablet cerró sesión: deja de aparecer en línea y su cuenta queda libre para otro dispositivo. */
 tabletsRouter.post('/salir', (req, res) => {
   enLinea.delete(req.usuario!.id);
+  liberarSesionTablet(req.usuario!.id, req.sesionId);
   void registrarConexionTablet(req.usuario!.id, { ip: ipDe(req), mesero: null });
   res.json({ ok: true });
 });

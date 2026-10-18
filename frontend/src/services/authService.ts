@@ -50,6 +50,29 @@ export async function login(usuario: string, password: string): Promise<Usuario>
   return data.usuario;
 }
 
+/**
+ * Una cuenta de tablet solo puede estar abierta en un dispositivo: si se entró con ella en otro,
+ * el servidor responde 401 con `sesionReemplazada` a las peticiones de este.
+ */
+export class SesionReemplazadaError extends Error {}
+
+/** Lanza SesionReemplazadaError si la respuesta indica que la sesión se abrió en otro dispositivo. */
+export async function revisarSesionReemplazada(res: Response): Promise<void> {
+  if (res.status !== 401) return;
+  const data = await res.clone().json().catch(() => ({}));
+  if (data.sesionReemplazada) throw new SesionReemplazadaError(data.error || 'Se inició sesión con esta cuenta en otro dispositivo.');
+}
+
+// Motivo por el que obtenerSesion() no encontró sesión, para mostrarlo en el inicio de sesión.
+let avisoSesion: string | null = null;
+
+/** Devuelve (una sola vez) el aviso de la última sesión que el servidor cerró, o null. */
+export function tomarAvisoSesion(): string | null {
+  const aviso = avisoSesion;
+  avisoSesion = null;
+  return aviso;
+}
+
 /** Devuelve el usuario de la sesión guardada, o null si no hay sesión válida. */
 export async function obtenerSesion(): Promise<Usuario | null> {
   const token = getToken();
@@ -57,6 +80,9 @@ export async function obtenerSesion(): Promise<Usuario | null> {
 
   const res = await fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } });
   if (res.status === 401) {
+    await revisarSesionReemplazada(res).catch((err: Error) => {
+      avisoSesion = err.message;
+    });
     logout();
     return null;
   }

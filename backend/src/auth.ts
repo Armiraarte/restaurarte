@@ -2,12 +2,15 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { config } from './config.js';
-import { aPublico, buscarPorId, buscarPorUsuario, type UsuarioPublico } from './usuarios.js';
+import { aPublico, buscarPorId, buscarPorUsuario, type Usuario, type UsuarioPublico } from './usuarios.js';
+import { abrirSesionTablet, sesionTabletVigente } from './sesionesTablet.js';
 
 declare global {
   namespace Express {
     interface Request {
       usuario?: UsuarioPublico;
+      /** Solo cuentas de tablet: id de su sesión (ver sesionesTablet.ts). */
+      sesionId?: string;
     }
   }
 }
@@ -31,11 +34,45 @@ authRouter.post('/login', async (req, res) => {
     return;
   }
 
-  const token = jwt.sign({ sub: encontrado.id, rol: encontrado.rol }, config.jwtSecret, {
+  // Una cuenta de tablet solo puede estar abierta en un dispositivo a la vez.
+  let sid: string | undefined;
+  if (encontrado.rol === 'tablet') {
+    sid = abrirSesionTablet(encontrado.id) ?? undefined;
+    if (!sid) {
+      res.status(409).json({
+        error: `${encontrado.nombre} ya tiene la sesión abierta en otro dispositivo. Cierra sesión ahí para entrar aquí.`,
+      });
+      return;
+    }
+  }
+
+  const token = jwt.sign({ sub: encontrado.id, rol: encontrado.rol, ...(sid && { sid }) }, config.jwtSecret, {
     expiresIn: config.jwtExpiresIn,
   });
   res.json({ token, usuario: aPublico(encontrado) });
 });
+
+/** Usuario dueño del token o, si ya no sirve, la respuesta 401. */
+export function usuarioDelToken(
+  token: string,
+): { usuario: Usuario; sesionId?: string } | { error: string; sesionReemplazada?: true } {
+  let payload: jwt.JwtPayload;
+  try {
+    payload = jwt.verify(token, config.jwtSecret) as jwt.JwtPayload;
+  } catch {
+    return { error: 'Sesión inválida o expirada.' };
+  }
+  const usuario = payload.sub ? buscarPorId(payload.sub) : undefined;
+  if (!usuario) return { error: 'Sesión inválida o expirada.' };
+  if (usuario.rol !== 'tablet') return { usuario };
+
+  // Token de tablet de antes de la sesión única: se vuelve a iniciar sesión una vez.
+  if (typeof payload.sid !== 'string') return { error: 'Sesión inválida o expirada.' };
+  if (!sesionTabletVigente(usuario.id, payload.sid)) {
+    return { error: `Se inició sesión con ${usuario.nombre} en otro dispositivo.`, sesionReemplazada: true };
+  }
+  return { usuario, sesionId: payload.sid };
+}
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
@@ -45,15 +82,14 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
     return;
   }
 
-  try {
-    const payload = jwt.verify(token, config.jwtSecret) as jwt.JwtPayload;
-    const usuario = payload.sub ? buscarPorId(payload.sub) : undefined;
-    if (!usuario) throw new Error('Usuario no encontrado');
-    req.usuario = aPublico(usuario);
-    next();
-  } catch {
-    res.status(401).json({ error: 'Sesión inválida o expirada.' });
+  const resultado = usuarioDelToken(token);
+  if ('error' in resultado) {
+    res.status(401).json(resultado);
+    return;
   }
+  req.usuario = aPublico(resultado.usuario);
+  req.sesionId = resultado.sesionId;
+  next();
 }
 
 authRouter.get('/me', requireAuth, (req, res) => {

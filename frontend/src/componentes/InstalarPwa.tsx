@@ -28,7 +28,7 @@ export const BotonInstalarPwa: React.FC<{ nombreApp: string; variante?: 'oscuro'
   };
 
   return (
-    <div className="space-y-2">
+    <div className="relative">
       <button
         type="button"
         onClick={handleClick}
@@ -42,8 +42,9 @@ export const BotonInstalarPwa: React.FC<{ nombreApp: string; variante?: 'oscuro'
         <span>Instalar app {nombreApp}</span>
       </button>
 
+      {/* Los pasos flotan sobre el botón: abrirlos no cambia el alto del inicio de sesión, que no tiene scroll. */}
       {verPasos && (
-        <div className="relative bg-white border border-neutral-200 rounded-xl p-4 pr-9 text-xs text-neutral-700 space-y-1.5 select-text">
+        <div className="absolute bottom-full inset-x-0 z-10 mb-2 bg-white border border-neutral-200 rounded-xl p-4 pr-9 text-xs text-neutral-700 space-y-1.5 select-text shadow-xl">
           <button
             type="button"
             onClick={() => setVerPasos(false)}
