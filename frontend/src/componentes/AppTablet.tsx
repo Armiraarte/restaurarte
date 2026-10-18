@@ -9,11 +9,12 @@ import {
   Loader2,
   LogOut,
   Minus,
+  Phone,
   Plus,
   Send,
   User,
 } from 'lucide-react';
-import { piezasSinEnviar } from '../services/borradorPedido';
+import { BORRADOR_LLAMADA, piezasSinEnviar } from '../services/borradorPedido';
 import { Account, ProductCatalogItem, TabletDevice } from '../types/pos';
 import { posDataService } from '../services/dataService';
 import { SelectorTipoOrden } from './AppTabletCuenta';
@@ -244,6 +245,9 @@ function PantallaMesero({
 }) {
   // Orden abierta en pantalla (BD: orden.idOrden); su pedido se toma con PedidoOrden.
   const [ordenAbierta, setOrdenAbierta] = useState<number | null>(null);
+  // LLAMADA: pedido por teléfono que aún no es orden (se registra con el nombre al terminar).
+  const [llamada, setLlamada] = useState(false);
+  const enOrden = ordenAbierta !== null || llamada;
   const [agregandoMesa, setAgregandoMesa] = useState(false);
 
   // Órdenes activas (ABIERTA o PAGANDO) del turno abierto: es lo único que se dibuja; las cobradas van a Ventas.
@@ -279,13 +283,21 @@ function PantallaMesero({
   const abrirCuenta = async (_tipo: 'mesa' | 'nombre', identificador: string, paraLlevar: boolean) => {
     const { mesa } = await registrarMesa(identificador, paraLlevar);
     setAgregandoMesa(false);
+    setLlamada(false);
     setOrdenAbierta(mesa.id);
     cargarMesas();
+  };
+  // "LLAMADA": se abre el menú sin registrar la orden; si ya había una llamada a medias, se retoma.
+  const abrirLlamada = () => {
+    setAgregandoMesa(false);
+    setOrdenAbierta(null);
+    setLlamada(true);
   };
 
   const abrirMesaRegistrada = (mesa: MesaRegistrada) => setOrdenAbierta(mesa.id);
   const volverAOrdenes = () => {
     setOrdenAbierta(null);
+    setLlamada(false);
     cargarMesas();
   };
 
@@ -308,7 +320,7 @@ function PantallaMesero({
           </div>
           <div className="flex items-center gap-[8px] shrink-0">
             {/* Con una orden abierta: volver a la lista. Lo que no se envió queda guardado (services/borradorPedido.ts). */}
-            {ordenAbierta !== null && (
+            {enOrden && (
               <button
                 onClick={volverAOrdenes}
                 className="neon-solido neon-azul h-[56px] px-[24px] rounded-[12px] flex items-center gap-[8px] text-[18px] font-bold tracking-wide cursor-pointer"
@@ -322,12 +334,12 @@ function PantallaMesero({
               onClick={() => setAgregandoMesa(true)}
               aria-label="Agregar orden"
               className={`neon-solido neon-fresco h-[56px] rounded-[12px] flex items-center gap-[8px] text-[18px] font-bold cursor-pointer ${
-                ordenAbierta !== null ? 'px-[16px] sm:px-[24px]' : 'px-[24px]'
+                enOrden ? 'px-[16px] sm:px-[24px]' : 'px-[24px]'
               }`}
             >
               <Plus className="w-[24px] h-[24px]" />
               {/* En tablets angostas, con ÓRDENES a la vista, solo el ícono para que quepa el encabezado */}
-              <span className={ordenAbierta !== null ? 'hidden sm:inline' : undefined}>Agregar orden</span>
+              <span className={enOrden ? 'hidden sm:inline' : undefined}>Agregar orden</span>
             </button>
             <button
               onClick={onLogout}
@@ -344,21 +356,45 @@ function PantallaMesero({
       <main className="flex-1 min-h-0 p-3">
         {/* Si la pantalla falla, se ve el problema y se puede volver a las órdenes sin cerrar la app. */}
         <LimiteDeErrores
-          key={ordenAbierta ?? 'mesas'}
-          salida={ordenAbierta !== null ? { texto: 'Volver a las órdenes', accion: () => setOrdenAbierta(null) } : undefined}
+          key={llamada ? 'llamada' : (ordenAbierta ?? 'mesas')}
+          salida={enOrden ? { texto: 'Volver a las órdenes', accion: volverAOrdenes } : undefined}
         >
-          {ordenAbierta !== null ? (
+          {llamada ? (
+            // LLAMADA: al terminar se registra con el nombre del cliente y se pasa a esa orden.
+            <PedidoOrden
+              idOrden={null}
+              origen={nombreTablet}
+              pantallaCompleta
+              onVolver={volverAOrdenes}
+              onOrdenCreada={(id) => {
+                setLlamada(false);
+                setOrdenAbierta(id);
+                cargarMesas();
+              }}
+            />
+          ) : ordenAbierta !== null ? (
             // Pedido desde la base: menú (producto), envío a cocina (orden_has_detalle) y total.
             <PedidoOrden idOrden={ordenAbierta} origen={nombreTablet} pantallaCompleta onVolver={volverAOrdenes} />
           ) : (
-            <VistaMesas mesas={mesas} error={errorMesas} onAbrir={abrirMesaRegistrada} />
+            <VistaMesas
+              mesas={mesas}
+              error={errorMesas}
+              onAbrir={abrirMesaRegistrada}
+              piezasLlamada={piezasSinEnviar(BORRADOR_LLAMADA)}
+              onAbrirLlamada={abrirLlamada}
+            />
           )}
         </LimiteDeErrores>
       </main>
 
       <AnimatePresence>
         {agregandoMesa && (
-          <DialogoNuevaCuenta siguienteMesa={siguienteMesa} onAbrir={abrirCuenta} onCancelar={() => setAgregandoMesa(false)} />
+          <DialogoNuevaCuenta
+            siguienteMesa={siguienteMesa}
+            onAbrir={abrirCuenta}
+            onLlamada={abrirLlamada}
+            onCancelar={() => setAgregandoMesa(false)}
+          />
         )}
       </AnimatePresence>
     </div>
@@ -379,10 +415,15 @@ function VistaMesas({
   mesas,
   error,
   onAbrir,
+  piezasLlamada,
+  onAbrirLlamada,
 }: {
   mesas: MesaRegistrada[] | null;
   error: string | null;
   onAbrir: (mesa: MesaRegistrada) => void;
+  /** Piezas de una LLAMADA a medias (aún no es orden); 0 si no hay. */
+  piezasLlamada: number;
+  onAbrirLlamada: () => void;
 }) {
   return (
     <section className="h-full min-h-0 flex flex-col gap-2">
@@ -399,12 +440,30 @@ function VistaMesas({
           <Loader2 className="w-5 h-5 animate-spin" />
         </div>
       )}
-      {mesas?.length === 0 && (
+      {mesas?.length === 0 && piezasLlamada === 0 && (
         <p className="text-sm text-neutral-500">No hay órdenes en este turno. Toca «Agregar orden» para abrir una.</p>
       )}
 
       {/* Si hay más mesas de las que caben, solo esta zona se desplaza (la página no) */}
       <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 auto-rows-min content-start gap-2">
+        {/* LLAMADA a medias: todavía no es orden; se retoma aquí */}
+        {piezasLlamada > 0 && (
+          <button
+            onClick={onAbrirLlamada}
+            className="neon neon-azul min-h-20 rounded-xl border-2 p-2.5 text-left flex flex-col justify-between gap-2 cursor-pointer"
+          >
+            <span className="flex items-center gap-1.5 text-sm font-black tracking-wide">
+              <Phone className="w-4 h-4" /> LLAMADA
+            </span>
+            <span className="leading-tight">
+              <span className="block text-xs font-medium">Sin nombre todavía</span>
+              <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-orange-500 px-2 py-0.5 text-[11px] font-bold text-white">
+                <Send className="w-3 h-3" />
+                {piezasLlamada} sin enviar
+              </span>
+            </span>
+          </button>
+        )}
         {(mesas ?? []).map((mesa) => {
           const titulo = etiquetaMesaRegistrada(mesa);
           const paraLlevar = mesa.tipo_venta_id === 2;
@@ -460,10 +519,13 @@ type ModoNuevaCuenta = 'nombre' | 'mesa';
 function DialogoNuevaCuenta({
   siguienteMesa,
   onAbrir,
+  onLlamada,
   onCancelar,
 }: {
   siguienteMesa: number;
   onAbrir: (tipo: 'mesa' | 'nombre', identificador: string, paraLlevar: boolean) => Promise<void>;
+  /** Pedido por teléfono: abre el menú sin registrar la orden; el nombre se pide al terminar. */
+  onLlamada: () => void;
   onCancelar: () => void;
 }) {
   const [modo, setModo] = useState<ModoNuevaCuenta>('mesa');
@@ -518,6 +580,19 @@ function DialogoNuevaCuenta({
         <h2 id="nueva-cuenta-titulo" className="text-base font-bold">
           Abrir cuenta
         </h2>
+
+        {/* Pedido por teléfono: se toma de una vez y el nombre se guarda al colgar */}
+        <button
+          type="button"
+          onClick={onLlamada}
+          className="neon-solido neon-azul w-full rounded-xl px-4 py-3 flex items-center gap-3 text-left cursor-pointer"
+        >
+          <Phone className="w-7 h-7 shrink-0" />
+          <span>
+            <span className="block text-lg font-black tracking-wide">LLAMADA</span>
+            <span className="block text-xs font-medium opacity-90">Toma el pedido ya; el nombre se guarda al terminar</span>
+          </span>
+        </button>
 
         {/* Opción 1: por nombre (cuentas.tipo_identificador = 'nombre') */}
         <div className={claseOpcion(modo === 'nombre')} onClick={() => setModo('nombre')}>

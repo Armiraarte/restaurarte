@@ -5,6 +5,12 @@
 const PREFIJO = 'pedido_borrador_'; // sin prefijo pos_ para no disparar la sincronización entre pestañas
 const VIGENCIA_MS = 12 * 60 * 60 * 1000;
 
+/** Pedido de una LLAMADA: todavía no hay orden; se registra con el nombre del cliente al terminar. */
+export const BORRADOR_LLAMADA = 'llamada';
+
+/** idOrden de la orden, o BORRADOR_LLAMADA. */
+type ClaveBorrador = number | typeof BORRADOR_LLAMADA;
+
 interface Borrador<T> {
   lineas: T[];
   guardado: number;
@@ -20,13 +26,13 @@ function leer<T>(clave: string): Borrador<T> | null {
 }
 
 /** Renglones guardados de la orden (vacío si no hay o ya caducaron). */
-export function leerBorrador<T>(idOrden: number): T[] {
+export function leerBorrador<T>(idOrden: ClaveBorrador): T[] {
   const borrador = leer<T>(PREFIJO + idOrden);
   return borrador && Date.now() - borrador.guardado < VIGENCIA_MS ? borrador.lineas : [];
 }
 
 /** Guarda los renglones de la orden; sin renglones, borra su borrador. */
-export function guardarBorrador<T>(idOrden: number, lineas: T[]) {
+export function guardarBorrador<T>(idOrden: ClaveBorrador, lineas: T[]) {
   try {
     if (lineas.length === 0) localStorage.removeItem(PREFIJO + idOrden);
     else localStorage.setItem(PREFIJO + idOrden, JSON.stringify({ lineas, guardado: Date.now() } satisfies Borrador<T>));
@@ -37,7 +43,7 @@ export function guardarBorrador<T>(idOrden: number, lineas: T[]) {
 }
 
 /** Piezas agregadas a la orden que todavía no se envían a cocina. */
-export function piezasSinEnviar(idOrden: number): number {
+export function piezasSinEnviar(idOrden: ClaveBorrador): number {
   return leerBorrador<{ cantidad: number }>(idOrden).reduce((acc, l) => acc + l.cantidad, 0);
 }
 

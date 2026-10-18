@@ -10,6 +10,7 @@ export interface ProductoMenu {
   id: number; // producto.id
   nombre: string; // "Frijol"
   tamano: string | null; // "Chica", "Media orden"… o null
+  grupo: string | null; // subgrupo de la categoría (Bebidas: Refrescos, Aguas, Jugos) o null
   precio: number;
   imagen: string | null;
   complementos: ComplementoMenu[];

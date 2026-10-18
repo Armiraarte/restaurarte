@@ -4,7 +4,27 @@
 //   Enviar a cocina→ POST /api/ordenes/:idOrden/pedido (orden_has_detalle + orden.total)
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { AlertTriangle, ArrowLeft, CheckCircle2, HandCoins, ClipboardList, History, Home, Loader2, LockKeyhole, Minus, Plus, Printer, Send, ShoppingBag, Trash2, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  CheckCircle2,
+  HandCoins,
+  ClipboardList,
+  History,
+  Home,
+  Loader2,
+  LockKeyhole,
+  Minus,
+  Phone,
+  PhoneOff,
+  Plus,
+  Printer,
+  Send,
+  ShoppingBag,
+  Trash2,
+  User,
+  X,
+} from 'lucide-react';
 import {
   CategoriaMenu,
   ComplementoMenu,
@@ -25,7 +45,9 @@ import { ExtrasLinea, OpcionesCategoria } from './OpcionesCategoria';
 import { PedidoEnviado } from './PedidoEnviado';
 import { useEnVivo } from '../services/enVivo';
 import { useCadaTantoVisible } from '../services/sincronizacion';
-import { guardarBorrador, leerBorrador } from '../services/borradorPedido';
+import { BORRADOR_LLAMADA, guardarBorrador, leerBorrador } from '../services/borradorPedido';
+import { registrarMesa } from '../services/mesasService';
+import { registrarError } from '../services/errores';
 import { TicketCocina } from '../types/ticketCocina';
 
 interface LineaNueva {
@@ -59,18 +81,26 @@ const precioLinea = (l: LineaNueva) => l.producto.precio + (l.carneExtra ?? 0) *
 /** Categorías que se muestran como cuadrícula rápida (Bebidas): sin complementos y con muchos productos. */
 const esCuadricula = (c: CategoriaMenu) =>
   c.productos.every((p) => p.complementos.length === 0) && new Set(c.productos.map((p) => p.nombre)).size > 6;
+/** Grupo del producto dentro de su categoría (BD: producto.grupo); los que no tienen van en «Otras». */
+const grupoDe = (p: ProductoMenu) => p.grupo ?? 'Otras';
 
 /** Categorías que no van en el ticket de cocina (se guardan en la orden, pero no se imprimen). */
 const FUERA_DEL_TICKET = new Set(['bebidas']);
 const vaEnTicket = (l: LineaNueva) => !FUERA_DEL_TICKET.has(l.categoria.trim().toLowerCase());
 
 interface Props {
-  idOrden: number;
+  /**
+   * null = LLAMADA: se toma el pedido sin registrar la orden (el cliente va pidiendo por teléfono);
+   * al terminar se guarda con su nombre, se manda a cocina y se avisa con `onOrdenCreada`.
+   */
+  idOrden: number | null;
   /** Quién manda el pedido (aparece en el ticket de cocina): "Tablet 01", "CAJA". */
   origen: string;
   onVolver: () => void;
   /** Tablet: ocupa exactamente la pantalla, sin scroll de página. */
   pantallaCompleta?: boolean;
+  /** LLAMADA: la orden ya quedó registrada con el nombre del cliente. */
+  onOrdenCreada?: (idOrden: number) => void;
 }
 
 
@@ -114,23 +144,29 @@ function ticketDe(orden: OrdenBD, lineas: LineaNueva[], ronda: number, origen: s
   };
 }
 
-export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantallaCompleta = false }) => {
+export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantallaCompleta = false, onOrdenCreada }) => {
+  const esLlamada = idOrden === null;
+  const claveBorrador = idOrden ?? BORRADOR_LLAMADA;
   const [menu, setMenu] = useState<CategoriaMenu[] | null>(null);
   const [orden, setOrden] = useState<OrdenBD | null>(null);
   const ultimaOrden = useRef<OrdenBD | null>(null);
   const [detalle, setDetalle] = useState<DetalleOrdenBD[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [categoriaAbierta, setCategoriaAbierta] = useState<CategoriaMenu | null>(null);
+  // Pestaña de la cuadrícula rápida (Bebidas: Refrescos, Aguas, Jugos); si no hay una elegida, la primera.
+  const [grupoAbierto, setGrupoAbierto] = useState<string | null>(null);
+  const gruposAbiertos = categoriaAbierta ? [...new Set(categoriaAbierta.productos.map(grupoDe))] : [];
+  const grupoVisible = grupoAbierto && gruposAbiertos.includes(grupoAbierto) ? grupoAbierto : gruposAbiertos[0];
   // Pantalla de opciones de una categoría (como la de antes): elige uno, tamaño, complementos y cantidad.
   const [opcionesDe, setOpcionesDe] = useState<CategoriaMenu | null>(null);
   // Lo agregado y aún no enviado se guarda en el dispositivo: si se sale a ÓRDENES, al volver sigue aquí.
   const [nuevo, setNuevo] = useState<LineaNueva[]>(() => {
-    const guardado = leerBorrador<LineaNueva>(idOrden);
+    const guardado = leerBorrador<LineaNueva>(claveBorrador);
     // Los renglones recuperados conservan su id: los que se agreguen siguen después.
     siguienteLinea = Math.max(siguienteLinea, ...guardado.map((l) => l.id + 1));
     return guardado;
   });
-  useEffect(() => guardarBorrador(idOrden, nuevo), [idOrden, nuevo]);
+  useEffect(() => guardarBorrador(claveBorrador, nuevo), [claveBorrador, nuevo]);
   // Pestañas: PEDIDO (lo ya enviado) y AGREGAR (menú + nuevo pedido).
   const [pestana, setPestana] = useState<'pedido' | 'agregar'>('pedido');
   // Tablet: lo ya enviado se ve en una ventana desde el botón de historial.
@@ -140,7 +176,11 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
   const [pidiendoCuenta, setPidiendoCuenta] = useState(false);
   const [alerta, setAlerta] = useState<{ titulo: string; detalle: string[]; impresion?: { ok: boolean | null; texto: string } } | null>(null);
   const bloqueada = orden !== null && orden.estatus !== 0;
-  const puedeEditar = orden?.estatus === 0 && !enviando && !pidiendoCuenta;
+  const puedeEditar = (esLlamada || orden?.estatus === 0) && !enviando && !pidiendoCuenta;
+  // LLAMADA: ventana del nombre al terminar; y la orden ya registrada, para pasar a ella al cerrar el aviso.
+  const [nombrando, setNombrando] = useState(false);
+  const [ordenCreada, setOrdenCreada] = useState<number | null>(null);
+  const [descartando, setDescartando] = useState(false);
 
   const textoOrden = useRef('');
   const actualizarOrden = useCallback((datos: { orden: OrdenBD; detalle: DetalleOrdenBD[] }) => {
@@ -172,6 +212,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
   }, [pantallaCompleta]);
 
   const cargarOrden = useCallback(async () => {
+    if (idOrden === null) return; // LLAMADA: todavía no hay orden
     try {
       const datos = await obtenerOrden(idOrden);
       actualizarOrden(datos);
@@ -190,6 +231,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
   // Al momento: si otra pantalla envía un pedido o pide la cuenta, se ve aquí sin refrescar.
   // Respaldo: se vuelve a leer cada 5 s. (No toca lo que se está seleccionando en "Nuevo pedido".)
   const refrescar = useCallback(async () => {
+    if (idOrden === null) return;
     try {
       const datos = await obtenerOrden(idOrden);
       actualizarOrden(datos);
@@ -205,6 +247,11 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
     const t = setTimeout(() => setAlerta(null), 4000);
     return () => clearTimeout(t);
   }, [alerta]);
+
+  // LLAMADA registrada: al cerrar el aviso de enviado se pasa a la orden ya con su nombre.
+  useEffect(() => {
+    if (ordenCreada !== null && !alerta) onOrdenCreada?.(ordenCreada);
+  }, [ordenCreada, alerta]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Desde la pantalla de opciones: siempre un renglón nuevo, aunque sea el mismo producto. */
   const agregar = (
@@ -244,14 +291,16 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
   const totalNuevo = nuevo.reduce((acc, l) => acc + precioLinea(l) * l.cantidad, 0);
   const rondasPrevias = new Set(detalle.map((d) => d.creado_en)).size;
 
-  const enviar = async () => {
-    if (!orden || !puedeEditar || nuevo.length === 0) return;
+  /** Manda lo nuevo a cocina. `destino`: la orden recién registrada al terminar una LLAMADA. */
+  const enviar = async (destino?: number): Promise<boolean> => {
+    const id = destino ?? idOrden;
+    if (id === null || (destino === undefined && !orden) || !puedeEditar || nuevo.length === 0) return false;
     setEnviando(true);
     setError(null);
     const enviado = nuevo;
     try {
       const datos = await enviarPedido(
-        idOrden,
+        id,
         enviado.map((l) => ({
           idProducto: l.producto.id,
           cantidad: l.cantidad,
@@ -275,26 +324,43 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
             ? { ok: null, texto: 'Imprimiendo ticket de cocina…' }
             : { ok: true, texto: 'Solo bebidas: no se imprime ticket de cocina.' },
       });
-      if (paraTicket.length === 0) return;
-      // Ticket de cocina: si la impresora no responde, el pedido ya quedó guardado; solo se avisa.
-      imprimirTicketCocina(ticketDe(datos.orden, paraTicket, rondasPrevias + 1, origen))
-        .then(() => setAlerta((a) => (a ? { ...a, impresion: { ok: true, texto: 'Ticket de cocina impreso.' } } : a)))
-        .catch((err) =>
-          setAlerta((a) =>
-            a ? { ...a, impresion: { ok: false, texto: `No se imprimió el ticket: ${err instanceof Error ? err.message : 'error'}` } } : a
-          )
-        );
+      if (paraTicket.length > 0) {
+        // Ticket de cocina: si la impresora no responde, el pedido ya quedó guardado; solo se avisa.
+        imprimirTicketCocina(ticketDe(datos.orden, paraTicket, rondasPrevias + 1, origen))
+          .then(() => setAlerta((a) => (a ? { ...a, impresion: { ok: true, texto: 'Ticket de cocina impreso.' } } : a)))
+          .catch((err) =>
+            setAlerta((a) =>
+              a ? { ...a, impresion: { ok: false, texto: `No se imprimió el ticket: ${err instanceof Error ? err.message : 'error'}` } } : a
+            )
+          );
+      }
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo enviar el pedido.');
-      await refrescar();
+      if (destino === undefined) await refrescar();
+      return false;
     } finally {
       setEnviando(false);
     }
   };
 
+  /**
+   * LLAMADA terminada: registra la orden con el nombre del cliente y le manda lo pedido a cocina.
+   * Si el envío falla, el pedido queda guardado en la orden nueva para volver a tocar Enviar ahí.
+   */
+  const terminarLlamada = async (nombre: string, paraLlevar: boolean) => {
+    const { mesa } = await registrarMesa(nombre.trim(), paraLlevar);
+    guardarBorrador(mesa.id, nuevo);
+    guardarBorrador(BORRADOR_LLAMADA, []);
+    setNombrando(false);
+    if (await enviar(mesa.id)) guardarBorrador(mesa.id, []);
+    else registrarError(`La orden de ${nombre.trim()} se guardó, pero el pedido no llegó a cocina. Ábrela y toca Enviar otra vez.`, 'app');
+    setOrdenCreada(mesa.id);
+  };
+
   const cuentaPedida = (orden?.estatus ?? 0) >= 1;
   const pedirLaCuenta = async () => {
-    if (!orden || !puedeEditar || detalle.length === 0) return;
+    if (idOrden === null || !orden || !puedeEditar || detalle.length === 0) return;
     setPidiendoCuenta(true);
     setError(null);
     try {
@@ -325,6 +391,40 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
               <ArrowLeft className="w-5 h-5" /> Órdenes
             </button>
           )}
+          {esLlamada ? (
+            // LLAMADA: aún no hay orden; se puede descartar si el cliente colgó.
+            <>
+              <span className="h-14 px-4 rounded-xl border-2 border-sky-400 bg-sky-100 text-sky-900 flex items-center gap-2 text-lg font-black tracking-wide">
+                <Phone className="w-6 h-6" /> LLAMADA
+              </span>
+              {descartando ? (
+                <span className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => {
+                      setNuevo([]);
+                      onVolver();
+                    }}
+                    className="h-14 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold cursor-pointer"
+                  >
+                    Sí, descartar
+                  </button>
+                  <button
+                    onClick={() => setDescartando(false)}
+                    className="h-14 px-4 rounded-xl bg-white border-2 border-neutral-200 font-semibold cursor-pointer"
+                  >
+                    No
+                  </button>
+                </span>
+              ) : (
+                <button
+                  onClick={() => setDescartando(true)}
+                  className="h-14 px-4 rounded-xl bg-white border-2 border-neutral-200 hover:border-rose-300 text-rose-700 font-semibold flex items-center gap-2 cursor-pointer"
+                >
+                  <Trash2 className="w-5 h-5" /> Descartar
+                </button>
+              )}
+            </>
+          ) : (
           <span
             title={paraLlevar ? 'Para llevar' : 'Comer aquí'}
             className={`${pantallaCompleta ? 'w-14 h-14' : 'w-12 h-12'} rounded-xl border-2 flex items-center justify-center ${
@@ -333,7 +433,8 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
           >
             {paraLlevar ? <ShoppingBag className="w-6 h-6" /> : <Home className="w-6 h-6" />}
           </span>
-          {pantallaCompleta && (
+          )}
+          {pantallaCompleta && !esLlamada && (
             <button
               onClick={() => setVerHistorial(true)}
               title="Historial de lo enviado"
@@ -350,9 +451,15 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
           )}
         </div>
         <div className="text-right">
-          <div className={`${pantallaCompleta ? 'text-3xl' : 'text-2xl'} font-bold`}>{orden?.etiqueta ?? '…'}</div>
+          <div className={`${pantallaCompleta ? 'text-3xl' : 'text-2xl'} font-bold`}>{esLlamada ? 'Pedido por teléfono' : (orden?.etiqueta ?? '…')}</div>
           <div className={`${pantallaCompleta ? 'text-base' : 'text-sm'} text-neutral-500`}>
-            Total orden <span className="font-mono font-semibold text-neutral-900">{dinero(orden?.total ?? 0)}</span>
+            {esLlamada ? (
+              'Al terminar se guarda con el nombre del cliente'
+            ) : (
+              <>
+                Total orden <span className="font-mono font-semibold text-neutral-900">{dinero(orden?.total ?? 0)}</span>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -452,8 +559,43 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
                 </button>
                 <div className="text-lg font-bold">{categoriaAbierta.nombre}</div>
               </div>
+              {/* Grupos de la categoría (Bebidas: Refrescos, Aguas, Jugos), como pestañas */}
+              {gruposAbiertos.length > 1 && (
+                <div
+                  className="shrink-0 grid gap-2"
+                  style={{ gridTemplateColumns: `repeat(${gruposAbiertos.length}, minmax(0, 1fr))` }}
+                >
+                  {gruposAbiertos.map((g) => {
+                    const activo = g === grupoVisible;
+                    const piezas = nuevo.filter((l) => l.categoria === categoriaAbierta.nombre && grupoDe(l.producto) === g).reduce((a, l) => a + l.cantidad, 0);
+                    return (
+                      <button
+                        key={g}
+                        onClick={() => setGrupoAbierto(g)}
+                        aria-pressed={activo}
+                        className={`relative h-12 rounded-xl border-2 text-lg font-bold flex items-center justify-center gap-2 cursor-pointer ${
+                          pantallaCompleta
+                            ? activo
+                              ? 'neon-solido neon-cian'
+                              : 'neon neon-cian'
+                            : activo
+                              ? 'bg-orange-500 border-orange-500 text-white'
+                              : 'bg-white border-orange-200 text-orange-800 hover:bg-orange-50'
+                        }`}
+                      >
+                        {g}
+                        {piezas > 0 && (
+                          <span className="min-w-6 h-6 px-1.5 rounded-full bg-orange-500 text-white text-xs font-bold flex items-center justify-center">
+                            {piezas}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
               <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain grid grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] auto-rows-[minmax(4.5rem,1fr)] gap-2">
-                {categoriaAbierta.productos.map((p) => {
+                {categoriaAbierta.productos.filter((p) => gruposAbiertos.length < 2 || grupoDe(p) === grupoVisible).map((p) => {
                   const enPedido = nuevo.filter((l) => l.producto.id === p.id).reduce((acc, l) => acc + l.cantidad, 0) || undefined;
                   return (
                     <button
@@ -557,7 +699,18 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
                 ))
               )}
             </div>
-            {pantallaCompleta && nuevo.length === 0 ? (
+            {esLlamada ? (
+              // LLAMADA: al colgar se pide el nombre del cliente; ahí se registra la orden y se manda a cocina.
+              <button
+                onClick={() => setNombrando(true)}
+                disabled={!puedeEditar || nuevo.length === 0}
+                className="neon-solido neon-azul w-full h-14 shrink-0 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed text-lg font-bold flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {enviando ? <Loader2 className="w-5 h-5 animate-spin" /> : <PhoneOff className="w-5 h-5" />}
+                Terminar llamada
+                {nuevo.length > 0 && ` · ${dinero(totalNuevo)}`}
+              </button>
+            ) : pantallaCompleta && nuevo.length === 0 ? (
               // Tablet sin productos seleccionados: pedir la cuenta (orden.estatus → 1 PAGANDO; la caja cobra)
               <button
                 onClick={pedirLaCuenta}
@@ -569,7 +722,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
               </button>
             ) : (
               <button
-                onClick={enviar}
+                onClick={() => enviar()}
                 disabled={!puedeEditar || nuevo.length === 0}
                 className={`w-full h-14 shrink-0 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed text-lg font-semibold flex items-center justify-center gap-2 cursor-pointer ${
                   pantallaCompleta ? 'neon-solido neon-fuego' : 'bg-amber-500 hover:bg-amber-400 text-neutral-950'
@@ -586,6 +739,18 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
       )}
       </>
       )}
+
+      {/* LLAMADA terminada: nombre del cliente */}
+      <AnimatePresence>
+        {nombrando && (
+          <DialogoTerminarLlamada
+            piezas={nuevo.reduce((acc, l) => acc + l.cantidad, 0)}
+            total={totalNuevo}
+            onGuardar={terminarLlamada}
+            onCancelar={() => setNombrando(false)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Historial de lo enviado (tablet) */}
       <AnimatePresence>
@@ -670,3 +835,121 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
     </div>
   );
 };
+
+/** LLAMADA: al colgar se escribe a nombre de quién va el pedido; ahí se registra la orden y se manda a cocina. */
+function DialogoTerminarLlamada({
+  piezas,
+  total,
+  onGuardar,
+  onCancelar,
+}: {
+  piezas: number;
+  total: number;
+  onGuardar: (nombre: string, paraLlevar: boolean) => Promise<void>;
+  onCancelar: () => void;
+}) {
+  const [nombre, setNombre] = useState('');
+  // Por teléfono casi siempre es para llevar.
+  const [paraLlevar, setParaLlevar] = useState(true);
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const guardar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nombre.trim() || guardando) return;
+    setGuardando(true);
+    setError(null);
+    try {
+      await onGuardar(nombre, paraLlevar);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo guardar la orden.');
+      setGuardando(false);
+    }
+  };
+
+  const claseTipo = (activo: boolean) =>
+    `h-12 rounded-xl border-2 font-bold flex items-center justify-center gap-2 cursor-pointer ${
+      activo ? 'bg-sky-600 border-sky-700 text-white' : 'bg-white border-neutral-200 text-neutral-700'
+    }`;
+
+  return (
+    <motion.div
+      className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-[8vh] bg-black/40"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={() => !guardando && onCancelar()}
+    >
+      <motion.form
+        role="dialog"
+        aria-labelledby="terminar-llamada-titulo"
+        onSubmit={guardar}
+        className="w-full max-w-md bg-white rounded-2xl shadow-xl p-5 space-y-4"
+        initial={{ scale: 0.95, y: 10 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div>
+          <h2 id="terminar-llamada-titulo" className="text-xl font-bold flex items-center gap-2">
+            <PhoneOff className="w-6 h-6 text-sky-700" /> Terminar llamada
+          </h2>
+          <p className="text-sm text-neutral-600">
+            {piezas} {piezas === 1 ? 'producto' : 'productos'} · {dinero(total)}. Escribe a nombre de quién va el pedido.
+          </p>
+        </div>
+
+        <label className="block space-y-1.5">
+          <span className="text-sm font-semibold text-neutral-800">Nombre del cliente</span>
+          <span className="relative block">
+            <User className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-400" />
+            <input
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+              autoFocus
+              maxLength={100}
+              enterKeyHint="send"
+              placeholder="Ej. Juan Pérez"
+              className="w-full h-14 pl-11 pr-3 rounded-xl border-2 border-neutral-300 bg-white text-lg focus:outline-none focus:border-sky-500 select-text"
+            />
+          </span>
+        </label>
+
+        <div className="grid grid-cols-2 gap-2">
+          <button type="button" onClick={() => setParaLlevar(true)} aria-pressed={paraLlevar} className={claseTipo(paraLlevar)}>
+            <ShoppingBag className="w-5 h-5" /> Para llevar
+          </button>
+          <button type="button" onClick={() => setParaLlevar(false)} aria-pressed={!paraLlevar} className={claseTipo(!paraLlevar)}>
+            <Home className="w-5 h-5" /> Comer aquí
+          </button>
+        </div>
+
+        {error && (
+          <div className="flex items-center gap-2 text-sm text-rose-700 bg-rose-50 border border-rose-200 px-3 py-2 rounded-lg">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            {error}
+          </div>
+        )}
+
+        <div className="grid grid-cols-[auto_1fr] gap-2">
+          <button
+            type="button"
+            onClick={onCancelar}
+            disabled={guardando}
+            className="h-14 px-4 rounded-xl text-base font-semibold text-neutral-700 hover:bg-neutral-100 cursor-pointer"
+          >
+            Seguir pidiendo
+          </button>
+          <button
+            type="submit"
+            disabled={!nombre.trim() || guardando}
+            className="h-14 rounded-xl bg-sky-600 hover:bg-sky-500 disabled:bg-neutral-200 disabled:text-neutral-500 disabled:cursor-not-allowed text-white text-lg font-bold flex items-center justify-center gap-2 cursor-pointer"
+          >
+            {guardando ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+            {guardando ? 'Guardando…' : 'Guardar y enviar a cocina'}
+          </button>
+        </div>
+      </motion.form>
+    </motion.div>
+  );
+}

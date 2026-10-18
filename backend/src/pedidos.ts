@@ -2,7 +2,7 @@
 // producto_has_complemento, orden y orden_has_detalle). La tabla comanda ya no se usa (se eliminó);
 // lo que va a cocina sale en el ticket de cocina impreso.
 //
-//   GET   /api/menu                         categorías activas con sus productos, precio y complementos
+//   GET   /api/menu                         categorías activas con sus productos (grupo, precio) y complementos
 //   GET   /api/ordenes/:idOrden             la orden con su detalle y total
 //   POST  /api/ordenes/:idOrden/pedido      { items: [{ idProducto, cantidad, sin?, sinQueso?, carneExtra? }] } → orden_has_detalle + total
 //                                           sin = ids de complementos quitados (solo van en el ticket de cocina)
@@ -63,7 +63,7 @@ pedidosRouter.use(requireAuth, conBase, soloRoles('tablet', 'admin', 'cajero', '
 pedidosRouter.get('/menu', async (_req, res) => {
   const [categorias] = await pool!.query<RowDataPacket[]>('SELECT id, nombre FROM categorias WHERE estatus = 1 ORDER BY id');
   const [productos] = await pool!.query<RowDataPacket[]>(
-    'SELECT id, categoria_id, nombre, tamano, precio, imagen FROM producto WHERE estatus = 1 ORDER BY categoria_id, id',
+    'SELECT id, categoria_id, nombre, tamano, grupo, precio, imagen FROM producto WHERE estatus = 1 ORDER BY categoria_id, id',
   );
   const [complementos] = await pool!.query<RowDataPacket[]>(
     `SELECT phc.producto_id, c.id, c.nombre
@@ -86,6 +86,7 @@ pedidosRouter.get('/menu', async (_req, res) => {
           id: p.id,
           nombre: p.nombre,
           tamano: p.tamano,
+          grupo: p.grupo,
           precio: Number(p.precio),
           imagen: p.imagen,
           complementos: complementosDe.get(p.id) ?? [],

@@ -22,6 +22,7 @@ class DatabaseSeeder extends Seeder
                 ProductoSeeder::class,
                 ProductoComplementoSeeder::class,
                 ProductoPrecioSeeder::class,
+                ProductoGrupoSeeder::class,
             ]);
         });
     }

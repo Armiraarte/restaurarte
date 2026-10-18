@@ -16,7 +16,7 @@ class Producto extends Model
 
     protected $table = 'producto';
 
-    protected $fillable = ['categoria_id', 'nombre', 'tamano', 'precio', 'estatus', 'imagen'];
+    protected $fillable = ['categoria_id', 'nombre', 'tamano', 'grupo', 'precio', 'estatus', 'imagen'];
 
     protected $hidden = ['tamano_clave'];
 
