@@ -1,0 +1,214 @@
+<!doctype html>
+<!--
+  Prueba de impresoras USB conectadas directo a la tablet (Chrome en Android + WebUSB, requiere HTTPS).
+  Sirve para comprobar, antes de armar el kiosco de cobro, que la tablet puede imprimir en cada impresora:
+    - Axiohm APOS (VID 0x05D9): imagen en ESC/POS (ESC * 33), igual que print-agent/escpos.cs.
+    - Star TSP143 (VID 0x0519): imagen en modo gráfico de Star (raster "b n1 n2 …").
+  No toca el sistema: solo habla con la impresora que elijas.
+-->
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Prueba de impresoras USB</title>
+    <style>
+      :root { --rojo: #c41212; --fuego: #ff7518; --crema: #fff4e4; --texto: #1c1917; --gris: #57534e; --verde: #366d1e; }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--crema); color: var(--texto); font: 16px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+      main { max-width: 760px; margin: 0 auto; padding: 20px 16px 40px; }
+      h1 { font-size: 26px; margin: 0 0 4px; color: var(--rojo); }
+      p { margin: 0 0 12px; color: var(--gris); }
+      .tarjeta { background: #fff; border: 1px solid #f0e3cf; border-radius: 16px; padding: 16px; margin: 14px 0; }
+      button { font: inherit; font-weight: 700; border: 0; border-radius: 12px; min-height: 52px; padding: 0 18px; cursor: pointer; }
+      .principal { background: var(--fuego); color: #0a0a0a; width: 100%; font-size: 18px; }
+      .secundario { background: #fff; border: 2px solid #dfcdb3; color: var(--texto); }
+      .botones { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+      .botones button { flex: 1 1 200px; }
+      .imprimir { background: var(--verde); color: #fff; }
+      .nombre { font-weight: 800; font-size: 18px; }
+      .detalle { font: 13px/1.4 ui-monospace, 'JetBrains Mono', monospace; color: var(--gris); }
+      .aviso { background: #fff1f1; border: 1px solid #ffbaba; color: #780b0b; border-radius: 12px; padding: 12px; }
+      #registro { background: #1c1917; color: #f5f5f4; border-radius: 12px; padding: 12px; min-height: 120px; font: 13px/1.5 ui-monospace, monospace; white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Prueba de impresoras USB</h1>
+      <p>Conecta la impresora a la tablet por USB, enciéndela y toca «Conectar impresora». Repite con cada impresora.</p>
+      <div id="soporte"></div>
+      <button class="principal" id="conectar">Conectar impresora</button>
+      <div id="impresoras"></div>
+      <h2 style="font-size:18px;margin:20px 0 8px">Registro</h2>
+      <div id="registro"></div>
+    </main>
+
+    <script>
+      const VENDEDORES = { 0x05d9: 'Axiohm', 0x0519: 'Star Micronics' };
+      const ANCHO = 576; // 72 mm a 203 ppp: ancho de impresión de ambas
+      const $ = (id) => document.getElementById(id);
+      const hex = (n) => '0x' + n.toString(16).padStart(4, '0');
+      const registrar = (texto) => { $('registro').textContent += `${new Date().toLocaleTimeString('es-MX')}  ${texto}\n`; };
+
+      function lenguajeDe(d) {
+        return d.vendorId === 0x0519 ? 'star' : 'escpos';
+      }
+
+      // Ticket de prueba dibujado en un canvas de 576 px de ancho; devuelve una función negro(x, y).
+      function dibujarPrueba(dispositivo, lenguaje) {
+        const lienzo = document.createElement('canvas');
+        lienzo.width = ANCHO;
+        lienzo.height = 330;
+        const g = lienzo.getContext('2d');
+        g.fillStyle = '#fff';
+        g.fillRect(0, 0, lienzo.width, lienzo.height);
+        g.fillStyle = '#000';
+        g.textBaseline = 'top';
+        const lineas = [
+          ['bold 40px sans-serif', 'PRUEBA USB'],
+          ['bold 28px sans-serif', 'Cenaduría Los Diablitos'],
+          ['24px sans-serif', 'Desde la tablet (Chrome + USB)'],
+          ['22px sans-serif', `Impresora: ${dispositivo.productName || 'sin nombre'}`],
+          ['22px sans-serif', `Lenguaje: ${lenguaje === 'star' ? 'Star (gráfico)' : 'ESC/POS'}`],
+          ['22px sans-serif', new Date().toLocaleString('es-MX')],
+        ];
+        let y = 8;
+        for (const [fuente, texto] of lineas) {
+          g.font = fuente;
+          g.fillText(texto, 8, y);
+          y += parseInt(fuente.match(/(\d+)px/)[1], 10) + 12;
+        }
+        g.fillRect(8, y + 4, ANCHO - 16, 3);
+        g.font = 'bold 24px sans-serif';
+        g.fillText('Si lees esto, la tablet puede imprimir.', 8, y + 18);
+        const datos = g.getImageData(0, 0, lienzo.width, lienzo.height).data;
+        const negro = (x, yy) => {
+          const i = (yy * lienzo.width + x) * 4;
+          return datos[i] * 299 + datos[i + 1] * 587 + datos[i + 2] * 114 < 128000;
+        };
+        return { negro, alto: lienzo.height };
+      }
+
+      // ESC/POS por columnas de 24 puntos (ESC * 33), como print-agent/escpos.cs; termina con corte parcial.
+      function bytesEscPos(negro, alto) {
+        const out = [0x1b, 0x40, 0x1b, 0x33, 24];
+        for (let arriba = 0; arriba < alto; arriba += 24) {
+          out.push(0x1b, 0x2a, 33, ANCHO & 0xff, ANCHO >> 8);
+          for (let x = 0; x < ANCHO; x++) {
+            for (let grupo = 0; grupo < 3; grupo++) {
+              let columna = 0;
+              for (let bit = 0; bit < 8; bit++) {
+                const y = arriba + grupo * 8 + bit;
+                if (y < alto && negro(x, y)) columna |= 0x80 >> bit;
+              }
+              out.push(columna);
+            }
+          }
+          out.push(0x0a);
+        }
+        out.push(0x1b, 0x32, 0x0a, 0x0a, 0x0a, 0x1d, 0x56, 0x42, 0x00);
+        return new Uint8Array(out);
+      }
+
+      // Modo gráfico de Star (TSP100): un renglón de puntos por comando "b n1 n2 datos".
+      function bytesStar(negro, alto) {
+        const porRenglon = ANCHO / 8;
+        const out = [0x1b, 0x2a, 0x72, 0x52, 0x1b, 0x2a, 0x72, 0x41, 0x1b, 0x2a, 0x72, 0x50, 0x30, 0x00];
+        const renglon = (y) => {
+          out.push(0x62, porRenglon & 0xff, porRenglon >> 8);
+          for (let i = 0; i < porRenglon; i++) {
+            let byte = 0;
+            for (let bit = 0; bit < 8; bit++) if (y !== null && negro(i * 8 + bit, y)) byte |= 0x80 >> bit;
+            out.push(byte);
+          }
+        };
+        for (let y = 0; y < alto; y++) renglon(y);
+        for (let i = 0; i < 160; i++) renglon(null); // papel en blanco para sacar el ticket
+        out.push(0x1b, 0x0c, 0x00, 0x1b, 0x2a, 0x72, 0x42);
+        return new Uint8Array(out);
+      }
+
+      async function enviar(dispositivo, datos) {
+        await dispositivo.open();
+        if (dispositivo.configuration === null) await dispositivo.selectConfiguration(1);
+        let interfaz = null, alterna = null, salida = null;
+        for (const i of dispositivo.configuration.interfaces) {
+          for (const a of i.alternates) {
+            const e = a.endpoints.find((ep) => ep.direction === 'out' && ep.type === 'bulk');
+            if (e && !salida) { interfaz = i; alterna = a; salida = e; }
+          }
+        }
+        if (!salida) throw new Error('La impresora no tiene salida de datos USB (bulk OUT).');
+        registrar(`interfaz ${interfaz.interfaceNumber} (clase ${alterna.interfaceClass}), salida ${salida.endpointNumber}`);
+        await dispositivo.claimInterface(interfaz.interfaceNumber);
+        if (alterna.alternateSetting) await dispositivo.selectAlternateInterface(interfaz.interfaceNumber, alterna.alternateSetting);
+        try {
+          for (let i = 0; i < datos.length; i += 16384) {
+            const r = await dispositivo.transferOut(salida.endpointNumber, datos.slice(i, i + 16384));
+            if (r.status !== 'ok') throw new Error(`transferencia: ${r.status}`);
+          }
+        } finally {
+          await dispositivo.releaseInterface(interfaz.interfaceNumber).catch(() => {});
+          await dispositivo.close().catch(() => {});
+        }
+      }
+
+      async function imprimir(dispositivo, lenguaje) {
+        const nombre = dispositivo.productName || hex(dispositivo.productId);
+        registrar(`Imprimiendo en ${nombre} como ${lenguaje === 'star' ? 'Star' : 'ESC/POS'}…`);
+        try {
+          const { negro, alto } = dibujarPrueba(dispositivo, lenguaje);
+          const datos = lenguaje === 'star' ? bytesStar(negro, alto) : bytesEscPos(negro, alto);
+          await enviar(dispositivo, datos);
+          registrar(`✓ Enviado (${datos.length} bytes). Revisa si salió el ticket.`);
+        } catch (err) {
+          registrar(`✗ Error: ${err.message}`);
+        }
+      }
+
+      async function mostrarImpresoras() {
+        const lista = await navigator.usb.getDevices();
+        $('impresoras').innerHTML = '';
+        if (lista.length === 0) {
+          $('impresoras').innerHTML = '<div class="tarjeta"><p>Todavía no hay impresoras conectadas a esta página.</p></div>';
+          return;
+        }
+        for (const d of lista) {
+          const tarjeta = document.createElement('div');
+          tarjeta.className = 'tarjeta';
+          const marca = VENDEDORES[d.vendorId] || d.manufacturerName || 'Marca desconocida';
+          tarjeta.innerHTML = `
+            <div class="nombre"></div>
+            <div class="detalle"></div>
+            <div class="botones">
+              <button class="imprimir" data-l="${lenguajeDe(d)}">Imprimir prueba</button>
+              <button class="secundario" data-l="escpos">Probar como ESC/POS</button>
+              <button class="secundario" data-l="star">Probar como Star</button>
+            </div>`;
+          tarjeta.querySelector('.nombre').textContent = `${marca} · ${d.productName || 'sin nombre'}`;
+          tarjeta.querySelector('.detalle').textContent = `VID ${hex(d.vendorId)}  PID ${hex(d.productId)}  · lenguaje sugerido: ${lenguajeDe(d) === 'star' ? 'Star' : 'ESC/POS'}`;
+          tarjeta.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => imprimir(d, b.dataset.l)));
+          $('impresoras').appendChild(tarjeta);
+        }
+      }
+
+      if (!window.isSecureContext || !('usb' in navigator)) {
+        $('soporte').innerHTML = '<div class="aviso">Este navegador no permite usar impresoras USB. Abre esta página en <b>Chrome</b> en la tablet Android, con <b>https://</b>.</div>';
+        $('conectar').disabled = true;
+      } else {
+        $('conectar').addEventListener('click', async () => {
+          try {
+            const d = await navigator.usb.requestDevice({ filters: [] });
+            registrar(`Conectada: ${d.manufacturerName || ''} ${d.productName || ''} (VID ${hex(d.vendorId)}, PID ${hex(d.productId)})`);
+          } catch (err) {
+            registrar(err.name === 'NotFoundError' ? 'No se eligió ninguna impresora.' : `✗ ${err.message}`);
+          }
+          mostrarImpresoras();
+        });
+        navigator.usb.addEventListener('connect', mostrarImpresoras);
+        navigator.usb.addEventListener('disconnect', mostrarImpresoras);
+        mostrarImpresoras();
+        registrar('Listo. Toca «Conectar impresora».');
+      }
+    </script>
+  </body>
+</html>
