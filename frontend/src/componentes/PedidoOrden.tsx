@@ -85,11 +85,13 @@ function ticketDe(orden: OrdenBD, lineas: LineaNueva[], ronda: number, origen: s
       categoria: l.categoria,
       cantidad: l.cantidad,
       opciones: [],
-      // Un complemento por renglón: primero los que lleva y luego los que se quitaron.
-      descripcion: [
-        ...l.producto.complementos.filter((c) => !l.sin.some((x) => x.id === c.id)).map((c) => c.nombre),
-        ...l.sin.map((c) => `Sin ${c.nombre.toLowerCase()}`),
-      ],
+      // Complementos: si lleva todos, solo «TODO»; si se quitó alguno, solo lo que no quiere («Sin lechuga»).
+      descripcion:
+        l.producto.complementos.length === 0
+          ? []
+          : l.sin.length === 0
+            ? ['TODO']
+            : l.sin.map((c) => `Sin ${c.nombre.toLowerCase()}`),
     })),
     total_piezas: lineas.reduce((acc, l) => acc + l.cantidad, 0),
   };
