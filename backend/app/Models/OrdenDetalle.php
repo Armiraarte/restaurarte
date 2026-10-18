@@ -22,7 +22,7 @@ class OrdenDetalle extends Model
 
     protected $primaryKey = 'idDetalle_Orden';
 
-    public const CATEGORIAS_SIN_QUESO = ['Quesadillas', 'Hamburguesas', 'Lonches'];
+    public const CATEGORIAS_SIN_QUESO = ['Tacos', 'Sopes', 'Quesadillas', 'Hamburguesas', 'Lonches'];
 
     public const CATEGORIA_CARNE_EXTRA = 'Hamburguesas';
 
@@ -80,7 +80,7 @@ class OrdenDetalle extends Model
                 throw new InvalidArgumentException('El grupo MIX debe ser un entero mayor que cero.');
             }
             if ($detalle->sin_queso && ! in_array($categoria, self::CATEGORIAS_SIN_QUESO, true)) {
-                throw new InvalidArgumentException('Solo las quesadillas, hamburguesas y lonches se pueden pedir sin queso.');
+                throw new InvalidArgumentException('La opción SIN QUESO no está disponible para este producto.');
             }
 
             $carneExtra = $detalle->carne_extra ?? 0;
@@ -91,10 +91,29 @@ class OrdenDetalle extends Model
                 throw new InvalidArgumentException('Solo las hamburguesas llevan carne extra.');
             }
 
-            // Subtotal = cantidad × (precio del producto + carnes extra) en este momento
+            $opciones = $detalle->opciones ?? [];
+            $papas = $opciones['papas'] ?? null;
+            $papasAnteriores = $detalle->getOriginal('opciones')['papas'] ?? null;
+            if ($papas !== null) {
+                if (! in_array($categoria, ['Hamburguesas', 'Lonches'], true)) {
+                    throw new InvalidArgumentException('Solo las hamburguesas y lonches ofrecen CON PAPAS.');
+                }
+                if (! $detalle->exists || $papas !== $papasAnteriores) {
+                    $productoPapas = Producto::whereHas('categoria', fn ($q) => $q->where('nombre', 'Papas a la Francesa')->where('estatus', 1))
+                        ->where('tamano', 'Orden completa')->where('estatus', 1)->first()
+                        ?? throw new InvalidArgumentException('La orden completa de papas no está disponible.');
+                    $papas = [
+                        'idProducto' => $productoPapas->id, 'nombre' => $productoPapas->nombre,
+                        'tamano' => $productoPapas->tamano, 'precio' => (float) $productoPapas->precio,
+                    ];
+                    $detalle->opciones = [...$opciones, 'papas' => $papas];
+                }
+            }
+
+            // Subtotal = cantidad × (precio del producto + carnes extra + orden completa de papas)
             // (se guarda y ya no cambia con el precio).
-            if ($detalle->subtotal === null || $detalle->isDirty(['cantidad', 'idProducto', 'carne_extra'])) {
-                $porPieza = (float) $producto->precio + $carneExtra * self::PRECIO_CARNE_EXTRA;
+            if ($detalle->subtotal === null || $detalle->isDirty(['cantidad', 'idProducto', 'carne_extra']) || $papas !== $papasAnteriores) {
+                $porPieza = (float) $producto->precio + $carneExtra * self::PRECIO_CARNE_EXTRA + ($papas['precio'] ?? 0);
                 $detalle->subtotal = number_format($detalle->cantidad * $porPieza, 2, '.', '');
             }
 

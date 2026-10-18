@@ -46,6 +46,21 @@ test('rechaza grupos, cantidades y opciones de tipos incorrectos', () => {
   }
 });
 
+test('CON PAPAS cobra el precio del catálogo por pieza y conserva su referencia y precio', async () => {
+  const filas = [];
+  const conexion = { async execute(sql, valores) { filas.push(valores); return [{ insertId: filas.length }]; } };
+  const papas = { idProducto: 77, nombre: 'Papas a la Francesa', tamano: 'Orden completa', precio: 37.5 };
+  await guardarDetallePedido(conexion, 1, [
+    { idProducto: 1, cantidad: 2, carneExtra: 1, conPapas: true },
+    { idProducto: 1, cantidad: 1 },
+  ], new Map([[1, { precio: '50.00' }]]), new Map(), new Date(), papas);
+  assert.equal(filas[0][8], '215.00'); // 2 × (50 + 20 + 37.50)
+  assert.equal(filas[1][8], '50.00');
+  assert.deepEqual(JSON.parse(filas[0][7]).papas, papas);
+  assert.equal(JSON.parse(filas[1][7]).papas, undefined);
+  assert.equal(itemsValidos([{ idProducto: 1, cantidad: 1, conPapas: 'sí' }]), false);
+});
+
 test('términos: los tres en Tacos, solo Blando y Medio en Tacos Dorados, ninguno en otras categorías', () => {
   for (const nombre of ['Blando', 'Medio', 'Dorado']) assert.equal(terminoPermitido('Tacos', nombre), true);
   assert.equal(terminoPermitido('Tacos Dorados', 'Blando'), true);

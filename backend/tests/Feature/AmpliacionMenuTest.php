@@ -115,4 +115,38 @@ class AmpliacionMenuTest extends TestCase
             'sin_queso' => true, 'con_queso' => true,
         ]);
     }
+
+    public function test_papas_suma_orden_completa_por_pieza_y_conserva_el_precio_historico(): void
+    {
+        $orden = Orden::create(['nombre' => '11']);
+        $hamburguesa = OrdenDetalle::create([
+            'idOrden' => $orden->idOrden, 'idProducto' => $this->producto('Hamburguesas')->id,
+            'cantidad' => 2, 'carne_extra' => 1, 'opciones' => ['papas' => true],
+        ])->fresh();
+        $lonche = OrdenDetalle::create([
+            'idOrden' => $orden->idOrden, 'idProducto' => $this->producto('Lonches')->id,
+            'cantidad' => 1, 'opciones' => ['papas' => true],
+        ])->fresh();
+        $this->assertSame('200.00', $hamburguesa->subtotal);
+        $this->assertSame('80.00', $lonche->subtotal);
+        $papas = $this->producto('Papas a la Francesa')->categoria->productos()->where('tamano', 'Orden completa')->firstOrFail();
+        $this->assertSame($papas->id, $lonche->opciones['papas']['idProducto']);
+        $papas->update(['precio' => '45.00']);
+        $this->assertSame(30, $lonche->fresh()->opciones['papas']['precio']);
+        $this->assertSame('80.00', $lonche->fresh()->subtotal);
+        $lonche->opciones = [];
+        $lonche->save();
+        $this->assertSame('50.00', $lonche->fresh()->subtotal);
+    }
+
+    public function test_sin_queso_ahora_admite_tacos_y_sopes(): void
+    {
+        $orden = Orden::create(['nombre' => '12']);
+        foreach (['Tacos', 'Sopes'] as $categoria) {
+            $detalle = OrdenDetalle::create([
+                'idOrden' => $orden->idOrden, 'idProducto' => $this->producto($categoria)->id, 'cantidad' => 1, 'sin_queso' => true,
+            ])->fresh();
+            $this->assertTrue($detalle->sin_queso);
+        }
+    }
 }

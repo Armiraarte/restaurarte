@@ -322,11 +322,10 @@ en el orden de los items enviados: el ticket usa sus IDs y grupos definitivos.
 En cocina cada grupo se imprime como «MIX n · UN SOLO PLATO», con las opciones
 de cada producto. El cobro conserva los importes individuales.
 
-Tacos y Sopes ofrecen «CON QUESO» fuera de complementos. El Sope de Queso
-es un producto aparte y no necesita ese botón. Quesadillas y Hamburguesas
-ofrecen «SIN QUESO». Estas opciones no añaden cargos al precio.
-Lonches ofrece ambas opciones, «CON QUESO» y «SIN QUESO», con selección
-excluyente y registro en el detalle de la orden y los tickets.
+Tacos, Sopes, Quesadillas, Hamburguesas y Lonches usan un único botón
+«SIN QUESO»: apagado conserva el queso y encendido lo retira. El Sope de
+Queso es un producto aparte y no necesita ese botón. Estas opciones no
+añaden cargos al precio; las elecciones anteriores se conservan en el detalle.
 Para actualizar una base existente, después de respaldarla y antes de publicar
 la API y el frontend, ejecutar desde `backend/`:
 
@@ -354,6 +353,21 @@ y Carne de res ($20), y los complementos Mango, BFF, BBQ, Jitomate, Queso
 y Pepino. En Bebidas, Limón / Cereza cambia al grupo Alcohol y cuesta $60;
 Cerveza cuesta $30 y pertenece al mismo grupo. Se actualiza el producto
 original de Limón / Cereza sin modificar los subtotales de ventas anteriores.
+
+### Orden completa de papas y distribución de opciones
+
+Hamburguesas y Lonches ofrecen «CON PAPAS». El precio adicional se consulta
+en el producto activo de Papas a la Francesa con tamaño «Orden completa»
+(actualmente $30). El servidor suma ese precio por cada pieza marcada, junto
+con las carnes extra, y guarda en `opciones.papas` el ID, nombre, tamaño y
+precio de las papas en ese momento. No requiere una tabla ni columna nueva.
+El ticket de cocina, el historial y el cobro indican «CON PAPAS · Orden completa».
+Los renglones con y sin papas se mantienen separados en la cuenta.
+
+En Hamburguesas, queso, carne extra y papas comparten una fila con tres
+columnas iguales. En Lonches, queso y papas se reparten la fila por mitades.
+En Ensaladas, «Sin carne» queda al extremo derecho y seleccionar una proteína
+elige automáticamente tamaño Chica, que puede cambiarse a Grande.
 
 Para actualizar una instalación existente después del respaldo:
 

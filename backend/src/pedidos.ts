@@ -20,11 +20,11 @@ import { mysqlDisponible } from './usuarios.js';
 import { turnoAbierto } from './turnos.js';
 import { imprimirLineas } from './impresion.js';
 import { lineasTicketCobro } from './ticketCobro.js';
-import { guardarDetallePedido, itemsValidos, terminoPermitido, type ItemPedido } from './detallePedido.js';
+import { guardarDetallePedido, itemsValidos, terminoPermitido, type ItemPedido, type PapasPedido } from './detallePedido.js';
 
 // Opciones por renglón; las mismas constantes que OrdenDetalle en Laravel.
 /** Categorías que ofrecen SIN QUESO. */
-const CATEGORIAS_SIN_QUESO = ['Quesadillas', 'Hamburguesas', 'Lonches'];
+const CATEGORIAS_SIN_QUESO = ['Tacos', 'Sopes', 'Quesadillas', 'Hamburguesas', 'Lonches'];
 const CATEGORIAS_CON_QUESO = ['Tacos', 'Sopes', 'Lonches'];
 /** La única categoría con DOBLE / TRIPLE CARNE. */
 const CATEGORIA_CARNE_EXTRA = 'Hamburguesas';
@@ -74,9 +74,12 @@ pedidosRouter.get('/menu', async (_req, res) => {
   for (const c of complementos) {
     complementosDe.set(c.producto_id, [...(complementosDe.get(c.producto_id) ?? []), { id: c.id, nombre: c.nombre }]);
   }
+  const categoriaPapas = categorias.find((c) => c.nombre === 'Papas a la Francesa');
+  const papas = productos.find((p) => p.categoria_id === categoriaPapas?.id && p.tamano === 'Orden completa');
 
   res.json({
     terminos,
+    papas: papas ? { idProducto: papas.id, nombre: papas.nombre, tamano: papas.tamano, precio: Number(papas.precio) } : null,
     categorias: categorias.map((cat) => ({
       id: cat.id,
       nombre: cat.nombre,
@@ -175,11 +178,11 @@ async function imprimirTicketCobro(idOrden: number, recibido: number | null, cob
   // Para el cliente se junta el mismo producto aunque se haya pedido en varios envíos
   // (las quesadillas sin queso van en su propio renglón).
   const porProducto = new Map<string, { cantidad: number; nombre: string; importe: number }>();
-  type Renglon = { idProducto: number; categoria: string; nombre: string; tamano: string | null; cantidad: number; sin_queso: boolean; con_queso: boolean; carne_extra: number; subtotal: number; opciones: { mezcla?: string[] } | null };
+  type Renglon = { idProducto: number; categoria: string; nombre: string; tamano: string | null; cantidad: number; sin_queso: boolean; con_queso: boolean; carne_extra: number; subtotal: number; opciones: { mezcla?: string[]; papas?: PapasPedido } | null };
   for (const d of datos.detalle as unknown as Renglon[]) {
     const nombre = d.opciones?.mezcla && d.opciones.mezcla.length > 1 ? d.opciones.mezcla.join(' con ') : d.nombre;
-    const clave = `${d.idProducto}-${d.sin_queso ? 1 : 0}-${d.con_queso ? 1 : 0}-${d.carne_extra}-${nombre}`;
-    const opciones = [d.sin_queso ? 'SIN QUESO' : '', d.con_queso ? 'CON QUESO' : '', textoCarneExtra(d.carne_extra)].filter(Boolean).join(' ');
+    const clave = `${d.idProducto}-${d.sin_queso ? 1 : 0}-${d.con_queso ? 1 : 0}-${d.carne_extra}-${nombre}-${d.opciones?.papas ? 1 : 0}`;
+    const opciones = [d.sin_queso ? 'SIN QUESO' : '', d.con_queso ? 'CON QUESO' : '', textoCarneExtra(d.carne_extra), d.opciones?.papas ? 'CON PAPAS (orden completa)' : ''].filter(Boolean).join(' ');
     const p = porProducto.get(clave) ?? {
       cantidad: 0,
       nombre: `${d.categoria} ${nombre}${d.tamano ? ` (${d.tamano})` : ''}${opciones ? ` ${opciones}` : ''}`,
@@ -318,15 +321,18 @@ pedidosRouter.post('/ordenes/:idOrden/pedido', async (req, res) => {
     const fueraDeLugar =
       items.find((i) => i.sinQueso && !CATEGORIAS_SIN_QUESO.includes(categoriaDe(i))) ??
       items.find((i) => i.conQueso && !CATEGORIAS_CON_QUESO.includes(categoriaDe(i))) ??
+      items.find((i) => i.conPapas && !['Lonches', 'Hamburguesas'].includes(categoriaDe(i))) ??
       items.find((i) => (i.carneExtra ?? 0) > 0 && categoriaDe(i) !== CATEGORIA_CARNE_EXTRA);
     if (fueraDeLugar) {
       await conexion.rollback();
       res.status(400).json({
         error: fueraDeLugar.sinQueso && !CATEGORIAS_SIN_QUESO.includes(categoriaDe(fueraDeLugar))
-          ? `Solo las quesadillas, hamburguesas y lonches se pueden pedir sin queso (${categoriaDe(fueraDeLugar)}).`
+          ? `La opción SIN QUESO no está disponible para ${categoriaDe(fueraDeLugar)}.`
           : fueraDeLugar.conQueso && !CATEGORIAS_CON_QUESO.includes(categoriaDe(fueraDeLugar))
             ? 'Solo los tacos, sopes y lonches usan la opción CON QUESO.'
-            : `Solo las hamburguesas llevan carne extra (${categoriaDe(fueraDeLugar)}).`,
+            : fueraDeLugar.conPapas && !['Lonches', 'Hamburguesas'].includes(categoriaDe(fueraDeLugar))
+              ? 'Solo las hamburguesas y lonches ofrecen CON PAPAS.'
+              : `Solo las hamburguesas llevan carne extra (${categoriaDe(fueraDeLugar)}).`,
       });
       return;
     }
@@ -361,8 +367,22 @@ pedidosRouter.post('/ordenes/:idOrden/pedido', async (req, res) => {
       res.status(400).json({ error: 'Las opciones no corresponden al producto. Vuelve a cargar el menú.' });
       return;
     }
+    let papas: PapasPedido | null = null;
+    if (items.some((i) => i.conPapas)) {
+      const [filas] = await conexion.query<RowDataPacket[]>(
+        `SELECT p.id, p.nombre, p.tamano, p.precio FROM producto p JOIN categorias c ON c.id = p.categoria_id
+         WHERE c.nombre = 'Papas a la Francesa' AND p.tamano = 'Orden completa' AND p.estatus = 1 AND c.estatus = 1 LIMIT 1`,
+      );
+      if (!filas[0]) {
+        await conexion.rollback();
+        res.status(409).json({ error: 'La orden completa de papas no está disponible. Recarga el menú.' });
+        return;
+      }
+      const p = filas[0];
+      papas = { idProducto: p.id, nombre: p.nombre, tamano: p.tamano, precio: Number(p.precio) };
+    }
     const ahora = new Date();
-    const guardados = await guardarDetallePedido(conexion, idOrden, items, porId, complementos, ahora);
+    const guardados = await guardarDetallePedido(conexion, idOrden, items, porId, complementos, ahora, papas);
     await conexion.execute(
       `UPDATE orden SET total = (SELECT COALESCE(SUM(subtotal), 0) FROM orden_has_detalle WHERE idOrden = ?), actualizado_en = ?
         WHERE idOrden = ?`,

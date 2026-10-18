@@ -34,6 +34,10 @@ export const EtiquetaConQueso: React.FC = () => (
   </span>
 );
 
+export const EtiquetaConPapas: React.FC = () => (
+  <span className="block text-xs font-semibold text-amber-800">CON PAPAS · Orden completa</span>
+);
+
 /** Hamburguesa con DOBLE o TRIPLE CARNE (orden_has_detalle.carne_extra). */
 export const EtiquetaCarneExtra: React.FC<{ carneExtra: number }> = ({ carneExtra }) => (
   <span className="shrink-0 rounded-md border border-red-300 bg-red-100 px-1.5 py-0.5 text-[11px] font-black tracking-wide text-red-800">
@@ -47,6 +51,7 @@ interface Renglon {
   producto: string; // "Frijol" / "Milanesa (Grande)"
   sinQueso: boolean;
   conQueso: boolean;
+  conPapas: boolean;
   mixGrupo: number | null;
   termino: string | null;
   sin: string[];
@@ -80,6 +85,7 @@ export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, className = '',
       producto: d.opciones?.mezcla && d.opciones.mezcla.length > 1 ? d.opciones.mezcla.join(' con ') : d.tamano ? `${d.nombre} (${d.tamano})` : d.nombre,
       sinQueso: d.sin_queso,
       conQueso: d.con_queso,
+      conPapas: !!d.opciones?.papas,
       mixGrupo: d.mix_grupo ?? null,
       termino: d.termino ?? null,
       sin: d.opciones?.sin?.map((c) => c.nombre) ?? [],
@@ -176,6 +182,7 @@ export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, className = '',
                         </span>
                         <span className="min-w-0">
                           {r.termino && <span className="block text-xs font-semibold text-orange-800">Término: {r.termino}</span>}
+                          {r.conPapas && <EtiquetaConPapas />}
                           <span className="flex items-center gap-1.5 min-w-0">
                             <span className="font-semibold text-neutral-900 truncate">{r.producto}</span>
                             {r.sinQueso && <EtiquetaSinQueso />}

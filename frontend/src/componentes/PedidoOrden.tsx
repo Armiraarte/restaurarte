@@ -40,6 +40,7 @@ import {
   OrdenBD,
   ProductoMenu,
   TerminoMenu,
+  PapasMenu,
 } from '../services/pedidosService';
 import { imprimirTicketCocina } from '../services/ticketCocinaService';
 import { COLORES_CATEGORIA, iconoCategoria, NEON_CATEGORIA } from './iconosCategoria';
@@ -72,6 +73,7 @@ interface LineaNueva {
   conQueso?: boolean;
   mixGrupo?: number | null;
   termino?: TerminoMenu | null;
+  papas?: PapasMenu | null;
 }
 
 let siguienteLinea = 1;
@@ -80,9 +82,10 @@ const nombreLinea = (l: LineaNueva) => (l.mezcla.length > 1 ? l.mezcla.join(' co
 const textoSin = (l: LineaNueva) =>
   `${l.mixGrupo ? ` · MIX ${l.mixGrupo}` : ''}${l.termino ? ` · ${l.termino.nombre}` : ''}${l.conQueso ? ' · CON QUESO' : ''}${l.sinQueso ? ' · SIN QUESO' : ''}${l.carneExtra ? ` · ${textoCarneExtra(l.carneExtra)}` : ''}${
     l.sin.length ? ` · sin ${l.sin.map((c) => c.nombre.toLowerCase()).join(', ')}` : ''
+  }${l.papas ? ' · CON PAPAS (orden completa)' : ''
   }`;
 /** Precio de una pieza con sus carnes extra (el servidor lo calcula igual al guardar). */
-const precioLinea = (l: LineaNueva) => l.producto.precio + (l.carneExtra ?? 0) * PRECIO_CARNE_EXTRA;
+const precioLinea = (l: LineaNueva) => l.producto.precio + (l.carneExtra ?? 0) * PRECIO_CARNE_EXTRA + (l.papas?.precio ?? 0);
 
 /** Categorías que se muestran como cuadrícula rápida (Bebidas): sin complementos y con muchos productos. */
 const esCuadricula = (c: CategoriaMenu) =>
@@ -142,6 +145,7 @@ function ticketDe(orden: OrdenBD, lineas: LineaNueva[], ronda: number, origen: s
         ...(l.sinQueso ? ['SIN QUESO'] : []),
         ...(l.conQueso ? ['CON QUESO'] : []),
         ...(l.carneExtra ? [textoCarneExtra(l.carneExtra)] : []),
+        ...(l.papas ? ['CON PAPAS · Orden completa por pieza'] : []),
         ...(l.producto.complementos.length === 0
           ? []
           : l.sin.length === 0
@@ -271,12 +275,12 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
     cantidad: number,
     sin: ComplementoMenu[],
     mezcla: string[],
-    { sinQueso, conQueso, carneExtra, termino }: ExtrasLinea
+    { sinQueso, conQueso, carneExtra, termino, papas }: ExtrasLinea
   ) => {
     if (!puedeEditar) return;
     setNuevo((lista) => [
       ...lista,
-      { id: siguienteLinea++, rapida: false, producto, categoria, cantidad, sin, mezcla, sinQueso, conQueso, carneExtra, termino, mixGrupo: mixActivo },
+      { id: siguienteLinea++, rapida: false, producto, categoria, cantidad, sin, mezcla, sinQueso, conQueso, carneExtra, termino, papas, mixGrupo: mixActivo },
     ]);
   };
   /** Toque en la cuadrícula rápida (Bebidas): suma 1 al renglón rápido de ese producto. */
@@ -326,6 +330,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
           mezcla: l.mezcla,
           mixGrupo: l.mixGrupo ?? null,
           terminoId: l.termino?.id ?? null,
+          conPapas: !!l.papas,
           ...(l.conQueso && { conQueso: true }),
           ...(l.sinQueso && { sinQueso: true }),
           ...(l.carneExtra && { carneExtra: l.carneExtra }),
@@ -714,6 +719,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
                         {l.termino && <span className="block text-xs font-semibold text-orange-800">Término: {l.termino.nombre}</span>}
                         {l.sinQueso && <span className="block text-xs font-black tracking-wide text-violet-700">SIN QUESO</span>}
                         {l.conQueso && <span className="block text-xs font-black tracking-wide text-amber-700">CON QUESO</span>}
+                        {l.papas && <span className="block text-xs font-semibold text-amber-800">CON PAPAS · Orden completa (+{dinero(l.papas.precio)} c/u)</span>}
                         {!!l.carneExtra && (
                           <span className="block text-xs font-black tracking-wide text-red-700">{textoCarneExtra(l.carneExtra)}</span>
                         )}

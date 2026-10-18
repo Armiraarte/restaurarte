@@ -20,6 +20,7 @@ import {
   PRECIO_CARNE_EXTRA,
   ProductoMenu,
   TerminoMenu,
+  PapasMenu,
   textoCarneExtra,
 } from '../services/pedidosService';
 
@@ -67,20 +68,24 @@ export interface ExtrasLinea {
   conQueso: boolean;
   carneExtra: number;
   termino?: TerminoMenu | null;
+  papas?: PapasMenu | null;
 }
 
 export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta, onVolver, onAgregar }) => {
-  const nombres = [...new Set(categoria.productos.map((p) => p.nombre))];
+  const esEnsalada = categoria.nombre === 'Ensaladas';
+  const esHamburguesa = categoria.nombre === 'Hamburguesas';
+  const nombresCatalogo = [...new Set(categoria.productos.map((p) => p.nombre))];
+  const nombres = esEnsalada ? [...nombresCatalogo.filter((n) => n !== 'Sin carne'), ...nombresCatalogo.filter((n) => n === 'Sin carne')] : nombresCatalogo;
   // Mezclar solo tiene sentido si ningún producto se vende por tamaño (Ensaladas, Papas…).
   const permiteMezcla = categoria.nombre !== 'Carnes' && nombres.length > 1 && categoria.productos.every((p) => p.tamano === null);
   // Elegidos en orden de toque: el primero es el principal. Sin mezcla siempre hay a lo más uno.
   const [elegidos, setElegidos] = useState<string[]>(nombres.length === 1 ? [nombres[0]] : []);
   const nombre = elegidos[0] ?? null;
-  const [tamano, setTamano] = useState<string | null>(null);
+  const [tamano, setTamano] = useState<string | null>(esEnsalada ? 'Chica' : null);
   const [quitados, setQuitados] = useState<number[]>([]);
   // Quesadillas: llevan queso sin registrarlo; solo se marca (y se registra) cuando la piden sin queso.
   const [sinQueso, setSinQueso] = useState(false);
-  const [conQueso, setConQueso] = useState(false);
+  const [conPapas, setConPapas] = useState(false);
   const [termino, setTermino] = useState<TerminoMenu | null>(null);
   // Hamburguesas: cada toque suma una carne (DOBLE, luego TRIPLE) y el siguiente la quita.
   const [carneExtra, setCarneExtra] = useState(0);
@@ -108,8 +113,10 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
   const puedeConQueso = CATEGORIAS_CON_QUESO.includes(categoria.nombre) && !!nombre && !elegidos.includes('Queso');
   const puedeCarneExtra = categoria.nombre === CATEGORIA_CARNE_EXTRA && !!nombre;
   const carnesExtra = puedeCarneExtra ? carneExtra : 0;
+  const puedePapas = ['Hamburguesas', 'Lonches'].includes(categoria.nombre) && !!nombre;
+  const papas = puedePapas && conPapas ? categoria.papas ?? null : null;
   // Precio de una pieza con sus carnes extra.
-  const precioPieza = (producto?.precio ?? 0) + carnesExtra * PRECIO_CARNE_EXTRA;
+  const precioPieza = (producto?.precio ?? 0) + carnesExtra * PRECIO_CARNE_EXTRA + (papas?.precio ?? 0);
 
   const tocarNombre = (n: string) => {
     if (!permiteMezcla) return setElegidos([n]);
@@ -118,10 +125,10 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
 
   // Al cambiar de producto se reinician tamaño y complementos (todos incluidos).
   useEffect(() => {
-    setTamano(null);
+    setTamano(esEnsalada ? 'Chica' : null);
     setQuitados([]);
     setSinQueso(false);
-    setConQueso(false);
+    setConPapas(false);
     setTermino(null);
     setCarneExtra(0);
   }, [elegidos.join('|')]);
@@ -145,17 +152,17 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
     if (!producto) return;
     const sin = complementos.filter((c) => quitados.includes(c.id));
     const quesoFuera = puedeSinQueso && sinQueso;
-    onAgregar(producto, cantidad, sin, elegidos.length > 1 ? elegidos : [], { sinQueso: quesoFuera, conQueso: puedeConQueso && conQueso, carneExtra: carnesExtra, termino });
+    onAgregar(producto, cantidad, sin, elegidos.length > 1 ? elegidos : [], { sinQueso: quesoFuera, conQueso: puedeConQueso && !quesoFuera, carneExtra: carnesExtra, termino, papas });
     setAgregado(
       `${cantidad} × ${elegidos.length > 1 ? textoElegidos : producto.nombre}${producto.tamano ? ` (${producto.tamano})` : ''}${
-        quesoFuera ? ' · SIN QUESO' : puedeConQueso && conQueso ? ' · CON QUESO' : ''
-      }${carnesExtra ? ` · ${textoCarneExtra(carnesExtra)}` : ''}${termino ? ` · ${termino.nombre}` : ''}`
+        quesoFuera ? ' · SIN QUESO' : puedeConQueso ? ' · CON QUESO' : ''
+      }${carnesExtra ? ` · ${textoCarneExtra(carnesExtra)}` : ''}${papas ? ' · CON PAPAS (orden completa)' : ''}${termino ? ` · ${termino.nombre}` : ''}`
     );
     setElegidos(nombres.length === 1 ? [nombres[0]] : []);
-    setTamano(null);
+    setTamano(esEnsalada ? 'Chica' : null);
     setQuitados([]);
     setSinQueso(false);
-    setConQueso(false);
+    setConPapas(false);
     setTermino(null);
     setCarneExtra(0);
     setCantidad(1);
@@ -168,6 +175,10 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
     ? 'flex-1 min-h-0 grid auto-rows-fr grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-2'
     : 'grid grid-cols-2 sm:grid-cols-3 gap-2';
   const boton = pantallaCompleta ? 'h-full min-h-11 py-1.5 text-lg rounded-xl' : 'min-h-16 text-lg rounded-2xl';
+  const rejillaEleccion = esEnsalada
+    ? (pantallaCompleta ? 'flex-1 min-h-0 grid auto-rows-fr grid-cols-4 gap-2' : 'grid grid-cols-2 sm:grid-cols-4 gap-2') : rejilla;
+  const rejillaComplementos = esHamburguesa && pantallaCompleta
+    ? 'flex-1 min-h-0 grid auto-rows-fr grid-cols-3 gap-2' : rejilla;
 
   let paso = 0;
   return (
@@ -187,7 +198,7 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
         </div>
       </div>
 
-      <div className={pantallaCompleta ? 'flex-1 min-h-0 flex flex-col gap-3 overflow-y-auto overscroll-contain' : 'space-y-5'}>
+      <div data-opciones-scroll={categoria.nombre} className={pantallaCompleta ? 'flex-1 min-h-0 flex flex-col gap-2 overflow-y-auto overscroll-contain' : 'space-y-5'}>
         {/* 1. Elige una: productos de la categoría */}
         {nombres.length > 1 && (
           <div {...grupo(nombres.length)}>
@@ -198,7 +209,7 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
               </span>
               {elegidos.length > 1 && <span className="ml-2 font-semibold text-orange-800">→ {textoElegidos}</span>}
             </div>
-            <div className={rejilla}>
+            <div className={rejillaEleccion}>
               {nombres.map((n) => {
                 const precios = categoria.productos.filter((p) => p.nombre === n).map((p) => p.precio);
                 const activo = elegidos.includes(n);
@@ -281,7 +292,7 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
                 {todosIncluidos ? 'Quitar todo' : 'Con todo'}
               </button>
             </div>
-            <div className={rejilla}>
+            <div className={rejillaComplementos}>
               {complementos.map((c) => {
                 const incluido = !quitados.includes(c.id);
                 return (
@@ -302,45 +313,13 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
           </div>
         )}
 
-        {puedeConQueso && (
-          <div {...grupo(puedeSinQueso ? 2 : 1)}>
-            <div className="shrink-0 text-sm font-semibold text-neutral-700">
-              {++paso}. Queso <span className="font-normal text-neutral-500">{puedeSinQueso ? '· elige con queso o sin queso' : '· toca si lo quieren con queso'}</span>
-            </div>
-            <div className={rejilla}>
-              <button
-                onClick={() => { setConQueso((v) => !v); setSinQueso(false); }}
-                aria-pressed={conQueso}
-                className={`${boton} px-2 border-2 font-black tracking-wide flex items-center justify-center gap-2 transition-colors cursor-pointer ${
-                  conQueso ? 'bg-amber-500 border-amber-600 text-neutral-950 shadow-sm' : 'bg-white border-amber-300 text-amber-800 hover:bg-amber-50'
-                }`}
-              >
-                {conQueso && <Check className="w-5 h-5" />}
-                CON QUESO
-              </button>
-              {puedeSinQueso && (
-                <button
-                  onClick={() => { setSinQueso((v) => !v); setConQueso(false); }}
-                  aria-pressed={sinQueso}
-                  className={`${boton} px-2 border-2 font-black tracking-wide flex items-center justify-center gap-2 cursor-pointer ${
-                    sinQueso ? 'bg-violet-600 border-violet-700 text-white shadow-sm' : 'bg-white border-violet-300 text-violet-700 hover:bg-violet-50'
-                  }`}
-                >
-                  {sinQueso && <Check className="w-5 h-5" />} SIN QUESO
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* 4. Queso (solo Quesadillas): ya lo llevan; solo se toca si la piden sin queso y entonces se registra */}
-        {puedeSinQueso && !puedeConQueso && (
+        {(puedeSinQueso || puedeCarneExtra || puedePapas) && (
           <div {...grupo(1)}>
             <div className="shrink-0 text-sm font-semibold text-neutral-700">
-              {++paso}. Queso <span className="font-normal text-neutral-500">· ya lleva queso; toca para pedir sin queso</span>
+              {++paso}. Opciones
             </div>
-            <div className={rejilla}>
-              <button
+            <div data-fila-opciones className="flex-1 min-h-0 grid auto-rows-fr gap-2" style={{ gridTemplateColumns: `repeat(${Number(puedeSinQueso) + Number(puedeCarneExtra) + Number(puedePapas)}, minmax(0, 1fr))` }}>
+              {puedeSinQueso && <button
                 onClick={() => setSinQueso((v) => !v)}
                 aria-pressed={sinQueso}
                 className={`${boton} px-2 border-2 font-black tracking-wide flex items-center justify-center gap-2 transition-colors cursor-pointer ${
@@ -349,22 +328,8 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
               >
                 {sinQueso && <Check className="w-5 h-5" />}
                 SIN QUESO
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* 4. Carne (solo Hamburguesas): un toque DOBLE CARNE, otro TRIPLE CARNE, otro la quita; +$20 por carne extra */}
-        {puedeCarneExtra && (
-          <div {...grupo(1)}>
-            <div className="shrink-0 text-sm font-semibold text-neutral-700">
-              {++paso}. Carne{' '}
-              <span className="font-normal text-neutral-500">
-                · toca para doble carne y otra vez para triple (+{dinero(PRECIO_CARNE_EXTRA)} c/u)
-              </span>
-            </div>
-            <div className={rejilla}>
-              <button
+              </button>}
+              {puedeCarneExtra && <button
                 onClick={() => setCarneExtra((n) => (n + 1) % (MAX_CARNE_EXTRA + 1))}
                 aria-pressed={carneExtra > 0}
                 className={`${boton} px-2 border-2 font-black tracking-wide flex flex-col items-center justify-center transition-colors cursor-pointer ${
@@ -380,7 +345,18 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
                     ? `+${dinero(PRECIO_CARNE_EXTRA)}`
                     : `${carneExtra + 1} carnes · +${dinero(carneExtra * PRECIO_CARNE_EXTRA)}`}
                 </span>
-              </button>
+              </button>}
+              {puedePapas && <button
+                onClick={() => setConPapas((v) => !v)}
+                disabled={!categoria.papas}
+                aria-pressed={conPapas}
+                className={`${boton} px-2 border-2 font-black flex flex-col items-center justify-center cursor-pointer disabled:opacity-40 ${
+                  conPapas ? 'bg-amber-500 border-amber-600 text-neutral-950' : 'bg-white border-amber-300 text-amber-800 hover:bg-amber-50'
+                }`}
+              >
+                <span className="flex items-center gap-1">{conPapas && <Check className="w-4 h-4" />} CON PAPAS</span>
+                <span className="text-sm font-semibold">{categoria.papas ? `Orden completa · +${dinero(categoria.papas.precio)}` : 'No disponibles'}</span>
+              </button>}
             </div>
           </div>
         )}

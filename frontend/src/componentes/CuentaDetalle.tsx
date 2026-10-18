@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 import { AlertTriangle, Clock, Home, Loader2, ShoppingBag, Tablet, X } from 'lucide-react';
 import { DetalleOrdenBD, ESTATUS_ORDEN, obtenerOrden, OrdenBD } from '../services/pedidosService';
 import { useEnVivo } from '../services/enVivo';
-import { COLOR_ESTATUS_ORDEN, EtiquetaCarneExtra, EtiquetaConQueso, EtiquetaSinQueso } from './PedidoEnviado';
+import { COLOR_ESTATUS_ORDEN, EtiquetaCarneExtra, EtiquetaConPapas, EtiquetaConQueso, EtiquetaSinQueso } from './PedidoEnviado';
 
 const dinero = (n: number) => `$${n.toFixed(2)}`;
 const hora = (fecha: string) => new Date(fecha).toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' });
@@ -42,16 +42,17 @@ export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones }) 
   const categorias = useMemo(() => {
     const porProducto = new Map<
       string,
-      { clave: string; nombre: string; sinQueso: boolean; conQueso: boolean; carneExtra: number; categoria: string; cantidad: number; importe: number }
+      { clave: string; nombre: string; sinQueso: boolean; conQueso: boolean; conPapas: boolean; carneExtra: number; categoria: string; cantidad: number; importe: number }
     >();
     for (const d of detalle) {
       const nombre = d.opciones?.mezcla && d.opciones.mezcla.length > 1 ? d.opciones.mezcla.join(' con ') : d.tamano ? `${d.nombre} (${d.tamano})` : d.nombre;
-      const clave = `${d.idProducto}-${d.sin_queso ? 1 : 0}-${d.con_queso ? 1 : 0}-${d.carne_extra}-${nombre}`;
+      const clave = `${d.idProducto}-${d.sin_queso ? 1 : 0}-${d.con_queso ? 1 : 0}-${d.carne_extra}-${nombre}-${d.opciones?.papas ? 1 : 0}`;
       const p = porProducto.get(clave) ?? {
         clave,
         nombre,
         sinQueso: d.sin_queso,
         conQueso: d.con_queso,
+        conPapas: !!d.opciones?.papas,
         carneExtra: d.carne_extra,
         categoria: d.categoria,
         cantidad: 0,
@@ -145,6 +146,7 @@ export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones }) 
                         {p.carneExtra > 0 && <EtiquetaCarneExtra carneExtra={p.carneExtra} />}
                       </span>
                       <span className="block text-sm text-neutral-500 font-mono">{dinero(p.importe / p.cantidad)} c/u</span>
+                      {p.conPapas && <EtiquetaConPapas />}
                     </span>
                     <span className="shrink-0 font-mono font-bold text-xl">{dinero(p.importe)}</span>
                   </div>

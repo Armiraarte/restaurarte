@@ -12,6 +12,13 @@ export interface TerminoMenu {
   nombre: string;
 }
 
+export interface PapasMenu {
+  idProducto: number;
+  nombre: string;
+  tamano: string;
+  precio: number;
+}
+
 export interface ProductoMenu {
   id: number; // producto.id
   nombre: string; // "Frijol"
@@ -27,6 +34,7 @@ export interface CategoriaMenu {
   nombre: string; // "Tacos Dorados"
   productos: ProductoMenu[];
   terminos?: TerminoMenu[];
+  papas?: PapasMenu | null;
 }
 
 export interface OrdenBD {
@@ -59,7 +67,7 @@ export interface DetalleOrdenBD {
   mix_grupo: number | null;
   termino_id: number | null;
   termino: string | null;
-  opciones: { sin: ComplementoMenu[]; mezcla: string[] } | null;
+  opciones: { sin: ComplementoMenu[]; mezcla: string[]; papas?: PapasMenu } | null;
   subtotal: number;
   creado_en: string;
 }
@@ -82,7 +90,7 @@ async function pedir<T>(ruta: string, init: RequestInit = {}): Promise<T> {
 /**
  * Quesadillas y Hamburguesas: SIN QUESO se registra en orden_has_detalle.sin_queso.
  */
-export const CATEGORIAS_SIN_QUESO = ['Quesadillas', 'Hamburguesas', 'Lonches'];
+export const CATEGORIAS_SIN_QUESO = ['Tacos', 'Sopes', 'Quesadillas', 'Hamburguesas', 'Lonches'];
 export const CATEGORIAS_CON_QUESO = ['Tacos', 'Sopes', 'Lonches'];
 
 /**
@@ -95,8 +103,11 @@ export const MAX_CARNE_EXTRA = 2;
 export const textoCarneExtra = (n: number | undefined) => (n === 1 ? 'DOBLE CARNE' : n === 2 ? 'TRIPLE CARNE' : '');
 
 /** Categorías activas con sus productos (precio y complementos). */
-export const obtenerMenu = () => pedir<{ categorias: CategoriaMenu[]; terminos?: TerminoMenu[] }>('/menu')
-  .then((d) => d.categorias.map((c) => ({ ...c, terminos: terminosCategoria(c.nombre, d.terminos ?? []) })));
+export const obtenerMenu = () => pedir<{ categorias: CategoriaMenu[]; terminos?: TerminoMenu[]; papas?: PapasMenu | null }>('/menu')
+  .then((d) => d.categorias.map((c) => ({
+    ...c, terminos: terminosCategoria(c.nombre, d.terminos ?? []),
+    papas: ['Hamburguesas', 'Lonches'].includes(c.nombre) ? d.papas ?? null : null,
+  })));
 
 /** Orden con su detalle y total. */
 export const obtenerOrden = (idOrden: number) => pedir<{ orden: OrdenBD; detalle: DetalleOrdenBD[] }>(`/ordenes/${idOrden}`);
@@ -104,7 +115,7 @@ export const obtenerOrden = (idOrden: number) => pedir<{ orden: OrdenBD; detalle
 /** Manda productos a cocina: guarda el detalle (orden_has_detalle) y recalcula el total. */
 export const enviarPedido = (
   idOrden: number,
-  items: { idProducto: number; cantidad: number; sin?: number[]; mezcla?: string[]; sinQueso?: boolean; conQueso?: boolean; carneExtra?: number; mixGrupo?: number | null; terminoId?: number | null }[]
+  items: { idProducto: number; cantidad: number; sin?: number[]; mezcla?: string[]; sinQueso?: boolean; conQueso?: boolean; carneExtra?: number; mixGrupo?: number | null; terminoId?: number | null; conPapas?: boolean }[]
 ) =>
   pedir<{ orden: OrdenBD; detalle: DetalleOrdenBD[]; guardados: { idDetalle_Orden: number; mix_grupo: number | null }[] }>(`/ordenes/${idOrden}/pedido`, { method: 'POST', body: JSON.stringify({ items }) });
 
