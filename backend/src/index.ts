@@ -30,6 +30,6 @@ app.use('/api', avisarCambios('ordenes'), pedidosRouter);
 
 await inicializarUsuarios();
 
-app.listen(config.port, () => {
-  console.log(`[backend] API escuchando en http://localhost:${config.port}`);
+app.listen({ port: config.port, host: config.host }, () => {
+  console.log(`[backend] API escuchando en http://${config.host ?? 'localhost'}:${config.port}`);
 });

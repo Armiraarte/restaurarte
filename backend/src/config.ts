@@ -12,6 +12,9 @@ function leerJwtSecret(): string {
 
 export const config = {
   port: Number(process.env.PORT) || 4000,
+  // Dirección donde escucha la API. En el servidor: 127.0.0.1, así solo se llega por nginx (HTTPS).
+  // Sin definir escucha en todas las interfaces (PC del restaurante y Docker).
+  host: process.env.HOST || undefined,
   // Carpeta para los datos que la API guarda en disco (usuarios creados desde Configuración).
   dataDir: process.env.DATA_DIR || 'data',
   jwtSecret: leerJwtSecret(),
