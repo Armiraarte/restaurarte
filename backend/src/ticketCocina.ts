@@ -20,6 +20,7 @@ export interface ProductoTicketCocina {
   nombre: string; // BD: partidas.nombre (copia histórica: "Taco Dorado (Frijol)", "3 Burritas")
   categoria: string; // BD: productos.categoria_id → categorias.nombre
   cantidad: number; // BD: partidas.cantidad
+  mix_grupo?: number | null;
   opciones: OpcionTicket[]; // producto normal
   piezas?: { pieza: string; opciones: OpcionTicket[] }[]; // paquete (Burritas): una entrada por pieza
   reparto?: { opcion: string; cantidad: number }[]; // reparto (Alitas): cuántas de cada sabor
@@ -54,6 +55,7 @@ export function validarTicketCocina(t: any): string | null {
   if (!Array.isArray(t.productos) || t.productos.length === 0) return 'El ticket no tiene productos.';
   for (const p of t.productos) {
     if (typeof p?.nombre !== 'string' || !(Number(p?.cantidad) > 0)) return 'Producto inválido en el ticket.';
+    if (p.mix_grupo != null && (!Number.isSafeInteger(p.mix_grupo) || p.mix_grupo < 1)) return 'Grupo MIX inválido.';
   }
   return null;
 }
@@ -96,11 +98,27 @@ export function lineasTicketCocina(t: TicketCocina): LineaTicket[] {
     { separador: true },
   ];
 
-  // Productos y complementos con letra 50% más grande para leerlos de lejos en cocina.
+  // Cada MIX se imprime como un bloque, sin juntar cantidades ni perder opciones por producto.
+  const bloques: { grupo: number | null; productos: ProductoTicketCocina[] }[] = [];
+  const porGrupo = new Map<number, (typeof bloques)[number]>();
   for (const p of t.productos) {
-    lineas.push({ texto: `${p.cantidad}x ${p.nombre}`, negrita: true, escala: 1.5 });
-    for (const d of p.descripcion) lineas.push({ texto: `  - ${d}`, escala: 1.5 });
-    if (p.notas) lineas.push({ texto: `  NOTA: ${p.notas}`, negrita: true });
+    const numero = p.mix_grupo ?? null;
+    let bloque = numero === null ? undefined : porGrupo.get(numero);
+    if (!bloque) {
+      bloque = { grupo: numero, productos: [] };
+      bloques.push(bloque);
+      if (numero !== null) porGrupo.set(numero, bloque);
+    }
+    bloque.productos.push(p);
+  }
+  for (const bloque of bloques) {
+    if (bloque.grupo !== null) lineas.push({ separador: true }, { texto: `MIX ${bloque.grupo} · UN SOLO PLATO`, negrita: true, escala: 1.5 });
+    for (const p of bloque.productos) {
+      lineas.push({ texto: `${p.cantidad}x ${p.nombre}`, negrita: true, escala: 1.5 });
+      for (const d of p.descripcion) lineas.push({ texto: `  - ${d}`, escala: 1.5 });
+      if (p.notas) lineas.push({ texto: `  NOTA: ${p.notas}`, negrita: true });
+    }
+    if (bloque.grupo !== null) lineas.push({ separador: true });
   }
 
   if (t.notas_generales) lineas.push({ separador: true }, { texto: `NOTA: ${t.notas_generales}`, negrita: true });

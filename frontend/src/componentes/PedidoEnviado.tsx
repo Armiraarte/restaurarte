@@ -2,15 +2,14 @@
 // lo que ya se mandó a cocina, una tarjeta por envío con su hora, piezas y subtotal.
 //   orden             → estatus (0 abierta, 1 pagando, 2 pagado), creado_en, abierta_por, total
 //   orden_has_detalle → producto, cantidad y subtotal de cada renglón
-// (Los complementos quitados, «sin lechuga», solo van en el ticket de cocina: no se guardan en la base.
-// Las excepciones se guardan: quesadillas NO QUESO (orden_has_detalle.sin_queso) y hamburguesas
-// DOBLE / TRIPLE CARNE (orden_has_detalle.carne_extra).)
+// Las opciones y el grupo MIX también se recuperan de la base; cada producto conserva su detalle.
 // Los envíos se acomodan según el ancho del componente (container queries): una columna en el historial
 // de la tablet y dos o tres en la caja.
 import React from 'react';
 import { Clock, LucideIcon, Plus, Receipt, Send, Tablet } from 'lucide-react';
 import { DetalleOrdenBD, ESTATUS_ORDEN, OrdenBD, textoCarneExtra } from '../services/pedidosService';
 import { iconoCategoria } from './iconosCategoria';
+import { agruparMix } from '../services/pedidoMix';
 
 export const COLOR_ESTATUS_ORDEN: Record<number, string> = {
   0: 'bg-emerald-100 text-emerald-800 border-emerald-300',
@@ -29,6 +28,12 @@ export const EtiquetaNoQueso: React.FC = () => (
   </span>
 );
 
+export const EtiquetaConQueso: React.FC = () => (
+  <span className="shrink-0 rounded-md border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[11px] font-black tracking-wide text-amber-800">
+    CON QUESO
+  </span>
+);
+
 /** Hamburguesa con DOBLE o TRIPLE CARNE (orden_has_detalle.carne_extra). */
 export const EtiquetaCarneExtra: React.FC<{ carneExtra: number }> = ({ carneExtra }) => (
   <span className="shrink-0 rounded-md border border-red-300 bg-red-100 px-1.5 py-0.5 text-[11px] font-black tracking-wide text-red-800">
@@ -41,6 +46,9 @@ interface Renglon {
   cantidad: number;
   producto: string; // "Frijol" / "Milanesa (Grande)"
   sinQueso: boolean; // solo Quesadillas
+  conQueso: boolean;
+  mixGrupo: number | null;
+  sin: string[];
   carneExtra: number; // solo Hamburguesas: 1 doble, 2 triple
   categoria: string;
   subtotal: number;
@@ -68,8 +76,11 @@ export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, className = '',
     const renglon: Renglon = {
       clave: d.idDetalle_Orden,
       cantidad: d.cantidad,
-      producto: d.tamano ? `${d.nombre} (${d.tamano})` : d.nombre,
+      producto: d.opciones?.mezcla && d.opciones.mezcla.length > 1 ? d.opciones.mezcla.join(' con ') : d.tamano ? `${d.nombre} (${d.tamano})` : d.nombre,
       sinQueso: d.sin_queso,
+      conQueso: d.con_queso,
+      mixGrupo: d.mix_grupo ?? null,
+      sin: d.opciones?.sin?.map((c) => c.nombre) ?? [],
       carneExtra: d.carne_extra,
       categoria: d.categoria,
       subtotal: d.subtotal,
@@ -151,7 +162,10 @@ export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, className = '',
                   <span className="shrink-0 font-mono font-bold">{dinero(envio.subtotal)}</span>
                 </div>
                 <ul className="divide-y divide-neutral-100">
-                  {envio.renglones.map((r) => {
+                  {agruparMix(envio.renglones, (r) => r.mixGrupo).map((grupo, indice) => (
+                    <React.Fragment key={grupo.grupo === null ? `suelto-${indice}` : `mix-${grupo.grupo}`}>
+                      {grupo.grupo !== null && <li className="px-4 py-2 bg-violet-100 text-violet-900 font-bold text-sm">MIX {grupo.grupo} · UN SOLO PLATO</li>}
+                      {grupo.lineas.map((r) => {
                     const Icono = iconoCategoria(r.categoria);
                     return (
                       <li key={r.clave} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-2.5">
@@ -162,8 +176,10 @@ export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, className = '',
                           <span className="flex items-center gap-1.5 min-w-0">
                             <span className="font-semibold text-neutral-900 truncate">{r.producto}</span>
                             {r.sinQueso && <EtiquetaNoQueso />}
+                            {r.conQueso && <EtiquetaConQueso />}
                             {r.carneExtra > 0 && <EtiquetaCarneExtra carneExtra={r.carneExtra} />}
                           </span>
+                          {r.sin.length > 0 && <span className="block text-xs text-rose-700">Sin {r.sin.join(', ').toLowerCase()}</span>}
                           <span className="flex items-center gap-1 text-sm text-neutral-500">
                             <Icono className="w-3.5 h-3.5 shrink-0" />
                             <span className="truncate">{r.categoria}</span>
@@ -177,7 +193,9 @@ export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, className = '',
                         </span>
                       </li>
                     );
-                  })}
+                      })}
+                    </React.Fragment>
+                  ))}
                 </ul>
               </article>
             ))}

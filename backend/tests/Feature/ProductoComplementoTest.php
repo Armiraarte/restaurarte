@@ -9,6 +9,7 @@ use Database\Seeders\CategoriaSeeder;
 use Database\Seeders\ComplementoSeeder;
 use Database\Seeders\ProductoComplementoSeeder;
 use Database\Seeders\ProductoSeeder;
+use Database\Seeders\QuesoMenuSeeder;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -33,9 +34,9 @@ class ProductoComplementoTest extends TestCase
     {
         $this->cargar();
 
-        $this->assertSame(243, \DB::table('producto_has_complemento')->count());
+        $this->assertSame(240, \DB::table('producto_has_complemento')->count());
         $this->assertEqualsCanonicalizing(['Repollo', 'Lechuga', 'Salsa', 'Crema'], $this->producto('Tacos Dorados', 'Frijol')->complementos->pluck('nombre')->all());
-        $this->assertEqualsCanonicalizing(['Queso', 'Cilantro', 'Cebolla', 'Salsa'], $this->producto('Tacos', 'Pollo')->complementos->pluck('nombre')->all());
+        $this->assertEqualsCanonicalizing(['Cilantro', 'Cebolla', 'Salsa'], $this->producto('Tacos', 'Pollo')->complementos->pluck('nombre')->all());
         $this->assertEqualsCanonicalizing(['Jitomate', 'Pepino', 'Chile', 'Cebolla'], $this->producto('Ensaladas', 'Milanesa')->complementos->pluck('nombre')->all());
         $this->assertCount(0, $this->producto('Bebidas', 'Pepsi')->complementos);
         $this->assertSame(39, Complemento::where('nombre', 'Lechuga')->firstOrFail()->productos()->count());
@@ -46,7 +47,24 @@ class ProductoComplementoTest extends TestCase
         $this->cargar();
         $this->seed(ProductoComplementoSeeder::class);
 
-        $this->assertSame(243, \DB::table('producto_has_complemento')->count());
+        $this->assertSame(240, \DB::table('producto_has_complemento')->count());
+    }
+
+    public function test_ajuste_queso_corrige_datos_existentes_sin_tocar_precios_ni_otros_complementos(): void
+    {
+        $this->cargar();
+        $taco = $this->producto('Tacos', 'Pollo');
+        $sope = $this->producto('Sopes', 'Frijol');
+        $queso = Complemento::where('nombre', 'Queso')->value('id');
+        $taco->complementos()->attach($queso);
+        $sope->complementos()->detach($queso);
+        $taco->update(['precio' => '22.50']);
+        $this->seed(QuesoMenuSeeder::class);
+        $this->seed(QuesoMenuSeeder::class);
+        $this->assertEqualsCanonicalizing(['Cilantro', 'Cebolla', 'Salsa'], $taco->fresh()->complementos->pluck('nombre')->all());
+        $this->assertEqualsCanonicalizing(['Repollo', 'Lechuga', 'Salsa', 'Crema', 'Queso'], $sope->fresh()->complementos->pluck('nombre')->all());
+        $this->assertSame('22.50', $taco->fresh()->precio);
+        $this->assertSame(240, \DB::table('producto_has_complemento')->count());
     }
 
     public function test_no_se_repite_la_misma_relacion(): void

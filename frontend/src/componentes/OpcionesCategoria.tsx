@@ -3,7 +3,7 @@
 //                   En categorías sin tamaños se pueden tocar varias para mezclarlas ("Papa con Frijol").
 //   2. Tamaño     → solo si el producto tiene tamaños (BD: producto.tamano), con su precio
 //   3. Complementos → todos incluidos; se tocan los que no quieren (BD: producto_has_complemento)
-//   4. Queso      → solo Quesadillas: llevan queso sin registrarlo; NO QUESO sí se registra
+//   4. Queso      → Tacos: CON QUESO opcional. Quesadillas: NO QUESO si se retira.
 //                   (BD: orden_has_detalle.sin_queso)
 //   4. Carne      → solo Hamburguesas: DOBLE CARNE / TRIPLE CARNE, +$20 por carne extra
 //                   (BD: orden_has_detalle.carne_extra)
@@ -12,6 +12,7 @@ import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Check, Minus, Plus } from 'lucide-react';
 import {
   CATEGORIA_CARNE_EXTRA,
+  CATEGORIA_CON_QUESO,
   CATEGORIA_SIN_QUESO,
   CategoriaMenu,
   ComplementoMenu,
@@ -54,13 +55,14 @@ interface Props {
   onVolver: () => void;
   /**
    * mezcla: los demás productos elegidos junto con `producto` ("Papa con Frijol"); vacío si es uno solo.
-   * extras.sinQueso: solo Quesadillas, NO QUESO. extras.carneExtra: solo Hamburguesas, 1 doble y 2 triple.
+   * extras.sinQueso: Quesadillas. extras.conQueso: Tacos. extras.carneExtra: Hamburguesas, 1 doble y 2 triple.
    */
   onAgregar: (producto: ProductoMenu, cantidad: number, sin: ComplementoMenu[], mezcla: string[], extras: ExtrasLinea) => void;
 }
 
 export interface ExtrasLinea {
   sinQueso: boolean;
+  conQueso: boolean;
   carneExtra: number;
 }
 
@@ -75,6 +77,7 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
   const [quitados, setQuitados] = useState<number[]>([]);
   // Quesadillas: llevan queso sin registrarlo; solo se marca (y se registra) cuando la piden sin queso.
   const [sinQueso, setSinQueso] = useState(false);
+  const [conQueso, setConQueso] = useState(false);
   // Hamburguesas: cada toque suma una carne (DOBLE, luego TRIPLE) y el siguiente la quita.
   const [carneExtra, setCarneExtra] = useState(0);
   const [cantidad, setCantidad] = useState(1);
@@ -94,10 +97,11 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
     ...new Map(
       categoria.productos.filter((p) => elegidos.includes(p.nombre)).flatMap((p) => p.complementos).map((c) => [c.id, c])
     ).values(),
-  ];
+  ].filter((c) => categoria.nombre !== CATEGORIA_CON_QUESO || c.nombre.toLowerCase() !== 'queso');
   const textoElegidos = elegidos.join(' con ');
   // La de queso ya es queso: ahí no aplica.
   const puedeSinQueso = categoria.nombre === CATEGORIA_SIN_QUESO && !!nombre && !elegidos.includes('Queso');
+  const puedeConQueso = categoria.nombre === CATEGORIA_CON_QUESO && !!nombre;
   const puedeCarneExtra = categoria.nombre === CATEGORIA_CARNE_EXTRA && !!nombre;
   const carnesExtra = puedeCarneExtra ? carneExtra : 0;
   // Precio de una pieza con sus carnes extra.
@@ -113,6 +117,7 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
     setTamano(null);
     setQuitados([]);
     setSinQueso(false);
+    setConQueso(false);
     setCarneExtra(0);
   }, [elegidos.join('|')]);
 
@@ -135,16 +140,17 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
     if (!producto) return;
     const sin = complementos.filter((c) => quitados.includes(c.id));
     const quesoFuera = puedeSinQueso && sinQueso;
-    onAgregar(producto, cantidad, sin, elegidos.length > 1 ? elegidos : [], { sinQueso: quesoFuera, carneExtra: carnesExtra });
+    onAgregar(producto, cantidad, sin, elegidos.length > 1 ? elegidos : [], { sinQueso: quesoFuera, conQueso: puedeConQueso && conQueso, carneExtra: carnesExtra });
     setAgregado(
       `${cantidad} × ${elegidos.length > 1 ? textoElegidos : producto.nombre}${producto.tamano ? ` (${producto.tamano})` : ''}${
-        quesoFuera ? ' · NO QUESO' : ''
+        quesoFuera ? ' · NO QUESO' : puedeConQueso && conQueso ? ' · CON QUESO' : ''
       }${carnesExtra ? ` · ${textoCarneExtra(carnesExtra)}` : ''}`
     );
     setElegidos(nombres.length === 1 ? [nombres[0]] : []);
     setTamano(null);
     setQuitados([]);
     setSinQueso(false);
+    setConQueso(false);
     setCarneExtra(0);
     setCantidad(1);
   };
@@ -266,6 +272,26 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
                   </button>
                 );
               })}
+            </div>
+          </div>
+        )}
+
+        {puedeConQueso && (
+          <div {...grupo(1)}>
+            <div className="shrink-0 text-sm font-semibold text-neutral-700">
+              {++paso}. Queso <span className="font-normal text-neutral-500">· toca si lo quieren con queso</span>
+            </div>
+            <div className={rejilla}>
+              <button
+                onClick={() => setConQueso((v) => !v)}
+                aria-pressed={conQueso}
+                className={`${boton} px-2 border-2 font-black tracking-wide flex items-center justify-center gap-2 transition-colors cursor-pointer ${
+                  conQueso ? 'bg-amber-500 border-amber-600 text-neutral-950 shadow-sm' : 'bg-white border-amber-300 text-amber-800 hover:bg-amber-50'
+                }`}
+              >
+                {conQueso && <Check className="w-5 h-5" />}
+                CON QUESO
+              </button>
             </div>
           </div>
         )}

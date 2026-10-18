@@ -48,6 +48,9 @@ export interface DetalleOrdenBD {
   sin_queso: boolean;
   /** Solo Hamburguesas: 1 = DOBLE CARNE, 2 = TRIPLE CARNE (ya incluida en subtotal). */
   carne_extra: number;
+  con_queso: boolean;
+  mix_grupo: number | null;
+  opciones: { sin: ComplementoMenu[]; mezcla: string[] } | null;
   subtotal: number;
   creado_en: string;
 }
@@ -72,6 +75,7 @@ async function pedir<T>(ruta: string, init: RequestInit = {}): Promise<T> {
  * si las piden sin queso, se registra en el renglón (orden_has_detalle.sin_queso).
  */
 export const CATEGORIA_SIN_QUESO = 'Quesadillas';
+export const CATEGORIA_CON_QUESO = 'Tacos';
 
 /**
  * Hamburguesas: DOBLE CARNE (1 extra) o TRIPLE CARNE (2 extra); cada carne extra cuesta PRECIO_CARNE_EXTRA
@@ -91,9 +95,9 @@ export const obtenerOrden = (idOrden: number) => pedir<{ orden: OrdenBD; detalle
 /** Manda productos a cocina: guarda el detalle (orden_has_detalle) y recalcula el total. */
 export const enviarPedido = (
   idOrden: number,
-  items: { idProducto: number; cantidad: number; sin?: number[]; sinQueso?: boolean; carneExtra?: number }[]
+  items: { idProducto: number; cantidad: number; sin?: number[]; mezcla?: string[]; sinQueso?: boolean; conQueso?: boolean; carneExtra?: number; mixGrupo?: number | null }[]
 ) =>
-  pedir<{ orden: OrdenBD; detalle: DetalleOrdenBD[] }>(`/ordenes/${idOrden}/pedido`, { method: 'POST', body: JSON.stringify({ items }) });
+  pedir<{ orden: OrdenBD; detalle: DetalleOrdenBD[]; guardados: { idDetalle_Orden: number; mix_grupo: number | null }[] }>(`/ordenes/${idOrden}/pedido`, { method: 'POST', body: JSON.stringify({ items }) });
 
 /** Pide la cuenta: la orden pasa a PAGANDO (estatus 1) y la caja hace el cobro. */
 export const pedirCuenta = (idOrden: number) =>

@@ -21,6 +21,7 @@ class DatabaseSeeder extends Seeder
                 ComplementoSeeder::class,
                 ProductoSeeder::class,
                 ProductoComplementoSeeder::class,
+                QuesoMenuSeeder::class,
                 ProductoPrecioSeeder::class,
                 ProductoGrupoSeeder::class,
             ]);

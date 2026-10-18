@@ -106,6 +106,32 @@ class OrdenDetalleTest extends TestCase
         OrdenDetalle::create(['idOrden' => $this->orden->idOrden, 'idProducto' => $this->frijol->id, 'cantidad' => 0]);
     }
 
+    public function test_mix_guarda_cada_producto_y_sus_opciones_sin_modificar_el_precio(): void
+    {
+        $taco = Producto::whereHas('categoria', fn ($q) => $q->where('nombre', 'Tacos'))->firstOrFail();
+        $opciones = ['sin' => [['id' => 5, 'nombre' => 'Cebolla']], 'mezcla' => []];
+        $uno = OrdenDetalle::create([
+            'idOrden' => $this->orden->idOrden, 'idProducto' => $taco->id, 'cantidad' => 2,
+            'con_queso' => true, 'mix_grupo' => 1, 'opciones' => $opciones,
+        ])->fresh();
+        $dos = OrdenDetalle::create([
+            'idOrden' => $this->orden->idOrden, 'idProducto' => $this->frijol->id, 'cantidad' => 3, 'mix_grupo' => 1,
+        ])->fresh();
+        $this->assertCount(2, $this->orden->fresh()->detalles);
+        $this->assertSame(1, $uno->mix_grupo);
+        $this->assertSame($uno->mix_grupo, $dos->mix_grupo);
+        $this->assertTrue($uno->con_queso);
+        $this->assertEquals(2 * (float) $taco->precio, (float) $uno->subtotal);
+        $this->assertSame('30.00', $dos->subtotal);
+        $this->assertSame($opciones, $uno->opciones);
+    }
+
+    public function test_rechaza_con_queso_fuera_de_tacos(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        OrdenDetalle::create(['idOrden' => $this->orden->idOrden, 'idProducto' => $this->frijol->id, 'cantidad' => 1, 'con_queso' => true]);
+    }
+
     public function test_borrar_la_orden_borra_su_detalle_y_no_se_borra_un_producto_vendido(): void
     {
         OrdenDetalle::create(['idOrden' => $this->orden->idOrden, 'idProducto' => $this->frijol->id, 'cantidad' => 1]);

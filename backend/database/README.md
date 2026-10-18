@@ -300,10 +300,40 @@ temporales; la cuenta del servidor del proyecto tiene permisos sobre
 
 ## Integración con la aplicación
 
-La API que atiende al frontend sigue en `src/` (Node). La persistencia de usuarios
-en JSON y los datos del POS en el navegador se conectarán a MySQL en una etapa
-posterior. Los comandos de Laravel se ejecutan localmente; el Compose existente
-levanta la API Node y el frontend.
+La API que atiende al frontend está en `src/` (Node) y guarda usuarios, menú,
+órdenes y sus detalles en MySQL. El navegador conserva los borradores pendientes
+de enviar. Los comandos de Laravel administran el esquema y las cargas de datos.
+
+### MIX y opciones de queso
+
+«Activar MIX» abre un plato; los productos agregados hasta «Terminar MIX»
+comparten su grupo. Se pueden abrir varios grupos en un pedido, además de
+agregar productos sueltos. El borrador conserva el grupo activo al salir.
+
+La migración `2026_10_18_000025_agregar_mix_y_opciones_a_orden_has_detalle.php`
+añade `mix_grupo`, `con_queso` y `opciones`. Cada producto mantiene su propio
+renglón, cantidad y subtotal. `opciones` guarda los complementos quitados
+(ID y nombre) y la mezcla de rellenos. Los detalles anteriores quedan sin MIX.
+
+La API asigna números MIX consecutivos por orden dentro de la transacción que
+bloquea esa orden. Cada envío recibe grupos nuevos, aunque dos dispositivos
+usen los mismos números en sus borradores. La respuesta incluye `guardados`
+en el orden de los items enviados: el ticket usa sus IDs y grupos definitivos.
+En cocina cada grupo se imprime como «MIX n · UN SOLO PLATO», con las opciones
+de cada producto. El cobro conserva los importes individuales.
+
+Tacos ofrece «CON QUESO» fuera de complementos. Sopes incluye el complemento
+Queso, que se puede retirar. Estos cambios no añaden cargos al precio.
+Para actualizar una base existente, después de respaldarla y antes de publicar
+la API y el frontend, ejecutar desde `backend/`:
+
+```powershell
+.\artisan.ps1 migrate --force --path=database/migrations/2026_10_18_000025_agregar_mix_y_opciones_a_orden_has_detalle.php
+.\artisan.ps1 db:seed --class=QuesoMenuSeeder --force
+```
+
+El seeder puntual conserva precios y los demás complementos. Evitar ejecutar
+la carga completa de datos para esta actualización en producción.
 
 `001_initial.sql` se conserva como referencia histórica del esquema PostgreSQL.
 Laravel no lo ejecuta. Las tablas MySQL se construyen con las clases en

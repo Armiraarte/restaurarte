@@ -26,13 +26,13 @@ class OrdenDetalle extends Model
 
     public const CATEGORIA_CARNE_EXTRA = 'Hamburguesas';
 
-    /** Precio de cada carne extra por pieza (igual que PRECIO_CARNE_EXTRA en backend/src/pedidos.ts). */
+    /** Precio de cada carne extra por pieza (igual que backend/src/detallePedido.ts). */
     public const PRECIO_CARNE_EXTRA = 20;
 
     /** Hasta triple carne: la normal más dos extra. */
     public const MAX_CARNE_EXTRA = 2;
 
-    protected $fillable = ['idOrden', 'idProducto', 'cantidad', 'sin_queso', 'carne_extra', 'subtotal'];
+    protected $fillable = ['idOrden', 'idProducto', 'cantidad', 'sin_queso', 'con_queso', 'carne_extra', 'mix_grupo', 'opciones', 'subtotal'];
 
     protected function casts(): array
     {
@@ -42,6 +42,9 @@ class OrdenDetalle extends Model
             'idProducto' => 'integer',
             'cantidad' => 'integer',
             'sin_queso' => 'boolean',
+            'con_queso' => 'boolean',
+            'mix_grupo' => 'integer',
+            'opciones' => 'array',
             'carne_extra' => 'integer',
             'subtotal' => 'decimal:2',
             'creado_en' => 'datetime',
@@ -60,6 +63,12 @@ class OrdenDetalle extends Model
                 ?? throw new InvalidArgumentException('El producto no existe.');
 
             $categoria = $producto->categoria?->nombre;
+            if ($detalle->con_queso && $categoria !== 'Tacos') {
+                throw new InvalidArgumentException('Solo los tacos usan la opción CON QUESO.');
+            }
+            if ($detalle->mix_grupo !== null && filter_var($detalle->mix_grupo, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) === false) {
+                throw new InvalidArgumentException('El grupo MIX debe ser un entero mayor que cero.');
+            }
             if ($detalle->sin_queso && $categoria !== self::CATEGORIA_SIN_QUESO) {
                 throw new InvalidArgumentException('Solo las quesadillas se pueden pedir sin queso.');
             }

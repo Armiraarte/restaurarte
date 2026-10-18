@@ -14,6 +14,7 @@ type ClaveBorrador = number | typeof BORRADOR_LLAMADA;
 interface Borrador<T> {
   lineas: T[];
   guardado: number;
+  mixActivo?: number | null;
 }
 
 function leer<T>(clave: string): Borrador<T> | null {
@@ -31,11 +32,18 @@ export function leerBorrador<T>(idOrden: ClaveBorrador): T[] {
   return borrador && Date.now() - borrador.guardado < VIGENCIA_MS ? borrador.lineas : [];
 }
 
-/** Guarda los renglones de la orden; sin renglones, borra su borrador. */
-export function guardarBorrador<T>(idOrden: ClaveBorrador, lineas: T[]) {
+/** Recupera el plato que se estaba armando junto con el borrador. */
+export function leerMixActivo(idOrden: ClaveBorrador): number | null {
+  const borrador = leer(PREFIJO + idOrden);
+  const grupo = borrador?.mixActivo;
+  return borrador && Date.now() - borrador.guardado < VIGENCIA_MS && typeof grupo === 'number' && Number.isSafeInteger(grupo) && grupo > 0 ? grupo : null;
+}
+
+/** Sin renglones ni MIX activo, borra el borrador. */
+export function guardarBorrador<T>(idOrden: ClaveBorrador, lineas: T[], mixActivo: number | null = null) {
   try {
-    if (lineas.length === 0) localStorage.removeItem(PREFIJO + idOrden);
-    else localStorage.setItem(PREFIJO + idOrden, JSON.stringify({ lineas, guardado: Date.now() } satisfies Borrador<T>));
+    if (lineas.length === 0 && mixActivo === null) localStorage.removeItem(PREFIJO + idOrden);
+    else localStorage.setItem(PREFIJO + idOrden, JSON.stringify({ lineas, guardado: Date.now(), mixActivo } satisfies Borrador<T>));
   } catch {
     // sin espacio o sin almacenamiento: el pedido sigue en pantalla, solo no se guarda
   }
