@@ -22,9 +22,9 @@ const hora = (fecha: string) => new Date(fecha).toLocaleTimeString('es-MX', { ho
 const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`;
 
 /** Quesadilla pedida sin queso (orden_has_detalle.sin_queso). La usan también la cuenta de caja y la tablet. */
-export const EtiquetaNoQueso: React.FC = () => (
+export const EtiquetaSinQueso: React.FC = () => (
   <span className="shrink-0 rounded-md border border-violet-300 bg-violet-100 px-1.5 py-0.5 text-[11px] font-black tracking-wide text-violet-800">
-    NO QUESO
+    SIN QUESO
   </span>
 );
 
@@ -45,9 +45,10 @@ interface Renglon {
   clave: number;
   cantidad: number;
   producto: string; // "Frijol" / "Milanesa (Grande)"
-  sinQueso: boolean; // solo Quesadillas
+  sinQueso: boolean;
   conQueso: boolean;
   mixGrupo: number | null;
+  termino: string | null;
   sin: string[];
   carneExtra: number; // solo Hamburguesas: 1 doble, 2 triple
   categoria: string;
@@ -80,6 +81,7 @@ export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, className = '',
       sinQueso: d.sin_queso,
       conQueso: d.con_queso,
       mixGrupo: d.mix_grupo ?? null,
+      termino: d.termino ?? null,
       sin: d.opciones?.sin?.map((c) => c.nombre) ?? [],
       carneExtra: d.carne_extra,
       categoria: d.categoria,
@@ -173,9 +175,10 @@ export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, className = '',
                           {r.cantidad}×
                         </span>
                         <span className="min-w-0">
+                          {r.termino && <span className="block text-xs font-semibold text-orange-800">Término: {r.termino}</span>}
                           <span className="flex items-center gap-1.5 min-w-0">
                             <span className="font-semibold text-neutral-900 truncate">{r.producto}</span>
-                            {r.sinQueso && <EtiquetaNoQueso />}
+                            {r.sinQueso && <EtiquetaSinQueso />}
                             {r.conQueso && <EtiquetaConQueso />}
                             {r.carneExtra > 0 && <EtiquetaCarneExtra carneExtra={r.carneExtra} />}
                           </span>

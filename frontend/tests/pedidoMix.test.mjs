@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { agruparMix } from '../src/services/pedidoMix.ts';
+import { terminosCategoria } from '../src/services/terminosPedido.ts';
 import { guardarBorrador, leerBorrador, leerMixActivo, piezasSinEnviar } from '../src/services/borradorPedido.ts';
 
 test('MIX conserva orden de grupos, cantidades y productos sueltos', () => {
@@ -8,6 +9,14 @@ test('MIX conserva orden de grupos, cantidades y productos sueltos', () => {
   const grupos = agruparMix(lineas, (l) => l.mix);
   assert.deepEqual(grupos.map((g) => [g.grupo, g.lineas.map((l) => l.id)]), [[1, [1, 3]], [null, [2]], [2, [4]], [null, [5]]]);
   assert.equal(grupos.flatMap((g) => g.lineas).length, lineas.length);
+});
+
+test('solo Tacos ofrece los tres términos; Tacos Dorados excluye Dorado y otras categorías no ofrecen términos', () => {
+  const terminos = ['Blando', 'Medio', 'Dorado'].map((nombre, i) => ({ id: i + 1, nombre }));
+  assert.deepEqual(terminosCategoria('Tacos', terminos), terminos);
+  assert.deepEqual(terminosCategoria('Tacos Dorados', terminos).map(t => t.nombre), ['Blando', 'Medio']);
+  for (const categoria of ['Sopes', 'Hamburguesas', 'Carnes', 'Bebidas']) assert.deepEqual(terminosCategoria(categoria, terminos), []);
+  assert.equal(terminos.length, 3, 'El catálogo original conserva Dorado');
 });
 
 test('el borrador recupera el MIX activo, incluso vacío, y respeta pedidos antiguos', () => {

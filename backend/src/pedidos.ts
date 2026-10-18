@@ -6,7 +6,7 @@
 //   GET   /api/ordenes/:idOrden             la orden con su detalle y total
 //   POST  /api/ordenes/:idOrden/pedido      { items: [{ idProducto, cantidad, sin?, mezcla?, sinQueso?, conQueso?, carneExtra?, mixGrupo? }] }
 //                                           Cada producto conserva precio, opciones y grupo MIX en orden_has_detalle.
-//                                           sinQueso = solo Quesadillas: NO QUESO (orden_has_detalle.sin_queso)
+//                                           sinQueso = Quesadillas y Hamburguesas: SIN QUESO
 //                                           carneExtra = solo Hamburguesas: 1 doble, 2 triple; +$20 c/u por pieza
 //   POST  /api/ordenes/:idOrden/pedir-cuenta  orden.estatus 0 (ABIERTA) → 1 (PAGANDO): la caja hace el cobro
 //   POST  /api/ordenes/:idOrden/cobrar      { recibido } orden.estatus 1 (PAGANDO) → 2 (PAGADO) e imprime el ticket de cobro
@@ -20,11 +20,11 @@ import { mysqlDisponible } from './usuarios.js';
 import { turnoAbierto } from './turnos.js';
 import { imprimirLineas } from './impresion.js';
 import { lineasTicketCobro } from './ticketCobro.js';
-import { guardarDetallePedido, itemsValidos, type ItemPedido } from './detallePedido.js';
+import { guardarDetallePedido, itemsValidos, terminoPermitido, type ItemPedido } from './detallePedido.js';
 
 // Opciones por renglón; las mismas constantes que OrdenDetalle en Laravel.
-/** La única categoría que se puede pedir NO QUESO. */
-const CATEGORIA_SIN_QUESO = 'Quesadillas';
+/** Categorías que ofrecen SIN QUESO. */
+const CATEGORIAS_SIN_QUESO = ['Quesadillas', 'Hamburguesas'];
 /** La única categoría con DOBLE / TRIPLE CARNE. */
 const CATEGORIA_CARNE_EXTRA = 'Hamburguesas';
 
@@ -58,6 +58,7 @@ pedidosRouter.use(requireAuth, conBase, soloRoles('tablet', 'admin', 'cajero', '
 /* ---------- Menú ---------- */
 
 pedidosRouter.get('/menu', async (_req, res) => {
+  const [terminos] = await pool!.query<RowDataPacket[]>('SELECT id, nombre FROM termino WHERE estatus = 1 ORDER BY id');
   const [categorias] = await pool!.query<RowDataPacket[]>('SELECT id, nombre FROM categorias WHERE estatus = 1 ORDER BY id');
   const [productos] = await pool!.query<RowDataPacket[]>(
     'SELECT id, categoria_id, nombre, tamano, grupo, precio, imagen FROM producto WHERE estatus = 1 ORDER BY categoria_id, id',
@@ -74,6 +75,7 @@ pedidosRouter.get('/menu', async (_req, res) => {
   }
 
   res.json({
+    terminos,
     categorias: categorias.map((cat) => ({
       id: cat.id,
       nombre: cat.nombre,
@@ -107,10 +109,11 @@ async function ordenConDetalle(idOrden: number) {
   if (!ordenes[0]) return null;
   const [detalle] = await pool!.query<RowDataPacket[]>(
     `SELECT d.idDetalle_Orden, d.idProducto, c.nombre AS categoria, p.nombre, p.tamano, d.cantidad,
-            d.sin_queso, d.con_queso, d.carne_extra, d.mix_grupo, d.opciones, d.subtotal, d.creado_en
+            d.sin_queso, d.con_queso, d.carne_extra, d.mix_grupo, d.opciones, d.termino_id, te.nombre AS termino, d.subtotal, d.creado_en
        FROM orden_has_detalle d
        JOIN producto p ON p.id = d.idProducto
        JOIN categorias c ON c.id = p.categoria_id
+       LEFT JOIN termino te ON te.id = d.termino_id
       WHERE d.idOrden = ? ORDER BY d.idDetalle_Orden`,
     [idOrden],
   );
@@ -175,7 +178,7 @@ async function imprimirTicketCobro(idOrden: number, recibido: number | null, cob
   for (const d of datos.detalle as unknown as Renglon[]) {
     const nombre = d.opciones?.mezcla && d.opciones.mezcla.length > 1 ? d.opciones.mezcla.join(' con ') : d.nombre;
     const clave = `${d.idProducto}-${d.sin_queso ? 1 : 0}-${d.con_queso ? 1 : 0}-${d.carne_extra}-${nombre}`;
-    const opciones = [d.sin_queso ? 'NO QUESO' : '', d.con_queso ? 'CON QUESO' : '', textoCarneExtra(d.carne_extra)].filter(Boolean).join(' ');
+    const opciones = [d.sin_queso ? 'SIN QUESO' : '', d.con_queso ? 'CON QUESO' : '', textoCarneExtra(d.carne_extra)].filter(Boolean).join(' ');
     const p = porProducto.get(clave) ?? {
       cantidad: 0,
       nombre: `${d.categoria} ${nombre}${d.tamano ? ` (${d.tamano})` : ''}${opciones ? ` ${opciones}` : ''}`,
@@ -308,23 +311,33 @@ pedidosRouter.post('/ordenes/:idOrden/pedido', async (req, res) => {
       return;
     }
 
-    // Cada opción solo en su categoría: NO QUESO en quesadillas (llevan queso sin registrarlo),
+    // Cada opción solo en su categoría: SIN QUESO en quesadillas y hamburguesas,
     // DOBLE / TRIPLE CARNE en hamburguesas.
     const categoriaDe = (i: (typeof items)[number]) => porId.get(i.idProducto)!.categoria as string;
     const fueraDeLugar =
-      items.find((i) => i.sinQueso && categoriaDe(i) !== CATEGORIA_SIN_QUESO) ??
-      items.find((i) => i.conQueso && categoriaDe(i) !== 'Tacos') ??
+      items.find((i) => i.sinQueso && !CATEGORIAS_SIN_QUESO.includes(categoriaDe(i))) ??
+      items.find((i) => i.conQueso && !['Tacos', 'Sopes'].includes(categoriaDe(i))) ??
       items.find((i) => (i.carneExtra ?? 0) > 0 && categoriaDe(i) !== CATEGORIA_CARNE_EXTRA);
     if (fueraDeLugar) {
       await conexion.rollback();
       res.status(400).json({
-        error: fueraDeLugar.sinQueso && categoriaDe(fueraDeLugar) !== CATEGORIA_SIN_QUESO
-          ? `Solo las quesadillas se pueden pedir sin queso (${categoriaDe(fueraDeLugar)}).`
-          : fueraDeLugar.conQueso && categoriaDe(fueraDeLugar) !== 'Tacos'
-            ? 'Solo los tacos usan la opción CON QUESO.'
+        error: fueraDeLugar.sinQueso && !CATEGORIAS_SIN_QUESO.includes(categoriaDe(fueraDeLugar))
+          ? `Solo las quesadillas y hamburguesas se pueden pedir sin queso (${categoriaDe(fueraDeLugar)}).`
+          : fueraDeLugar.conQueso && !['Tacos', 'Sopes'].includes(categoriaDe(fueraDeLugar))
+            ? 'Solo los tacos y sopes usan la opción CON QUESO.'
             : `Solo las hamburguesas llevan carne extra (${categoriaDe(fueraDeLugar)}).`,
       });
       return;
+    }
+
+    if (items.some((i) => i.terminoId != null)) {
+      const [terminos] = await conexion.query<RowDataPacket[]>('SELECT id, nombre FROM termino WHERE estatus = 1');
+      const porTermino = new Map(terminos.map((t) => [t.id as number, t.nombre as string]));
+      if (items.some((i) => i.terminoId != null && !terminoPermitido(categoriaDe(i), porTermino.get(i.terminoId)))) {
+        await conexion.rollback();
+        res.status(400).json({ error: 'El término no está disponible para este producto.' });
+        return;
+      }
     }
 
     const [relaciones] = await conexion.query<RowDataPacket[]>(

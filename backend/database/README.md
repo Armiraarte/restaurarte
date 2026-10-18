@@ -322,8 +322,9 @@ en el orden de los items enviados: el ticket usa sus IDs y grupos definitivos.
 En cocina cada grupo se imprime como «MIX n · UN SOLO PLATO», con las opciones
 de cada producto. El cobro conserva los importes individuales.
 
-Tacos ofrece «CON QUESO» fuera de complementos. Sopes incluye el complemento
-Queso, que se puede retirar. Estos cambios no añaden cargos al precio.
+Tacos y Sopes ofrecen «CON QUESO» fuera de complementos. El Sope de Queso
+es un producto aparte y no necesita ese botón. Quesadillas y Hamburguesas
+ofrecen «SIN QUESO». Estas opciones no añaden cargos al precio.
 Para actualizar una base existente, después de respaldarla y antes de publicar
 la API y el frontend, ejecutar desde `backend/`:
 
@@ -334,6 +335,30 @@ la API y el frontend, ejecutar desde `backend/`:
 
 El seeder puntual conserva precios y los demás complementos. Evitar ejecutar
 la carga completa de datos para esta actualización en producción.
+
+### Términos, Carnes y Alcohol
+
+La migración `2026_10_18_000026_create_termino_table.php` crea el catálogo
+`termino` y la referencia opcional `orden_has_detalle.termino_id`.
+`TerminoSeeder` registra Blando, Medio y Dorado. Tacos admite los tres;
+Tacos Dorados solo Blando y Medio. Las demás categorías no usan términos.
+La API y el modelo validan esta restricción; el historial y cocina muestran
+el término elegido. El botón MIX está en el panel izquierdo y su texto
+permanece «MIX» tanto encendido como apagado.
+
+`AmpliacionMenuSeeder` agrega Sope de Queso al precio de los demás Sopes;
+Salsa verde a Lonches; Carnes con Milanesa ($40), Pollo a la plancha ($40)
+y Carne de res ($20), y los complementos Mango, BFF, BBQ, Jitomate, Queso
+y Pepino. En Bebidas, Limón / Cereza cambia al grupo Alcohol y cuesta $60;
+Cerveza cuesta $30 y pertenece al mismo grupo. Se actualiza el producto
+original de Limón / Cereza sin modificar los subtotales de ventas anteriores.
+
+Para actualizar una instalación existente después del respaldo:
+
+```powershell
+.\artisan.ps1 migrate --force --path=database/migrations/2026_10_18_000026_create_termino_table.php
+.\artisan.ps1 db:seed --class=AmpliacionMenuSeeder --force
+```
 
 `001_initial.sql` se conserva como referencia histórica del esquema PostgreSQL.
 Laravel no lo ejecuta. Las tablas MySQL se construyen con las clases en

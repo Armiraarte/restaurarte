@@ -2,6 +2,10 @@ import type { PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql2/prom
 
 const PRECIO_CARNE_EXTRA = 20;
 
+export function terminoPermitido(categoria: string, nombre: string | undefined): boolean {
+  return nombre !== undefined && (categoria === 'Tacos' || (categoria === 'Tacos Dorados' && nombre !== 'Dorado'));
+}
+
 export interface ItemPedido {
   idProducto: number;
   cantidad: number;
@@ -10,6 +14,7 @@ export interface ItemPedido {
   sinQueso?: boolean;
   conQueso?: boolean;
   carneExtra?: number;
+  terminoId?: number | null;
   /** Identificador temporal del borrador; se asigna un número definitivo bajo el bloqueo de la orden. */
   mixGrupo?: number | null;
 }
@@ -22,6 +27,8 @@ export function itemsValidos(items: ItemPedido[]): boolean {
     (i.mezcla === undefined || (Array.isArray(i.mezcla) && i.mezcla.length <= 40 && i.mezcla.every((n) => typeof n === 'string' && n.trim().length > 0 && n.length <= 255))) &&
     (i.sinQueso === undefined || typeof i.sinQueso === 'boolean') &&
     (i.conQueso === undefined || typeof i.conQueso === 'boolean') &&
+    !(i.sinQueso && i.conQueso) &&
+    (i.terminoId == null || (Number.isSafeInteger(i.terminoId) && i.terminoId > 0)) &&
     (i.carneExtra === undefined || (Number.isSafeInteger(i.carneExtra) && i.carneExtra >= 0 && i.carneExtra <= 2)) &&
     (i.mixGrupo == null || (Number.isSafeInteger(i.mixGrupo) && i.mixGrupo > 0 && i.mixGrupo <= 2147483647))
   );
@@ -57,10 +64,10 @@ export async function guardarDetallePedido(
     };
     const [resultado] = await conexion.execute<ResultSetHeader>(
       `INSERT INTO orden_has_detalle
-        (idOrden, idProducto, cantidad, sin_queso, con_queso, carne_extra, mix_grupo, opciones, subtotal, creado_en, actualizado_en)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (idOrden, idProducto, cantidad, sin_queso, con_queso, carne_extra, mix_grupo, opciones, subtotal, creado_en, actualizado_en, termino_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [idOrden, item.idProducto, item.cantidad, item.sinQueso ? 1 : 0, item.conQueso ? 1 : 0,
-        carneExtra, mix, JSON.stringify(opciones), subtotal.toFixed(2), ahora, ahora],
+        carneExtra, mix, JSON.stringify(opciones), subtotal.toFixed(2), ahora, ahora, item.terminoId ?? null],
     );
     guardados.push({ idDetalle_Orden: resultado.insertId, mix_grupo: mix });
   }

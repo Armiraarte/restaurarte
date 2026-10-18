@@ -15,14 +15,14 @@ class ProductoGrupoTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_todas_las_bebidas_quedan_en_refrescos_aguas_o_jugos(): void
+    public function test_todas_las_bebidas_quedan_en_su_grupo_incluido_alcohol(): void
     {
         $this->seed([CategoriaSeeder::class, ComplementoSeeder::class, ProductoSeeder::class, ProductoGrupoSeeder::class]);
         $bebidas = Categoria::where('nombre', 'Bebidas')->firstOrFail()->productos();
 
         $this->assertSame(0, (clone $bebidas)->whereNull('grupo')->count());
         $porGrupo = (clone $bebidas)->get()->groupBy('grupo')->map->count()->all();
-        $this->assertSame(['Refrescos' => 10, 'Aguas' => 5, 'Jugos' => 2], $porGrupo); // Agua de Lima: 3 tamaños
+        $this->assertSame(['Refrescos' => 9, 'Aguas' => 5, 'Jugos' => 2, 'Alcohol' => 1], $porGrupo); // Cerveza se agrega con AmpliacionMenuSeeder
         $this->assertSame('Aguas', (clone $bebidas)->where('nombre', 'Agua de Lima')->where('tamano', 'Grande')->value('grupo'));
 
         // Fuera de Bebidas no hay grupos.

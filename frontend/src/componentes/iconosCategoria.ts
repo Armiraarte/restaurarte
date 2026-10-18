@@ -34,6 +34,7 @@ export const ICONO_CATEGORIA: Record<string, LucideIcon> = {
   Alitas: Drumstick,
   Salchichas: Ham, // carne (no hay ícono de salchicha)
   Bebidas: CupSoda,
+  Carnes: Ham,
 };
 
 /** Ícono de la categoría; si no está en la lista, cubiertos. */

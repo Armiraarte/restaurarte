@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 import { AlertTriangle, Clock, Home, Loader2, ShoppingBag, Tablet, X } from 'lucide-react';
 import { DetalleOrdenBD, ESTATUS_ORDEN, obtenerOrden, OrdenBD } from '../services/pedidosService';
 import { useEnVivo } from '../services/enVivo';
-import { COLOR_ESTATUS_ORDEN, EtiquetaCarneExtra, EtiquetaConQueso, EtiquetaNoQueso } from './PedidoEnviado';
+import { COLOR_ESTATUS_ORDEN, EtiquetaCarneExtra, EtiquetaConQueso, EtiquetaSinQueso } from './PedidoEnviado';
 
 const dinero = (n: number) => `$${n.toFixed(2)}`;
 const hora = (fecha: string) => new Date(fecha).toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' });
@@ -38,7 +38,7 @@ export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones }) 
   }, [cargar]);
   useEnVivo(['ordenes'], cargar);
 
-  // Un renglón por producto, agrupado por categoría (NO QUESO y DOBLE / TRIPLE CARNE van en su propio renglón).
+  // Un renglón por producto, agrupado por categoría (SIN QUESO y DOBLE / TRIPLE CARNE van en su propio renglón).
   const categorias = useMemo(() => {
     const porProducto = new Map<
       string,
@@ -140,7 +140,7 @@ export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones }) 
                     <span className="flex-1 min-w-0">
                       <span className="flex items-center gap-2 min-w-0">
                         <span className="text-xl font-semibold leading-tight truncate">{p.nombre}</span>
-                        {p.sinQueso && <EtiquetaNoQueso />}
+                        {p.sinQueso && <EtiquetaSinQueso />}
                         {p.conQueso && <EtiquetaConQueso />}
                         {p.carneExtra > 0 && <EtiquetaCarneExtra carneExtra={p.carneExtra} />}
                       </span>

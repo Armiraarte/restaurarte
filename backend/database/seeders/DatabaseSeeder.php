@@ -24,6 +24,7 @@ class DatabaseSeeder extends Seeder
                 QuesoMenuSeeder::class,
                 ProductoPrecioSeeder::class,
                 ProductoGrupoSeeder::class,
+                AmpliacionMenuSeeder::class,
             ]);
         });
     }

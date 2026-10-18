@@ -1,7 +1,13 @@
 // Menú y pedidos desde la base de datos (API: backend/src/pedidos.ts).
 import { getToken } from './authService';
+import { terminosCategoria } from './terminosPedido';
 
 export interface ComplementoMenu {
+  id: number;
+  nombre: string;
+}
+
+export interface TerminoMenu {
   id: number;
   nombre: string;
 }
@@ -20,6 +26,7 @@ export interface CategoriaMenu {
   id: number;
   nombre: string; // "Tacos Dorados"
   productos: ProductoMenu[];
+  terminos?: TerminoMenu[];
 }
 
 export interface OrdenBD {
@@ -44,12 +51,14 @@ export interface DetalleOrdenBD {
   nombre: string;
   tamano: string | null;
   cantidad: number;
-  /** Solo Quesadillas: la pidieron sin queso (llevan queso sin registrarlo). */
+  /** Quesadillas y Hamburguesas: la pidieron sin queso. */
   sin_queso: boolean;
   /** Solo Hamburguesas: 1 = DOBLE CARNE, 2 = TRIPLE CARNE (ya incluida en subtotal). */
   carne_extra: number;
   con_queso: boolean;
   mix_grupo: number | null;
+  termino_id: number | null;
+  termino: string | null;
   opciones: { sin: ComplementoMenu[]; mezcla: string[] } | null;
   subtotal: number;
   creado_en: string;
@@ -71,11 +80,10 @@ async function pedir<T>(ruta: string, init: RequestInit = {}): Promise<T> {
 }
 
 /**
- * La única categoría que se puede pedir sin queso: las quesadillas llevan queso sin registrarlo y,
- * si las piden sin queso, se registra en el renglón (orden_has_detalle.sin_queso).
+ * Quesadillas y Hamburguesas: SIN QUESO se registra en orden_has_detalle.sin_queso.
  */
-export const CATEGORIA_SIN_QUESO = 'Quesadillas';
-export const CATEGORIA_CON_QUESO = 'Tacos';
+export const CATEGORIAS_SIN_QUESO = ['Quesadillas', 'Hamburguesas'];
+export const CATEGORIAS_CON_QUESO = ['Tacos', 'Sopes'];
 
 /**
  * Hamburguesas: DOBLE CARNE (1 extra) o TRIPLE CARNE (2 extra); cada carne extra cuesta PRECIO_CARNE_EXTRA
@@ -87,7 +95,8 @@ export const MAX_CARNE_EXTRA = 2;
 export const textoCarneExtra = (n: number | undefined) => (n === 1 ? 'DOBLE CARNE' : n === 2 ? 'TRIPLE CARNE' : '');
 
 /** Categorías activas con sus productos (precio y complementos). */
-export const obtenerMenu = () => pedir<{ categorias: CategoriaMenu[] }>('/menu').then((d) => d.categorias);
+export const obtenerMenu = () => pedir<{ categorias: CategoriaMenu[]; terminos?: TerminoMenu[] }>('/menu')
+  .then((d) => d.categorias.map((c) => ({ ...c, terminos: terminosCategoria(c.nombre, d.terminos ?? []) })));
 
 /** Orden con su detalle y total. */
 export const obtenerOrden = (idOrden: number) => pedir<{ orden: OrdenBD; detalle: DetalleOrdenBD[] }>(`/ordenes/${idOrden}`);
@@ -95,7 +104,7 @@ export const obtenerOrden = (idOrden: number) => pedir<{ orden: OrdenBD; detalle
 /** Manda productos a cocina: guarda el detalle (orden_has_detalle) y recalcula el total. */
 export const enviarPedido = (
   idOrden: number,
-  items: { idProducto: number; cantidad: number; sin?: number[]; mezcla?: string[]; sinQueso?: boolean; conQueso?: boolean; carneExtra?: number; mixGrupo?: number | null }[]
+  items: { idProducto: number; cantidad: number; sin?: number[]; mezcla?: string[]; sinQueso?: boolean; conQueso?: boolean; carneExtra?: number; mixGrupo?: number | null; terminoId?: number | null }[]
 ) =>
   pedir<{ orden: OrdenBD; detalle: DetalleOrdenBD[]; guardados: { idDetalle_Orden: number; mix_grupo: number | null }[] }>(`/ordenes/${idOrden}/pedido`, { method: 'POST', body: JSON.stringify({ items }) });
 
