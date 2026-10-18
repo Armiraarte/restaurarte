@@ -323,7 +323,8 @@ En cocina cada grupo se imprime como «MIX n · UN SOLO PLATO», con las opcione
 de cada producto. El cobro conserva los importes individuales.
 
 Tacos, Sopes, Quesadillas, Hamburguesas y Lonches usan un único botón
-«SIN QUESO»: apagado conserva el queso y encendido lo retira. El Sope de
+«CON QUESO»: inicia apagado y al activarlo agrega queso. Apagado registra
+`sin_queso = true`; encendido registra `con_queso = true`. El Sope de
 Queso es un producto aparte y no necesita ese botón. Estas opciones no
 añaden cargos al precio; las elecciones anteriores se conservan en el detalle.
 Para actualizar una base existente, después de respaldarla y antes de publicar

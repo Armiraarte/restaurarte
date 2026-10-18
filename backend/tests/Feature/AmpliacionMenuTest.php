@@ -139,14 +139,19 @@ class AmpliacionMenuTest extends TestCase
         $this->assertSame('50.00', $lonche->fresh()->subtotal);
     }
 
-    public function test_sin_queso_ahora_admite_tacos_y_sopes(): void
+    public function test_las_cinco_categorias_guardan_sin_queso_o_queso_agregado(): void
     {
         $orden = Orden::create(['nombre' => '12']);
-        foreach (['Tacos', 'Sopes'] as $categoria) {
+        foreach (['Tacos', 'Sopes', 'Quesadillas', 'Hamburguesas', 'Lonches'] as $categoria) {
             $detalle = OrdenDetalle::create([
                 'idOrden' => $orden->idOrden, 'idProducto' => $this->producto($categoria)->id, 'cantidad' => 1, 'sin_queso' => true,
             ])->fresh();
             $this->assertTrue($detalle->sin_queso);
+            $conQueso = OrdenDetalle::create([
+                'idOrden' => $orden->idOrden, 'idProducto' => $this->producto($categoria)->id, 'cantidad' => 1, 'con_queso' => true,
+            ])->fresh();
+            $this->assertTrue($conQueso->con_queso);
+            $this->assertFalse($conQueso->sin_queso);
         }
     }
 }

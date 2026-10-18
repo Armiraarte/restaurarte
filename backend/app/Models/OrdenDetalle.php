@@ -64,8 +64,8 @@ class OrdenDetalle extends Model
                 ?? throw new InvalidArgumentException('El producto no existe.');
 
             $categoria = $producto->categoria?->nombre;
-            if ($detalle->con_queso && ! in_array($categoria, ['Tacos', 'Sopes', 'Lonches'], true)) {
-                throw new InvalidArgumentException('Solo los tacos, sopes y lonches usan la opción CON QUESO.');
+            if ($detalle->con_queso && ! in_array($categoria, self::CATEGORIAS_SIN_QUESO, true)) {
+                throw new InvalidArgumentException('La opción CON QUESO no está disponible para este producto.');
             }
             if ($detalle->con_queso && $detalle->sin_queso) {
                 throw new InvalidArgumentException('El producto no puede llevar CON QUESO y SIN QUESO a la vez.');

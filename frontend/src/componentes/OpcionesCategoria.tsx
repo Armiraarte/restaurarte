@@ -3,7 +3,7 @@
 //                   En categorías sin tamaños se pueden tocar varias para mezclarlas ("Papa con Frijol").
 //   2. Tamaño     → solo si el producto tiene tamaños (BD: producto.tamano), con su precio
 //   3. Complementos → todos incluidos; se tocan los que no quieren (BD: producto_has_complemento)
-//   4. Queso      → Tacos: CON QUESO opcional. Quesadillas: SIN QUESO si se retira.
+//   4. Queso      → CON QUESO opcional, desactivado por defecto.
 //                   (BD: orden_has_detalle.sin_queso)
 //   4. Carne      → solo Hamburguesas: DOBLE CARNE / TRIPLE CARNE, +$20 por carne extra
 //                   (BD: orden_has_detalle.carne_extra)
@@ -13,7 +13,6 @@ import { ArrowLeft, Check, Minus, Plus } from 'lucide-react';
 import {
   CATEGORIA_CARNE_EXTRA,
   CATEGORIAS_CON_QUESO,
-  CATEGORIAS_SIN_QUESO,
   CategoriaMenu,
   ComplementoMenu,
   MAX_CARNE_EXTRA,
@@ -83,8 +82,8 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
   const nombre = elegidos[0] ?? null;
   const [tamano, setTamano] = useState<string | null>(esEnsalada ? 'Chica' : null);
   const [quitados, setQuitados] = useState<number[]>([]);
-  // Quesadillas: llevan queso sin registrarlo; solo se marca (y se registra) cuando la piden sin queso.
-  const [sinQueso, setSinQueso] = useState(false);
+  // El queso se agrega solo al activar el botón; sin seleccionar se registra SIN QUESO.
+  const [conQueso, setConQueso] = useState(false);
   const [conPapas, setConPapas] = useState(false);
   const [termino, setTermino] = useState<TerminoMenu | null>(null);
   // Hamburguesas: cada toque suma una carne (DOBLE, luego TRIPLE) y el siguiente la quita.
@@ -109,7 +108,6 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
   ].filter((c) => !CATEGORIAS_CON_QUESO.includes(categoria.nombre) || c.nombre.toLowerCase() !== 'queso');
   const textoElegidos = elegidos.join(' con ');
   // La de queso ya es queso: ahí no aplica.
-  const puedeSinQueso = CATEGORIAS_SIN_QUESO.includes(categoria.nombre) && !!nombre && !elegidos.includes('Queso');
   const puedeConQueso = CATEGORIAS_CON_QUESO.includes(categoria.nombre) && !!nombre && !elegidos.includes('Queso');
   const puedeCarneExtra = categoria.nombre === CATEGORIA_CARNE_EXTRA && !!nombre;
   const carnesExtra = puedeCarneExtra ? carneExtra : 0;
@@ -127,7 +125,7 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
   useEffect(() => {
     setTamano(esEnsalada ? 'Chica' : null);
     setQuitados([]);
-    setSinQueso(false);
+    setConQueso(false);
     setConPapas(false);
     setTermino(null);
     setCarneExtra(0);
@@ -151,8 +149,8 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
   const agregar = () => {
     if (!producto) return;
     const sin = complementos.filter((c) => quitados.includes(c.id));
-    const quesoFuera = puedeSinQueso && sinQueso;
-    onAgregar(producto, cantidad, sin, elegidos.length > 1 ? elegidos : [], { sinQueso: quesoFuera, conQueso: puedeConQueso && !quesoFuera, carneExtra: carnesExtra, termino, papas });
+    const quesoFuera = puedeConQueso && !conQueso;
+    onAgregar(producto, cantidad, sin, elegidos.length > 1 ? elegidos : [], { sinQueso: quesoFuera, conQueso: puedeConQueso && conQueso, carneExtra: carnesExtra, termino, papas });
     setAgregado(
       `${cantidad} × ${elegidos.length > 1 ? textoElegidos : producto.nombre}${producto.tamano ? ` (${producto.tamano})` : ''}${
         quesoFuera ? ' · SIN QUESO' : puedeConQueso ? ' · CON QUESO' : ''
@@ -161,7 +159,7 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
     setElegidos(nombres.length === 1 ? [nombres[0]] : []);
     setTamano(esEnsalada ? 'Chica' : null);
     setQuitados([]);
-    setSinQueso(false);
+    setConQueso(false);
     setConPapas(false);
     setTermino(null);
     setCarneExtra(0);
@@ -313,21 +311,21 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
           </div>
         )}
 
-        {(puedeSinQueso || puedeCarneExtra || puedePapas) && (
+        {(puedeConQueso || puedeCarneExtra || puedePapas) && (
           <div {...grupo(1)}>
             <div className="shrink-0 text-sm font-semibold text-neutral-700">
               {++paso}. Opciones
             </div>
-            <div data-fila-opciones className="flex-1 min-h-0 grid auto-rows-fr gap-2" style={{ gridTemplateColumns: `repeat(${Number(puedeSinQueso) + Number(puedeCarneExtra) + Number(puedePapas)}, minmax(0, 1fr))` }}>
-              {puedeSinQueso && <button
-                onClick={() => setSinQueso((v) => !v)}
-                aria-pressed={sinQueso}
+            <div data-fila-opciones className="flex-1 min-h-0 grid auto-rows-fr gap-2" style={{ gridTemplateColumns: `repeat(${Number(puedeConQueso) + Number(puedeCarneExtra) + Number(puedePapas)}, minmax(0, 1fr))` }}>
+              {puedeConQueso && <button
+                onClick={() => setConQueso((v) => !v)}
+                aria-pressed={conQueso}
                 className={`${boton} px-2 border-2 font-black tracking-wide flex items-center justify-center gap-2 transition-colors cursor-pointer ${
-                  sinQueso ? 'bg-violet-600 border-violet-700 text-white shadow-sm' : 'bg-white border-violet-300 text-violet-700 hover:bg-violet-50'
+                  conQueso ? 'bg-violet-600 border-violet-700 text-white shadow-sm' : 'bg-white border-violet-300 text-violet-700 hover:bg-violet-50'
                 }`}
               >
-                {sinQueso && <Check className="w-5 h-5" />}
-                SIN QUESO
+                {conQueso && <Check className="w-5 h-5" />}
+                CON QUESO
               </button>}
               {puedeCarneExtra && <button
                 onClick={() => setCarneExtra((n) => (n + 1) % (MAX_CARNE_EXTRA + 1))}

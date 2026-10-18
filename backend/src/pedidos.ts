@@ -25,7 +25,7 @@ import { guardarDetallePedido, itemsValidos, terminoPermitido, type ItemPedido, 
 // Opciones por renglón; las mismas constantes que OrdenDetalle en Laravel.
 /** Categorías que ofrecen SIN QUESO. */
 const CATEGORIAS_SIN_QUESO = ['Tacos', 'Sopes', 'Quesadillas', 'Hamburguesas', 'Lonches'];
-const CATEGORIAS_CON_QUESO = ['Tacos', 'Sopes', 'Lonches'];
+const CATEGORIAS_CON_QUESO = ['Tacos', 'Sopes', 'Quesadillas', 'Hamburguesas', 'Lonches'];
 /** La única categoría con DOBLE / TRIPLE CARNE. */
 const CATEGORIA_CARNE_EXTRA = 'Hamburguesas';
 
@@ -329,7 +329,7 @@ pedidosRouter.post('/ordenes/:idOrden/pedido', async (req, res) => {
         error: fueraDeLugar.sinQueso && !CATEGORIAS_SIN_QUESO.includes(categoriaDe(fueraDeLugar))
           ? `La opción SIN QUESO no está disponible para ${categoriaDe(fueraDeLugar)}.`
           : fueraDeLugar.conQueso && !CATEGORIAS_CON_QUESO.includes(categoriaDe(fueraDeLugar))
-            ? 'Solo los tacos, sopes y lonches usan la opción CON QUESO.'
+            ? `La opción CON QUESO no está disponible para ${categoriaDe(fueraDeLugar)}.`
             : fueraDeLugar.conPapas && !['Lonches', 'Hamburguesas'].includes(categoriaDe(fueraDeLugar))
               ? 'Solo las hamburguesas y lonches ofrecen CON PAPAS.'
               : `Solo las hamburguesas llevan carne extra (${categoriaDe(fueraDeLugar)}).`,
