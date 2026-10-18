@@ -21,7 +21,7 @@ import { InicioSesion } from './componentes/InicioSesion';
 import { MesasView } from './componentes/MesasView';
 import { ConfiguracionView } from './componentes/ConfiguracionView';
 import { InicioView } from './componentes/InicioView';
-import { logout, obtenerSesion, Usuario } from './services/authService';
+import { getToken, logout, obtenerSesion, Usuario } from './services/authService';
 import { useMesasTurno, useTurnoActual } from './services/sincronizacion';
 import { useTabletsEnLinea } from './services/tabletsService';
 import { AvisoIniciarTurno, BannerSinTurno, SeccionSinTurno } from './componentes/TurnoRequerido';
@@ -33,31 +33,71 @@ import { LimiteDeErrores } from './componentes/AlertasErrores';
 export default function App() {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [verificandoSesion, setVerificandoSesion] = useState(true);
+  // Token con el que se verificó la sesión que se está mostrando. La caja y la app de meseros comparten
+  // la sesión del navegador: si después se entró con una cuenta de tablet (en otra pestaña, o con «atrás»
+  // el navegador devuelve la caja como la tenía en memoria), el token ya no es este y se vuelve a verificar
+  // antes de mostrar nada. Así una tablet nunca ve el panel de la caja.
+  const [tokenVerificado, setTokenVerificado] = useState<string | null>(null);
+  const [revision, setRevision] = useState(0);
+  const tokenCambio = getToken() !== tokenVerificado;
 
   useEffect(() => {
     // Si el servidor no responde (se reinició), se reintenta cada 3 s en vez de mandar al login.
     let cancelado = false;
     let reintento: ReturnType<typeof setTimeout>;
-    const verificar = () =>
+    const verificar = () => {
+      const token = getToken();
       obtenerSesion()
         .then((u) => {
           if (cancelado) return;
           setUsuario(u);
+          setTokenVerificado(u ? token : null);
           setVerificandoSesion(false);
         })
         .catch(() => {
           if (!cancelado) reintento = setTimeout(verificar, 3_000);
         });
+    };
     verificar();
     return () => {
       cancelado = true;
       clearTimeout(reintento);
     };
-  }, []);
+  }, [revision]);
+
+  // Cada vez que se vuelve a la caja (atrás/adelante, otra pestaña, la app vuelve a la vista) o cambia la
+  // sesión guardada, se revisa si sigue siendo la misma; si no, se verifica de nuevo.
+  useEffect(() => {
+    const revisar = (e?: Event) => {
+      const restaurada = e instanceof PageTransitionEvent && e.persisted;
+      if (restaurada || getToken() !== tokenVerificado) setRevision((r) => r + 1);
+    };
+    const alCambiarVista = () => {
+      if (document.visibilityState === 'visible') revisar();
+    };
+    window.addEventListener('pageshow', revisar);
+    window.addEventListener('popstate', revisar);
+    window.addEventListener('focus', revisar);
+    window.addEventListener('storage', revisar);
+    document.addEventListener('visibilitychange', alCambiarVista);
+    return () => {
+      window.removeEventListener('pageshow', revisar);
+      window.removeEventListener('popstate', revisar);
+      window.removeEventListener('focus', revisar);
+      window.removeEventListener('storage', revisar);
+      document.removeEventListener('visibilitychange', alCambiarVista);
+    };
+  }, [tokenVerificado]);
 
   const handleLogout = () => {
     logout();
     setUsuario(null);
+    setTokenVerificado(null);
+  };
+
+  const entrar = (u: Usuario) => {
+    setUsuario(u);
+    setTokenVerificado(getToken());
   };
 
   useEffect(() => {
@@ -68,8 +108,13 @@ export default function App() {
     return <div className="min-h-screen bg-neutral-100" />;
   }
 
+  // La sesión guardada ya no es la que se verificó: no se muestra nada hasta revisarla (lo hace el efecto).
+  if (usuario && tokenCambio) {
+    return <div className="min-h-screen bg-neutral-100" />;
+  }
+
   if (!usuario) {
-    return <InicioSesion app="caja" onEntrar={setUsuario} />;
+    return <InicioSesion app="caja" onEntrar={entrar} />;
   }
 
   // Las cuentas de tipo tablet no usan la caja: van a la app de meseros.
