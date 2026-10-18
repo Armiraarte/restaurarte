@@ -42,13 +42,33 @@ function powershell(script, args = []) {
   });
 }
 
-async function listarImpresoras() {
-  return asignaciones.estado(JSON.parse(await powershell('impresoras.ps1')));
+// Pedirle a Windows la lista de impresoras (impresoras.ps1) tarda de 4 a 25 s. Se guarda y se renueva en
+// segundo plano cada minuto: imprimir y el panel de impresoras usan la lista guardada y responden al momento.
+const RENOVAR_LISTA_MS = 60_000;
+let listaGuardada = null;
+let listaEnCurso = null; // consulta en marcha: las peticiones que llegan mientras tanto la comparten
+
+function consultarImpresoras() {
+  listaEnCurso ??= powershell('impresoras.ps1')
+    .then((salida) => (listaGuardada = JSON.parse(salida)))
+    .finally(() => {
+      listaEnCurso = null;
+    });
+  return listaEnCurso;
+}
+
+async function listarImpresoras({ actualizar = false } = {}) {
+  return asignaciones.estado(!actualizar && listaGuardada ? listaGuardada : await consultarImpresoras());
 }
 
 async function imprimir(lineas, destino) {
-  const { impresoras } = await listarImpresoras();
-  const ticket = asignaciones.elegir(destino, impresoras);
+  let ticket;
+  try {
+    ticket = asignaciones.elegir(destino, (await listarImpresoras()).impresoras);
+  } catch {
+    // La lista guardada puede tener hasta un minuto: si la impresora no aparece o no estaba conectada, se revisa de nuevo.
+    ticket = asignaciones.elegir(destino, (await listarImpresoras({ actualizar: true })).impresoras);
+  }
 
   const dir = await mkdtemp(path.join(tmpdir(), 'ticket-'));
   const archivo = path.join(dir, 'ticket.json');
@@ -118,3 +138,8 @@ const servidor = http.createServer(async (req, res) => {
 servidor.listen(PUERTO, () => {
   console.log(`[agente] Agente de impresión escuchando en http://localhost:${PUERTO}`);
 });
+
+// Lista de impresoras lista desde el arranque y renovada cada minuto.
+const renovarLista = () => consultarImpresoras().catch((err) => console.error('[agente]', err.message));
+renovarLista();
+setInterval(renovarLista, RENOVAR_LISTA_MS);
