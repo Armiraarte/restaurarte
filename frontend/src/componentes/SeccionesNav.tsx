@@ -1,5 +1,8 @@
-import React from 'react';
-import { Clock, Home, LayoutGrid, Receipt, Tablet, TrendingUp, LucideIcon } from 'lucide-react';
+// Menú de secciones de la caja.
+//   Pantallas grandes (lg): barra lateral a la izquierda; se puede contraer a solo íconos (se recuerda en esta PC).
+//   Pantallas angostas: barra horizontal bajo el encabezado.
+import React, { useState } from 'react';
+import { Clock, Home, LayoutGrid, PanelLeftClose, PanelLeftOpen, Receipt, Tablet, TrendingUp, LucideIcon } from 'lucide-react';
 
 export type MainNavTab = 'inicio' | 'tablets' | 'cajas' | 'ventas' | 'mesas' | 'turnos';
 
@@ -19,42 +22,28 @@ interface Seccion {
   label: string;
   icon: LucideIcon;
   badge?: string;
-  alerta?: boolean; // resalta el botón (p. ej. cuenta pedida o tablet desconectada)
+  alerta?: boolean; // punto rojo (p. ej. cuenta pedida o tablet desconectada)
 }
 
-// Color pastel propio de cada sección (clases completas para que Tailwind las genere).
-const COLORES: Record<MainNavTab, { normal: string; activo: string; icono: string }> = {
-  inicio: {
-    normal: 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100',
-    activo: 'bg-slate-600 border-slate-600 text-white ring-2 ring-slate-300 ring-offset-2',
-    icono: 'text-slate-500',
-  },
-  tablets: {
-    normal: 'bg-sky-50 border-sky-200 text-sky-800 hover:bg-sky-100',
-    activo: 'bg-sky-500 border-sky-500 text-white ring-2 ring-sky-300 ring-offset-2',
-    icono: 'text-sky-500',
-  },
-  cajas: {
-    normal: 'bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100',
-    activo: 'bg-emerald-500 border-emerald-500 text-white ring-2 ring-emerald-300 ring-offset-2',
-    icono: 'text-emerald-500',
-  },
-  ventas: {
-    normal: 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100',
-    activo: 'bg-amber-500 border-amber-500 text-white ring-2 ring-amber-300 ring-offset-2',
-    icono: 'text-amber-500',
-  },
-  turnos: {
-    normal: 'bg-red-50 border-red-200 text-red-800 hover:bg-red-100',
-    activo: 'bg-red-500 border-red-500 text-white ring-2 ring-red-300 ring-offset-2',
-    icono: 'text-red-500',
-  },
-  mesas: {
-    normal: 'bg-violet-50 border-violet-200 text-violet-800 hover:bg-violet-100',
-    activo: 'bg-violet-500 border-violet-500 text-white ring-2 ring-violet-300 ring-offset-2',
-    icono: 'text-violet-500',
-  },
+// Color de cada sección: ícono, fondo al pasar el cursor y sección activa (tonos que dejan leer bien el texto).
+const COLORES: Record<MainNavTab, { icono: string; hover: string; activo: string }> = {
+  inicio: { icono: 'text-slate-500', hover: 'hover:bg-slate-100', activo: 'bg-slate-600 text-white shadow-slate-600/30' },
+  cajas: { icono: 'text-emerald-600', hover: 'hover:bg-emerald-50', activo: 'bg-emerald-700 text-white shadow-emerald-700/30' },
+  ventas: { icono: 'text-amber-600', hover: 'hover:bg-amber-50', activo: 'bg-amber-500 text-neutral-950 shadow-amber-500/30' },
+  mesas: { icono: 'text-violet-600', hover: 'hover:bg-violet-50', activo: 'bg-violet-600 text-white shadow-violet-600/30' },
+  tablets: { icono: 'text-sky-600', hover: 'hover:bg-sky-50', activo: 'bg-sky-700 text-white shadow-sky-700/30' },
+  turnos: { icono: 'text-red-600', hover: 'hover:bg-red-50', activo: 'bg-red-600 text-white shadow-red-600/30' },
 };
+
+const CLAVE_CONTRAIDO = 'caja_menu_contraido';
+
+function leerContraido(): boolean {
+  try {
+    return localStorage.getItem(CLAVE_CONTRAIDO) === '1';
+  } catch {
+    return false;
+  }
+}
 
 export const SeccionesNav: React.FC<SeccionesNavProps> = ({
   currentTab,
@@ -66,6 +55,17 @@ export const SeccionesNav: React.FC<SeccionesNavProps> = ({
   mesasTotal,
   ventasCount,
 }) => {
+  const [contraido, setContraido] = useState(leerContraido);
+  const alternar = () => {
+    const nuevo = !contraido;
+    setContraido(nuevo);
+    try {
+      localStorage.setItem(CLAVE_CONTRAIDO, nuevo ? '1' : '0');
+    } catch {
+      // sin almacenamiento: solo dura mientras la página esté abierta
+    }
+  };
+
   const secciones: Seccion[] = [
     { id: 'inicio', label: 'Inicio', icon: Home },
     { id: 'cajas', label: 'Cajas', icon: Receipt, badge: String(openAccountsCount), alerta: solicitadasCount > 0 },
@@ -76,8 +76,16 @@ export const SeccionesNav: React.FC<SeccionesNavProps> = ({
   ];
 
   return (
-    <nav aria-label="Secciones" className="relative z-10 bg-white border-b border-neutral-200">
-      <div className="px-4 lg:px-8 py-3 grid grid-cols-3 md:grid-cols-6 gap-2 md:gap-3">
+    <nav
+      aria-label="Secciones"
+      className={`relative z-20 shrink-0 bg-white border-b border-neutral-200 lg:border-b-0 lg:border-r lg:flex lg:flex-col transition-[width] duration-200 ${
+        contraido ? 'lg:w-20' : 'lg:w-60'
+      }`}
+    >
+      <div className="flex lg:flex-col gap-1.5 overflow-x-auto lg:overflow-x-hidden lg:overflow-y-auto px-4 py-2 lg:px-3 lg:py-4 lg:flex-1">
+        <div className={`hidden px-3 pb-2 text-[11px] font-bold uppercase tracking-wider text-neutral-500 ${contraido ? '' : 'lg:block'}`}>
+          Secciones
+        </div>
         {secciones.map(({ id, label, icon: Icon, badge, alerta }) => {
           const activo = currentTab === id;
           const color = COLORES[id];
@@ -86,24 +94,25 @@ export const SeccionesNav: React.FC<SeccionesNavProps> = ({
               key={id}
               onClick={() => onTabChange(id)}
               aria-current={activo ? 'page' : undefined}
-              className={`relative flex min-h-[72px] flex-col items-center justify-center gap-1.5 px-2 py-3 rounded-xl border-2 text-sm transition-colors cursor-pointer ${
-                activo ? `${color.activo} font-bold shadow-md` : `${color.normal} font-medium`
-              }`}
+              title={contraido ? label : undefined}
+              className={`relative shrink-0 flex items-center gap-3 h-11 lg:h-12 px-3.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 ${
+                contraido ? 'lg:justify-center lg:px-0' : ''
+              } ${activo ? `${color.activo} shadow-md` : `text-neutral-700 ${color.hover}`}`}
             >
-              <Icon className={`w-6 h-6 shrink-0 ${activo ? '' : color.icono}`} />
-              <span className="leading-tight whitespace-nowrap">{label}</span>
+              <Icon className={`w-5 h-5 shrink-0 ${activo ? '' : color.icono}`} />
+              <span className={contraido ? 'lg:sr-only' : ''}>{label}</span>
               {badge && (
                 <span
-                  className={`absolute top-1.5 right-1.5 font-mono text-[11px] leading-4 px-1.5 rounded-full border ${
-                    activo ? 'bg-white text-neutral-800 border-white' : 'bg-white/80 border-current/20'
-                  }`}
+                  className={`font-mono text-[11px] leading-5 px-1.5 rounded-full ${
+                    contraido ? 'lg:absolute lg:-top-1.5 lg:-right-1.5 lg:shadow-sm' : 'ml-auto'
+                  } ${activo ? 'bg-white/90 text-neutral-900' : 'bg-neutral-100 text-neutral-700'}`}
                 >
                   {badge}
                 </span>
               )}
               {alerta && (
                 <span
-                  className="absolute top-2 left-2 w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse"
+                  className="absolute top-1.5 left-1.5 w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-white animate-pulse"
                   aria-label="Requiere atención"
                 />
               )}
@@ -111,6 +120,25 @@ export const SeccionesNav: React.FC<SeccionesNavProps> = ({
           );
         })}
       </div>
+
+      {/* Contraer / expandir (solo pantallas grandes) */}
+      <button
+        type="button"
+        onClick={alternar}
+        aria-label={contraido ? 'Expandir menú' : 'Contraer menú'}
+        title={contraido ? 'Expandir menú' : undefined}
+        className={`hidden lg:flex items-center gap-2 m-3 h-10 rounded-xl text-sm font-medium text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 ${
+          contraido ? 'justify-center' : 'px-3'
+        }`}
+      >
+        {contraido ? (
+          <PanelLeftOpen className="w-5 h-5" />
+        ) : (
+          <>
+            <PanelLeftClose className="w-5 h-5" /> Contraer menú
+          </>
+        )}
+      </button>
     </nav>
   );
 };

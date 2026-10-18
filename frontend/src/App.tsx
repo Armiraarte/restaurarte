@@ -169,7 +169,8 @@ function PosDashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () =>
   };
 
   return (
-    <div className="cristal relative min-h-screen bg-neutral-100 text-neutral-900 flex flex-col font-sans selection:bg-amber-500 selection:text-neutral-950">
+    // Encabezado arriba y pie abajo, siempre a la vista; en medio, el menú de secciones y el contenido con su propio scroll.
+    <div className="cristal relative h-dvh overflow-hidden bg-neutral-100 text-neutral-900 flex flex-col font-sans selection:bg-amber-500 selection:text-neutral-950">
       {/* Logo de la cenaduría de fondo, difuminado */}
       <MarcaDeAgua />
 
@@ -181,60 +182,64 @@ function PosDashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () =>
         configActiva={verConfiguracion}
       />
 
-      {/* Secciones: INICIO | CAJAS | MESAS | TABLET */}
-      <SeccionesNav
-        currentTab={currentTab}
-        onTabChange={irASeccion}
-        hasDisconnectedTablet={tabletsConectadas < tabletsTotal}
-        openAccountsCount={ordenesPagando}
-        solicitadasCount={ordenesPagando}
-        mesasOcupadas={mesasOcupadas}
-        mesasTotal={ordenesActivas.length}
-        ventasCount={ordenesPagadas}
-      />
+      <div className="relative flex-1 min-h-0 flex flex-col lg:flex-row">
+        {/* Secciones: barra lateral en pantallas grandes, barra horizontal en las angostas */}
+        <SeccionesNav
+          currentTab={currentTab}
+          onTabChange={irASeccion}
+          hasDisconnectedTablet={tabletsConectadas < tabletsTotal}
+          openAccountsCount={ordenesPagando}
+          solicitadasCount={ordenesPagando}
+          mesasOcupadas={mesasOcupadas}
+          mesasTotal={ordenesActivas.length}
+          ventasCount={ordenesPagadas}
+        />
 
-      {sinTurno && <BannerSinTurno />}
-      <AnimarTurno>{sinTurno && !avisoTurnoVisto && <AvisoIniciarTurno onCerrar={() => setAvisoTurnoVisto(true)} />}</AnimarTurno>
+        <div className="flex-1 min-w-0 min-h-0 overflow-y-auto overscroll-contain flex flex-col">
+          {sinTurno && <BannerSinTurno />}
+          <AnimarTurno>{sinTurno && !avisoTurnoVisto && <AvisoIniciarTurno onCerrar={() => setAvisoTurnoVisto(true)} />}</AnimarTurno>
 
-      {/* 2. Main Content Area */}
-      <main className="relative z-10 flex-1 w-full px-4 lg:px-8 py-4 sm:py-6 lg:py-8">
-        {verConfiguracion && <ConfiguracionView onVolver={() => setEnConfiguracion(false)} />}
+          {/* 2. Main Content Area */}
+          <main className="relative z-10 flex-1 w-full px-4 lg:px-8 py-4 sm:py-6 lg:py-8">
+            {verConfiguracion && <ConfiguracionView onVolver={() => setEnConfiguracion(false)} />}
 
-        {!verConfiguracion && currentTab === 'inicio' && (
-          <InicioView
-            nombreUsuario={usuario.nombre}
-            ordenesActivas={ordenesActivas.length}
-            ordenesConPedido={mesasOcupadas}
-            ordenesPorCobrar={ordenesPagando}
-            ordenesCobradas={ordenesPagadas}
-            hayTurno={!!turnoCaja}
-            tabletsConectadas={tabletsConectadas}
-            tabletsTotal={tabletsTotal}
-            onNavigate={irASeccion}
-            onOpenSimulador={() => setIsSimuladorOpen(true)}
-          />
-        )}
+            {!verConfiguracion && currentTab === 'inicio' && (
+              <InicioView
+                nombreUsuario={usuario.nombre}
+                ordenesActivas={ordenesActivas.length}
+                ordenesConPedido={mesasOcupadas}
+                ordenesPorCobrar={ordenesPagando}
+                ordenesCobradas={ordenesPagadas}
+                hayTurno={!!turnoCaja}
+                tabletsConectadas={tabletsConectadas}
+                tabletsTotal={tabletsTotal}
+                onNavigate={irASeccion}
+                onOpenSimulador={() => setIsSimuladorOpen(true)}
+              />
+            )}
 
-        {!verConfiguracion && currentTab === 'tablets' && (
-          <TabletsView events={recentEvents} esAdmin={usuario.rol === 'admin'} />
-        )}
+            {!verConfiguracion && currentTab === 'tablets' && (
+              <TabletsView events={recentEvents} esAdmin={usuario.rol === 'admin'} />
+            )}
 
-        {!verConfiguracion && currentTab === 'cajas' && (
-          // Órdenes que pidieron la cuenta (orden.estatus = 1, PAGANDO)
-          sinTurno ? <SeccionSinTurno seccion="Cajas" /> : <CajasView />
-        )}
+            {!verConfiguracion && currentTab === 'cajas' && (
+              // Órdenes que pidieron la cuenta (orden.estatus = 1, PAGANDO)
+              sinTurno ? <SeccionSinTurno seccion="Cajas" /> : <CajasView />
+            )}
 
-        {/* Órdenes cobradas del turno abierto (orden.estatus = 2, PAGADO) */}
-        {!verConfiguracion && currentTab === 'ventas' && (sinTurno ? <SeccionSinTurno seccion="Ventas" /> : <VentasView />)}
+            {/* Órdenes cobradas del turno abierto (orden.estatus = 2, PAGADO) */}
+            {!verConfiguracion && currentTab === 'ventas' && (sinTurno ? <SeccionSinTurno seccion="Ventas" /> : <VentasView />)}
 
-        {/* Turno actual, corte de turno e historial de cortes */}
-        {!verConfiguracion && currentTab === 'turnos' && <TurnosView onIrA={irASeccion} />}
+            {/* Turno actual, corte de turno e historial de cortes */}
+            {!verConfiguracion && currentTab === 'turnos' && <TurnosView onIrA={irASeccion} />}
 
-        {!verConfiguracion && currentTab === 'mesas' && (
-          sinTurno ? <SeccionSinTurno seccion="Órdenes" /> : <MesasView nombreUsuario={usuario.nombre} />
-        )}
+            {!verConfiguracion && currentTab === 'mesas' && (
+              sinTurno ? <SeccionSinTurno seccion="Órdenes" /> : <MesasView nombreUsuario={usuario.nombre} />
+            )}
 
-      </main>
+          </main>
+        </div>
+      </div>
 
       <PieDePagina />
 
