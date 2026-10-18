@@ -7,7 +7,7 @@ use Illuminate\Database\Seeder;
 
 class ComplementoSeeder extends Seeder
 {
-    public const COMPLEMENTOS = ['Crema', 'Salsa', 'Lechuga', 'Aderezo', 'Cebolla', 'Jitomate', 'Chile', 'Repollo', 'Queso', 'Catsup', 'Pepino'];
+    public const COMPLEMENTOS = ['Crema', 'Salsa', 'Lechuga', 'Aderezo', 'Cebolla', 'Jitomate', 'Chile', 'Repollo', 'Queso', 'Catsup', 'Pepino', 'Cilantro'];
 
     public function run(): void
     {

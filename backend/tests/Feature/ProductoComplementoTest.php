@@ -33,8 +33,9 @@ class ProductoComplementoTest extends TestCase
     {
         $this->cargar();
 
-        $this->assertSame(213, \DB::table('producto_has_complemento')->count());
+        $this->assertSame(216, \DB::table('producto_has_complemento')->count());
         $this->assertEqualsCanonicalizing(['Repollo', 'Lechuga', 'Salsa', 'Crema'], $this->producto('Tacos Dorados', 'Frijol')->complementos->pluck('nombre')->all());
+        $this->assertEqualsCanonicalizing(['Queso', 'Cilantro', 'Cebolla', 'Salsa'], $this->producto('Tacos', 'Pollo')->complementos->pluck('nombre')->all());
         $this->assertEqualsCanonicalizing(['Jitomate', 'Pepino', 'Chile', 'Cebolla'], $this->producto('Ensaladas', 'Milanesa')->complementos->pluck('nombre')->all());
         $this->assertCount(0, $this->producto('Bebidas', 'Pepsi')->complementos);
         $this->assertSame(38, Complemento::where('nombre', 'Lechuga')->firstOrFail()->productos()->count());
@@ -45,7 +46,7 @@ class ProductoComplementoTest extends TestCase
         $this->cargar();
         $this->seed(ProductoComplementoSeeder::class);
 
-        $this->assertSame(213, \DB::table('producto_has_complemento')->count());
+        $this->assertSame(216, \DB::table('producto_has_complemento')->count());
     }
 
     public function test_no_se_repite_la_misma_relacion(): void

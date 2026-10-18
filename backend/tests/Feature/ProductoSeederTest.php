@@ -40,7 +40,7 @@ class ProductoSeederTest extends TestCase
         $this->cargar();
 
         $this->assertSame(ComplementoSeeder::COMPLEMENTOS, Complemento::orderBy('id')->pluck('nombre')->all());
-        $this->assertSame(11, Complemento::count());
+        $this->assertSame(12, Complemento::count());
     }
 
     public function test_repetir_no_duplica(): void
@@ -49,7 +49,7 @@ class ProductoSeederTest extends TestCase
         $this->cargar();
 
         $this->assertSame(69, Producto::count());
-        $this->assertSame(11, Complemento::count());
+        $this->assertSame(12, Complemento::count());
     }
 
     public function test_mismo_nombre_y_categoria_solo_con_tamano_distinto(): void

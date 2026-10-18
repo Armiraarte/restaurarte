@@ -17,7 +17,7 @@ class ProductoComplementoSeeder extends Seeder
     /** Categoría => complementos de sus productos. */
     public const COMPLEMENTOS_POR_CATEGORIA = [
         'Tacos Dorados' => ['Repollo', 'Lechuga', 'Salsa', 'Crema'],
-        'Tacos' => ['Queso', 'Cebolla', 'Salsa'],
+        'Tacos' => ['Queso', 'Cilantro', 'Cebolla', 'Salsa'],
         'Quesadillas' => ['Repollo', 'Lechuga', 'Salsa', 'Crema'],
         'Sopes' => ['Repollo', 'Lechuga', 'Salsa', 'Crema', 'Queso'],
         'Enchiladas' => ['Repollo', 'Lechuga', 'Salsa', 'Crema', 'Queso'],
