@@ -1,3 +1,19 @@
+# Ajusta el papel al contenido: evita imprimir el largo predeterminado del driver.
+function Ajustar-PaginaTicket {
+  param(
+    [Parameter(Mandatory)] [System.Drawing.Printing.PrintDocument]$Documento,
+    [Parameter(Mandatory)] $Ticket
+  )
+  $graphics = $Documento.PrinterSettings.CreateMeasurementGraphics()
+  try { $altoMm = Dibujar-Ticket -Graphics $graphics -Ticket $Ticket } finally { $graphics.Dispose() }
+  $altoPapel = [int][Math]::Ceiling(([single]$altoMm + 2) * 100 / 25.4)
+  if ($altoPapel -lt 1 -or $altoPapel -gt 9843) { throw 'El ticket excede el largo permitido.' }
+  $anchoPapel = $Documento.DefaultPageSettings.PaperSize.Width
+  $Documento.DefaultPageSettings.PaperSize = New-Object System.Drawing.Printing.PaperSize('Ticket', $anchoPapel, $altoPapel)
+  $Documento.DefaultPageSettings.Margins = New-Object System.Drawing.Printing.Margins(0, 0, 0, 0)
+  $Documento.OriginAtMargins = $false
+}
+
 # Dibuja las mismas líneas en la impresora o en una imagen de vista previa.
 function Dibujar-Ticket {
   param(

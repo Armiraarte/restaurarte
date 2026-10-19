@@ -85,4 +85,10 @@ test('ticket agrupa un solo plato sin perder modificadores y separa productos su
   assert.equal(lineas.filter((l) => l.includes('UN SOLO PLATO')).length, 2);
   assert.ok(validarTicketCocina({ ...ticket, productos: [producto('Mal', -1)] }));
   assert.equal(lineasTicketCocina({ ...ticket, productos: [producto('Anterior', undefined)] }).some((l) => l.texto?.includes('MIX')), false);
+  for (const area of ['cocina', 'bebidas']) {
+    const compacto = lineasTicketCocina({ ...ticket, area });
+    assert.deepEqual(compacto.at(-1), { texto: '' });
+    assert.equal(compacto.filter((l) => l.texto === '').length, 1, 'Solo queda una línea en blanco antes del corte');
+    assert.ok(!compacto.some((l) => l.texto === '.'), 'No se imprime una marca que alargue el papel');
+  }
 });

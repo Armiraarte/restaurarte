@@ -14,6 +14,7 @@ import { requireAuth } from './auth.js';
 import { esDuplicado, pool } from './db.js';
 import { mysqlDisponible } from './usuarios.js';
 import { sesionTabletAbierta, turnoAbierto } from './turnos.js';
+import { asignarNombreMesa, ErrorAltaMesa, validarNumeroMesa } from './numeracionMesas.js';
 
 const TIPO_VENTA = { comerAqui: 1, paraLlevar: 2 } as const;
 
@@ -86,8 +87,8 @@ mesasRouter.get('/', async (_req, res) => {
 });
 
 /**
- * Registra la mesa al agregarla, dentro del turno abierto. Si ya existe una con ese código, no se duplica:
- * se devuelve esa misma, se actualiza su tipo de venta y se liga al turno actual.
+ * Registra una mesa del 1 al 9, asignando el siguiente número libre dentro del turno abierto.
+ * Las cuentas por nombre conservan su identidad si ya existe una abierta con ese nombre.
  * Respuesta: { mesa, creada } — creada = true si se insertó una fila nueva.
  */
 mesasRouter.post('/', async (req, res) => {
@@ -95,6 +96,12 @@ mesasRouter.post('/', async (req, res) => {
   const nombre = normalizarNombreMesa(String(req.body?.nombre ?? req.body?.codigo ?? ''));
   if (!nombre || nombre.length > 100) {
     res.status(400).json({ error: 'La mesa necesita un número o nombre (máximo 100 caracteres).' });
+    return;
+  }
+  try {
+    validarNumeroMesa(nombre);
+  } catch (err) {
+    res.status(400).json({ error: (err as Error).message });
     return;
   }
   if (!pool || !mysqlDisponible()) {
@@ -107,24 +114,24 @@ mesasRouter.post('/', async (req, res) => {
     return;
   }
 
+  // Cierra turnos vencidos antes de tomar una conexión para la transacción.
+  const turno = await turnoAbierto();
+  if (!turno) {
+    res.status(409).json({ error: 'La caja no ha iniciado turno; no se puede agregar la mesa.', sinTurno: true });
+    return;
+  }
   const conexion = await pool.getConnection();
   try {
     await conexion.beginTransaction();
     const ahora = new Date();
-    // La mesa se registra dentro del turno abierto y de la sesión de la tablet que la agrega.
-    const turno = await turnoAbierto(conexion);
-    if (!turno) {
-      await conexion.rollback();
-      res.status(409).json({ error: 'La caja no ha iniciado turno; no se puede agregar la mesa.', sinTurno: true });
-      return;
-    }
+    const nombreAsignado = await asignarNombreMesa(conexion, turno.idTurno, nombre);
     const tabletId = req.usuario!.tablet?.id;
     const sesionId = tabletId ? ((await sesionTabletAbierta(tabletId, turno.idTurno, conexion))?.id ?? null) : null;
     // Si esa mesa ya tiene una orden activa (ABIERTA o PAGANDO) en el turno, se usa esa; una orden PAGADA
     // nunca se reabre: la nueva Mesa 1 es otra orden con su propio código.
     const [activas] = await conexion.query<MesaFila[]>(
       'SELECT idOrden AS id FROM orden WHERE idTurno = ? AND nombre = ? AND estatus IN (0, 1) FOR UPDATE',
-      [turno.idTurno, nombre],
+      [turno.idTurno, nombreAsignado],
     );
     let creada = false;
     let id: number;
@@ -136,7 +143,7 @@ mesasRouter.post('/', async (req, res) => {
       const [resultado] = await conexion.execute<ResultSetHeader>(
         `INSERT INTO orden (codigo, nombre, total, tipo_orden, estatus, idTurno, idSesion_tablet, creado_en, actualizado_en)
          VALUES (?, ?, 0.00, ?, 0, ?, ?, ?, ?)`,
-        [codigo, nombre, tipoVentaId, turno.idTurno, sesionId, ahora, ahora],
+        [codigo, nombreAsignado, tipoVentaId, turno.idTurno, sesionId, ahora, ahora],
       );
       id = resultado.insertId;
       creada = true;
@@ -147,6 +154,10 @@ mesasRouter.post('/', async (req, res) => {
     res.status(creada ? 201 : 200).json({ mesa: filas[0], creada });
   } catch (err) {
     await conexion.rollback();
+    if (err instanceof ErrorAltaMesa) {
+      res.status(err.status).json({ error: err.message, ...(err.sinTurno ? { sinTurno: true } : {}) });
+      return;
+    }
     if (esDuplicado(err)) {
       // Dos cajas/tablets generaron el mismo código al mismo tiempo: se pide reintentar.
       res.status(409).json({ error: 'Se registró otra orden al mismo tiempo; intenta de nuevo.' });

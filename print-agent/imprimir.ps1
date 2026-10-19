@@ -14,8 +14,6 @@ $doc = New-Object System.Drawing.Printing.PrintDocument
 $doc.PrinterSettings.PrinterName = $ticket.impresora
 if (-not $doc.PrinterSettings.IsValid) { throw "La impresora '$($ticket.impresora)' no existe en Windows." }
 $doc.DocumentName = 'Ticket Los Diablitos'
-$doc.DefaultPageSettings.Margins = New-Object System.Drawing.Printing.Margins(0, 0, 0, 0)
-$doc.OriginAtMargins = $false
 
 $doc.add_PrintPage({
   param($sender, $e)
@@ -24,6 +22,7 @@ $doc.add_PrintPage({
 })
 
 try {
+  Ajustar-PaginaTicket -Documento $doc -Ticket $ticket
   $doc.Print()
 } finally {
   $doc.Dispose()

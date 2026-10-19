@@ -1,13 +1,14 @@
 // Flujo compartido de Órdenes en caja y tablet: alta, llamada, borradores y pedido.
 import React, { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { AlertTriangle, ArrowLeft, Hash, Loader2, Minus, Phone, Plus, Send, User } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Hash, Loader2, Phone, Plus, Send, User } from 'lucide-react';
 import { BORRADOR_LLAMADA, piezasSinEnviar } from '../services/borradorPedido';
 import { esOrdenActiva, etiquetaMesaRegistrada, MesaRegistrada, registrarMesa } from '../services/mesasService';
 import { useMesasTurno } from '../services/sincronizacion';
 import { SelectorTipoOrden } from './AppTabletCuenta';
 import { PedidoOrden } from './PedidoOrden';
 import { LimiteDeErrores } from './AlertasErrores';
+import { siguienteNumeroMesa } from '../services/numeracionMesas';
 
 export function FlujoOrdenes({ origen, cabecera, acciones }: {
   /** Identifica quién toma el pedido en los tickets; no cambia su flujo. */
@@ -26,8 +27,7 @@ export function FlujoOrdenes({ origen, cabecera, acciones }: {
   const { mesas: mesasTurno, error: errorMesas, recargar: cargarMesas } = useMesasTurno();
   const mesas = mesasTurno === null ? null : mesasTurno.filter(esOrdenActiva);
 
-  // Siguiente número consecutivo: el mayor número de mesa activa en el turno + 1 (o 1 si no hay).
-  const siguienteMesa = (mesas ?? []).reduce((max, m) => (/^\d+$/.test(m.nombre) ? Math.max(max, Number(m.nombre)) : max), 0) + 1;
+  const siguienteMesa = siguienteNumeroMesa((mesas ?? []).map((m) => m.nombre));
 
   // "Agregar mesa": se registra en la base (en el turno abierto) y se abre su pedido.
   const abrirCuenta = async (_tipo: 'mesa' | 'nombre', identificador: string, paraLlevar: boolean) => {
@@ -251,10 +251,8 @@ function VistaMesas({
 type ModoNuevaCuenta = 'nombre' | 'mesa';
 
 /**
- * Abrir cuenta: dos opciones, "Por nombre" y, justo abajo, "Núm. de mesa".
- * El número de mesa es libre (cualquier N ≥ 1, sin límite ni lista fija de mesas) y se sugiere el
- * siguiente consecutivo; así escala a cualquier cantidad de mesas.
- * BD: no depende de la tabla `mesas`; la cuenta guarda el número (ver comentario de `abrir`).
+ * Abrir cuenta por nombre o con el siguiente número disponible entre 1 y 9.
+ * El servidor asigna el número definitivo para evitar duplicados entre tablets.
  */
 function DialogoNuevaCuenta({
   siguienteMesa,
@@ -262,7 +260,7 @@ function DialogoNuevaCuenta({
   onLlamada,
   onCancelar,
 }: {
-  siguienteMesa: number;
+  siguienteMesa: number | null;
   onAbrir: (tipo: 'mesa' | 'nombre', identificador: string, paraLlevar: boolean) => Promise<void>;
   /** Pedido por teléfono: abre el menú sin registrar la orden; el nombre se pide al terminar. */
   onLlamada: () => void;
@@ -270,24 +268,20 @@ function DialogoNuevaCuenta({
 }) {
   const [modo, setModo] = useState<ModoNuevaCuenta>('mesa');
   const [nombre, setNombre] = useState('');
-  const [numero, setNumero] = useState(String(siguienteMesa));
   const [paraLlevar, setParaLlevar] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const numeroMesa = Number(numero);
-  const numeroValido = Number.isInteger(numeroMesa) && numeroMesa >= 1;
-  const listo = modo === 'nombre' ? !!nombre.trim() : numeroValido;
-
-  const cambiarNumero = (delta: number) => setNumero((n) => String(Math.max(1, (Number(n) || 0) + delta)));
+  const listo = modo === 'nombre' ? !!nombre.trim() : siguienteMesa !== null;
 
   const [guardando, setGuardando] = useState(false);
 
   const confirmar = async () => {
+    if (!listo || guardando) return;
     setGuardando(true);
     setError(null);
     try {
       // "Mesa N" es la misma etiqueta que usa la caja; en la base se guarda como código "N".
-      if (modo === 'mesa') await onAbrir('mesa', `Mesa ${numeroMesa}`, paraLlevar);
+      if (modo === 'mesa') await onAbrir('mesa', `Mesa ${siguienteMesa}`, paraLlevar);
       else await onAbrir('nombre', nombre, paraLlevar);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo abrir la cuenta.');
@@ -353,44 +347,17 @@ function DialogoNuevaCuenta({
           </div>
 
           <div className="flex flex-col gap-3">
-            {/* Opción 2: número de mesa (cuentas.tipo_identificador = 'mesa'), consecutivo y sin límite */}
+            {/* Número automático: continúa hasta el 9 y después reutiliza el menor libre. */}
             <div className={claseOpcion(modo === 'mesa')} onClick={() => setModo('mesa')}>
               <div className="flex items-center gap-2 text-sm font-semibold">
                 <Hash className="w-4 h-4 text-neutral-500" /> Núm. de mesa
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setModo('mesa');
-                    cambiarNumero(-1);
-                  }}
-                  aria-label="Mesa anterior"
-                  className="w-10 h-10 rounded-lg border border-neutral-300 bg-white flex items-center justify-center cursor-pointer"
-                >
-                  <Minus className="w-4 h-4" />
-                </button>
-                <input
-                  value={numero}
-                  onChange={(e) => setNumero(e.target.value.replace(/\D/g, ''))}
-                  onFocus={() => setModo('mesa')}
-                  inputMode="numeric"
-                  aria-label="Número de mesa"
-                  className="flex-1 min-w-0 h-10 px-3 rounded-lg border border-neutral-300 bg-white text-center font-mono text-base font-bold focus:outline-none focus:border-amber-500 select-text"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setModo('mesa');
-                    cambiarNumero(1);
-                  }}
-                  aria-label="Mesa siguiente"
-                  className="w-10 h-10 rounded-lg border border-neutral-300 bg-white flex items-center justify-center cursor-pointer"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
+              <div aria-label="Número de mesa" aria-live="polite" className="h-10 flex items-center justify-center rounded-lg border border-neutral-300 bg-white font-mono text-lg font-bold">
+                {siguienteMesa === null ? 'Sin mesas libres' : `Mesa ${siguienteMesa}`}
               </div>
-              <p className="text-[11px] text-neutral-500">Siguiente consecutivo: Mesa {siguienteMesa}</p>
+              <p className={`text-[11px] ${siguienteMesa === null ? 'text-rose-700' : 'text-neutral-500'}`}>
+                {siguienteMesa === null ? 'Las 9 mesas están ocupadas. Cobra una para liberar su número.' : 'Asignación automática · Mesas del 1 al 9'}
+              </p>
             </div>
 
             {/* cuentas.para_llevar */}

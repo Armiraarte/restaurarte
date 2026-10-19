@@ -14,8 +14,8 @@ export interface MesaRegistrada {
 }
 
 /**
- * Inserta la mesa al agregarla desde la tablet. Si ya existía una con ese código, el servidor
- * devuelve esa misma (creada = false) en lugar de duplicarla.
+ * Inserta la mesa usando el siguiente número libre del 1 al 9, confirmado por el servidor.
+ * Para cuentas por nombre, devuelve la misma si ya había una activa con ese nombre.
  */
 export async function registrarMesa(codigo: string, paraLlevar: boolean): Promise<{ mesa: MesaRegistrada; creada: boolean }> {
   let res: Response;

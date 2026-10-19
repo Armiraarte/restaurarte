@@ -44,15 +44,14 @@ function Imprimir-Raw($ticket, [string]$salidaRaw) {
     [void][EscPosRaw]::Send([string]$ticket.impresora, $bytes)
 }
 
-# Star (caja) y demas: por el driver de Windows (mismo diseno que imprimir.ps1).
+# Star y demas: por el driver de Windows (mismo diseno que imprimir.ps1).
 function Imprimir-Driver($ticket) {
     $doc = New-Object System.Drawing.Printing.PrintDocument
     try {
         $doc.PrinterSettings.PrinterName = $ticket.impresora
         if (-not $doc.PrinterSettings.IsValid) { throw "La impresora '$($ticket.impresora)' no existe en Windows." }
         $doc.DocumentName = 'Ticket Los Diablitos'
-        $doc.DefaultPageSettings.Margins = New-Object System.Drawing.Printing.Margins(0, 0, 0, 0)
-        $doc.OriginAtMargins = $false
+        Ajustar-PaginaTicket -Documento $doc -Ticket $ticket
         $doc.add_PrintPage({
             param($sender, $e)
             [void](Dibujar-Ticket -Graphics $e.Graphics -Ticket $ticket)

@@ -46,7 +46,7 @@ public static class EscPosRaw
                     output.WriteByte(10);
                 }
                 // Restablecer interlineado, separar el contenido y cortar parcialmente.
-                output.Write(new byte[] { 27, 50, 10, 10, 10, 29, 86, 66, 0 }, 0, 9);
+                output.Write(new byte[] { 27, 50, 10, 29, 86, 66, 0 }, 0, 7);
                 return output.ToArray();
             }
         }

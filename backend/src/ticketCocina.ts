@@ -132,8 +132,7 @@ export function lineasTicketCocina(t: TicketCocina): LineaTicket[] {
     lineas.push({ separador: true }, { texto: 'EXTRAS', negrita: true });
     for (const extra of t.extras) lineas.push({ texto: extra.descripcion, derecha: `$${extra.importe.toFixed(2)}` });
   }
-  // Espacio en blanco al final: el papel sale más largo y es fácil arrancarlo (≈ 3 cm).
-  for (let i = 0; i < 8; i++) lineas.push({ texto: '' });
-  lineas.push({ texto: '.', alinear: 'centro' }); // marca final: evita que el driver recorte el espacio en blanco
+  // Una separación pequeña antes del corte, sin alargar el papel con una marca final.
+  lineas.push({ texto: '' });
   return lineas;
 }
