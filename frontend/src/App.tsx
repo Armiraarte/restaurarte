@@ -159,6 +159,7 @@ function PosDashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () =>
   const tabletsConectadas = (tabletsEnLinea ?? []).filter((t) => t.conectada).length;
   const tabletsTotal = tabletsEnLinea?.length ?? 0;
   const sinTurno = turnoCaja === null;
+  const enOrdenes = !verConfiguracion && currentTab === 'mesas' && !sinTurno;
   const [avisoTurnoVisto, setAvisoTurnoVisto] = useState(false);
 
   // Sync with shared central data service
@@ -245,12 +246,12 @@ function PosDashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () =>
           ventasCount={ordenesPagadas}
         />
 
-        <div className="flex-1 min-w-0 min-h-0 overflow-y-auto overscroll-contain flex flex-col">
+        <div className={`flex-1 min-w-0 min-h-0 flex flex-col ${enOrdenes ? 'overflow-hidden' : 'overflow-y-auto overscroll-contain'}`}>
           {sinTurno && <BannerSinTurno />}
           <AnimarTurno>{sinTurno && !avisoTurnoVisto && <AvisoIniciarTurno onCerrar={() => setAvisoTurnoVisto(true)} />}</AnimarTurno>
 
           {/* 2. Main Content Area */}
-          <main className="relative z-10 flex-1 w-full px-4 lg:px-8 py-4 sm:py-6 lg:py-8">
+          <main className={enOrdenes ? 'relative z-10 flex-1 min-h-0 w-full p-3 flex flex-col' : 'relative z-10 flex-1 w-full px-4 lg:px-8 py-4 sm:py-6 lg:py-8'}>
             {/* Si una sección falla, se ve el problema ahí mismo y el menú sigue funcionando. */}
             <LimiteDeErrores key={verConfiguracion ? 'configuracion' : currentTab}>
               {verConfiguracion && <ConfiguracionView onVolver={() => setEnConfiguracion(false)} />}
