@@ -41,6 +41,8 @@ import {
   ProductoMenu,
   TerminoMenu,
   PapasMenu,
+  ExtraPedido,
+  ExtraOrdenBD,
 } from '../services/pedidosService';
 import { imprimirTicketCocina } from '../services/ticketCocinaService';
 import { COLORES_CATEGORIA, iconoCategoria, NEON_CATEGORIA } from './iconosCategoria';
@@ -48,11 +50,14 @@ import { ExtrasLinea, OpcionesCategoria } from './OpcionesCategoria';
 import { PedidoEnviado } from './PedidoEnviado';
 import { useEnVivo } from '../services/enVivo';
 import { useCadaTantoVisible } from '../services/sincronizacion';
-import { BORRADOR_LLAMADA, guardarBorrador, leerBorrador, leerMixActivo } from '../services/borradorPedido';
+import { BORRADOR_LLAMADA, guardarBorrador, leerBorrador, leerMixActivo, leerExtrasBorrador } from '../services/borradorPedido';
 import { agruparMix } from '../services/pedidoMix';
 import { registrarMesa } from '../services/mesasService';
 import { registrarError } from '../services/errores';
 import { TicketCocina } from '../types/ticketCocina';
+import { DialogoAgregarExtra } from './DialogoAgregarExtra';
+import { ListaExtras } from './ListaExtras';
+import { esQueso } from '../services/complementos';
 
 interface LineaNueva {
   /** Cada vez que se agrega desde opciones es un plato aparte (3 y luego 5 = dos renglones). */
@@ -77,11 +82,13 @@ interface LineaNueva {
 }
 
 let siguienteLinea = 1;
+let siguienteExtra = 1;
 /** "Papa con Frijol" si es mezcla; si no, el nombre del producto con su tamaño. */
 const nombreLinea = (l: LineaNueva) => (l.mezcla.length > 1 ? l.mezcla.join(' con ') : nombreProducto(l.producto));
+const sinDescritos = (l: LineaNueva) => l.sin.filter((c) => !l.sinQueso || !esQueso(c));
 const textoSin = (l: LineaNueva) =>
   `${l.mixGrupo ? ` · MIX ${l.mixGrupo}` : ''}${l.termino ? ` · ${l.termino.nombre}` : ''}${l.conQueso ? ' · CON QUESO' : ''}${l.sinQueso ? ' · SIN QUESO' : ''}${l.carneExtra ? ` · ${textoCarneExtra(l.carneExtra)}` : ''}${
-    l.sin.length ? ` · sin ${l.sin.map((c) => c.nombre.toLowerCase()).join(', ')}` : ''
+    sinDescritos(l).length ? ` · sin ${sinDescritos(l).map((c) => c.nombre.toLowerCase()).join(', ')}` : ''
   }${l.papas ? ' · CON PAPAS (orden completa)' : ''
   }`;
 /** Precio de una pieza con sus carnes extra (el servidor lo calcula igual al guardar). */
@@ -116,7 +123,7 @@ interface Props {
 const dinero = (n: number) => `$${n.toFixed(2)}`;
 
 /** JSON del ticket de cocina (types/ticketCocina.ts) a partir de lo que se acaba de enviar. */
-function ticketDe(orden: OrdenBD, lineas: LineaNueva[], ronda: number, origen: string): TicketCocina {
+function ticketDe(orden: OrdenBD, lineas: LineaNueva[], ronda: number, origen: string, extras: ExtraPedido[] = []): TicketCocina {
   return {
     version: 1,
     orden_cocina: `#${String(orden.idOrden).padStart(5, '0')}-${ronda}`,
@@ -150,10 +157,11 @@ function ticketDe(orden: OrdenBD, lineas: LineaNueva[], ronda: number, origen: s
           ? []
           : l.sin.length === 0
             ? ['TODO']
-            : l.sin.map((c) => `Sin ${c.nombre.toLowerCase()}`)),
+            : sinDescritos(l).map((c) => `Sin ${c.nombre.toLowerCase()}`)),
       ],
     })),
     total_piezas: lineas.reduce((acc, l) => acc + l.cantidad, 0),
+    extras,
   };
 }
 
@@ -164,6 +172,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
   const [orden, setOrden] = useState<OrdenBD | null>(null);
   const ultimaOrden = useRef<OrdenBD | null>(null);
   const [detalle, setDetalle] = useState<DetalleOrdenBD[]>([]);
+  const [extrasEnviados, setExtrasEnviados] = useState<ExtraOrdenBD[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [categoriaAbierta, setCategoriaAbierta] = useState<CategoriaMenu | null>(null);
   // Pestaña de la cuadrícula rápida (Bebidas: Refrescos, Aguas, Jugos); si no hay una elegida, la primera.
@@ -180,7 +189,13 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
     return guardado;
   });
   const [mixActivo, setMixActivo] = useState<number | null>(() => leerMixActivo(claveBorrador));
-  useEffect(() => guardarBorrador(claveBorrador, nuevo, mixActivo), [claveBorrador, nuevo, mixActivo]);
+  const [extrasNuevos, setExtrasNuevos] = useState<(ExtraPedido & { id: number })[]>(() => {
+    const guardados = leerExtrasBorrador<ExtraPedido & { id: number }>(claveBorrador);
+    siguienteExtra = Math.max(siguienteExtra, ...guardados.map((e) => e.id + 1));
+    return guardados;
+  });
+  const [agregandoExtra, setAgregandoExtra] = useState(false);
+  useEffect(() => guardarBorrador(claveBorrador, nuevo, mixActivo, extrasNuevos), [claveBorrador, nuevo, mixActivo, extrasNuevos]);
   // Pestañas: PEDIDO (lo ya enviado) y AGREGAR (menú + nuevo pedido).
   const [pestana, setPestana] = useState<'pedido' | 'agregar'>('pedido');
   // Tablet: lo ya enviado se ve en una ventana desde el botón de historial.
@@ -197,7 +212,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
   const [descartando, setDescartando] = useState(false);
 
   const textoOrden = useRef('');
-  const actualizarOrden = useCallback((datos: { orden: OrdenBD; detalle: DetalleOrdenBD[] }) => {
+  const actualizarOrden = useCallback((datos: { orden: OrdenBD; detalle: DetalleOrdenBD[]; extras?: ExtraOrdenBD[] }) => {
     // Una respuesta anterior al cobro no puede volver a abrir la edición.
     const actual = ultimaOrden.current;
     if (actual?.idOrden === datos.orden.idOrden && actual.estatus > datos.orden.estatus) return;
@@ -208,6 +223,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
     ultimaOrden.current = datos.orden;
     setOrden(datos.orden);
     setDetalle(datos.detalle);
+    setExtrasEnviados(datos.extras ?? []);
   }, []);
 
   useEffect(() => {
@@ -215,6 +231,8 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
     setOpcionesDe(null);
     setCategoriaAbierta(null);
     setNuevo([]);
+    setExtrasNuevos([]);
+    setAgregandoExtra(false);
     setMixActivo(null);
     setPestana('pedido');
   }, [bloqueada]);
@@ -303,7 +321,9 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
     else setOpcionesDe(categoria); // las demás: pantalla de opciones
   };
 
-  const totalNuevo = nuevo.reduce((acc, l) => acc + precioLinea(l) * l.cantidad, 0);
+  const hayNuevo = nuevo.length > 0 || extrasNuevos.length > 0;
+  const hayEnviado = detalle.length > 0 || extrasEnviados.length > 0;
+  const totalNuevo = Math.round((nuevo.reduce((acc, l) => acc + precioLinea(l) * l.cantidad, 0) + extrasNuevos.reduce((acc, e) => acc + e.importe, 0)) * 100) / 100;
   const gruposNuevos = agruparMix(nuevo, (l) => l.mixGrupo);
   const alternarMix = () => {
     if (!puedeEditar) return;
@@ -311,15 +331,16 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
       ? Math.max(0, ...nuevo.map((l) => l.mixGrupo ?? 0), ...detalle.map((d) => d.mix_grupo ?? 0)) + 1
       : null);
   };
-  const rondasPrevias = new Set(detalle.map((d) => d.creado_en)).size;
+  const rondasPrevias = new Set([...detalle.map((d) => d.creado_en), ...extrasEnviados.map((e) => e.creado_en)]).size;
 
   /** Manda lo nuevo a cocina. `destino`: la orden recién registrada al terminar una LLAMADA. */
   const enviar = async (destino?: number): Promise<boolean> => {
     const id = destino ?? idOrden;
-    if (id === null || (destino === undefined && !orden) || !puedeEditar || nuevo.length === 0) return false;
+    if (id === null || (destino === undefined && !orden) || !puedeEditar || !hayNuevo) return false;
     setEnviando(true);
     setError(null);
     const enviado = nuevo;
+    const extrasDelBorrador = extrasNuevos;
     try {
       const datos = await enviarPedido(
         id,
@@ -334,10 +355,12 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
           ...(l.conQueso && { conQueso: true }),
           ...(l.sinQueso && { sinQueso: true }),
           ...(l.carneExtra && { carneExtra: l.carneExtra }),
-        }))
+        })),
+        extrasDelBorrador.map(({ descripcion, importe }) => ({ descripcion, importe })),
       );
       actualizarOrden(datos);
       setNuevo([]);
+      setExtrasNuevos([]);
       setMixActivo(null);
       setCategoriaAbierta(null);
       setOpcionesDe(null);
@@ -348,17 +371,19 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
         ...l, id: datos.guardados[i].idDetalle_Orden, mixGrupo: datos.guardados[i].mix_grupo,
       }));
       const paraTicket = confirmado.filter(vaEnTicket);
+      const extrasTicket = datos.extrasGuardados ?? extrasDelBorrador;
+      const imprime = paraTicket.length > 0 || extrasTicket.length > 0;
       setAlerta({
         titulo: `Pedido enviado a cocina · ${datos.orden.etiqueta}`,
-        detalle: confirmado.map((l) => `${l.cantidad} × ${l.categoria} · ${nombreLinea(l)}${textoSin(l)}`),
+        detalle: [...confirmado.map((l) => `${l.cantidad} × ${l.categoria} · ${nombreLinea(l)}${textoSin(l)}`), ...extrasTicket.map((e) => `Extra: ${e.descripcion} · ${dinero(e.importe)}`)],
         impresion:
-          paraTicket.length > 0
+          imprime
             ? { ok: null, texto: 'Imprimiendo ticket de cocina…' }
             : { ok: true, texto: 'Solo bebidas: no se imprime ticket de cocina.' },
       });
-      if (paraTicket.length > 0) {
+      if (imprime) {
         // Ticket de cocina: si la impresora no responde, el pedido ya quedó guardado; solo se avisa.
-        imprimirTicketCocina(ticketDe(datos.orden, paraTicket, rondasPrevias + 1, origen))
+        imprimirTicketCocina(ticketDe(datos.orden, paraTicket, rondasPrevias + 1, origen, extrasTicket))
           .then(() => setAlerta((a) => (a ? { ...a, impresion: { ok: true, texto: 'Ticket de cocina impreso.' } } : a)))
           .catch((err) =>
             setAlerta((a) =>
@@ -382,7 +407,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
    */
   const terminarLlamada = async (nombre: string, paraLlevar: boolean) => {
     const { mesa } = await registrarMesa(nombre.trim(), paraLlevar);
-    guardarBorrador(mesa.id, nuevo, mixActivo);
+    guardarBorrador(mesa.id, nuevo, mixActivo, extrasNuevos);
     guardarBorrador(BORRADOR_LLAMADA, []);
     setNombrando(false);
     if (await enviar(mesa.id)) guardarBorrador(mesa.id, []);
@@ -392,7 +417,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
 
   const cuentaPedida = (orden?.estatus ?? 0) >= 1;
   const pedirLaCuenta = async () => {
-    if (idOrden === null || !orden || !puedeEditar || detalle.length === 0) return;
+    if (idOrden === null || !orden || !puedeEditar || !hayEnviado) return;
     setPidiendoCuenta(true);
     setError(null);
     try {
@@ -434,7 +459,9 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
                   <button
                     onClick={() => {
                       setNuevo([]);
+                      setExtrasNuevos([]);
                       setMixActivo(null);
+                      guardarBorrador(claveBorrador, []);
                       onVolver();
                     }}
                     className="h-14 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold cursor-pointer"
@@ -513,7 +540,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
               <p className="text-sm">Ya no se pueden agregar productos ni modificar el pedido.</p>
             </div>
           </div>
-          <PedidoEnviado orden={orden} detalle={detalle} />
+          <PedidoEnviado orden={orden} detalle={detalle} extras={extrasEnviados} />
         </div>
       ) : (
       <>
@@ -556,6 +583,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
         <PedidoEnviado
           orden={orden}
           detalle={detalle}
+          extras={extrasEnviados}
           className="w-full"
           onAgregar={() => setPestana('agregar')}
         />
@@ -702,9 +730,12 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
         {/* Nuevo pedido */}
         <aside className={pantallaCompleta ? 'min-h-0 flex flex-col gap-2' : 'space-y-4'}>
           <section className={`bg-white border border-neutral-200 rounded-2xl p-4 space-y-3 ${pantallaCompleta ? 'flex-1 min-h-0 flex flex-col' : ''}`}>
-            <h3 className="font-bold shrink-0">Nuevo pedido</h3>
+            <div className="shrink-0 flex items-center justify-between gap-2">
+              <h3 className="font-bold">Nuevo pedido</h3>
+              <button type="button" disabled={!puedeEditar} onClick={() => setAgregandoExtra(true)} aria-label="Agregar extra" title="Agregar extra" className="w-10 h-10 rounded-xl border-2 border-amber-300 bg-amber-50 text-amber-900 flex items-center justify-center cursor-pointer disabled:opacity-40"><Plus className="w-5 h-5" /></button>
+            </div>
             <div className={pantallaCompleta ? 'flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-2 pr-1' : 'space-y-2'}>
-              {nuevo.length === 0 ? (
+              {!hayNuevo ? (
                 <p className="text-sm text-neutral-500">Toca productos del menú para agregarlos.</p>
               ) : (
                 gruposNuevos.map((grupo, indice) => (
@@ -723,8 +754,8 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
                         {!!l.carneExtra && (
                           <span className="block text-xs font-black tracking-wide text-red-700">{textoCarneExtra(l.carneExtra)}</span>
                         )}
-                        {l.sin.length > 0 && (
-                          <span className="block text-xs font-normal text-rose-700">Sin {l.sin.map((c) => c.nombre.toLowerCase()).join(', ')}</span>
+                        {sinDescritos(l).length > 0 && (
+                          <span className="block text-xs font-normal text-rose-700">Sin {sinDescritos(l).map((c) => c.nombre.toLowerCase()).join(', ')}</span>
                         )}
                       </span>
                       <span className="font-mono text-sm">{dinero(precioLinea(l) * l.cantidad)}</span>
@@ -753,23 +784,24 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
                   </div>
                 ))
               )}
+              <ListaExtras extras={extrasNuevos} onQuitar={puedeEditar ? (id) => setExtrasNuevos((lista) => lista.filter((e) => e.id !== id)) : undefined} />
             </div>
             {esLlamada ? (
               // LLAMADA: al colgar se pide el nombre del cliente; ahí se registra la orden y se manda a cocina.
               <button
                 onClick={() => setNombrando(true)}
-                disabled={!puedeEditar || nuevo.length === 0}
+                disabled={!puedeEditar || !hayNuevo}
                 className="neon-solido neon-azul w-full h-14 shrink-0 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed text-lg font-bold flex items-center justify-center gap-2 cursor-pointer"
               >
                 {enviando ? <Loader2 className="w-5 h-5 animate-spin" /> : <PhoneOff className="w-5 h-5" />}
                 Terminar llamada
-                {nuevo.length > 0 && ` · ${dinero(totalNuevo)}`}
+                {hayNuevo && ` · ${dinero(totalNuevo)}`}
               </button>
-            ) : pantallaCompleta && nuevo.length === 0 ? (
+            ) : pantallaCompleta && !hayNuevo ? (
               // Tablet sin productos seleccionados: pedir la cuenta (orden.estatus → 1 PAGANDO; la caja cobra)
               <button
                 onClick={pedirLaCuenta}
-                disabled={!puedeEditar || detalle.length === 0}
+                disabled={!puedeEditar || !hayEnviado}
                 className="neon-solido neon-fresco w-full h-14 shrink-0 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed text-lg font-bold tracking-wide flex items-center justify-center gap-2 cursor-pointer"
               >
                 {pidiendoCuenta ? <Loader2 className="w-5 h-5 animate-spin" /> : <HandCoins className="w-5 h-5" />}
@@ -778,14 +810,14 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
             ) : (
               <button
                 onClick={() => enviar()}
-                disabled={!puedeEditar || nuevo.length === 0}
+                disabled={!puedeEditar || !hayNuevo}
                 className={`w-full h-14 shrink-0 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed text-lg font-semibold flex items-center justify-center gap-2 cursor-pointer ${
                   pantallaCompleta ? 'neon-solido neon-fuego' : 'bg-amber-500 hover:bg-amber-400 text-neutral-950'
                 }`}
               >
                 {enviando ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
                 {pantallaCompleta ? 'Enviar' : 'Enviar a cocina'}
-                {nuevo.length > 0 && ` · ${dinero(totalNuevo)}`}
+                {hayNuevo && ` · ${dinero(totalNuevo)}`}
               </button>
             )}
           </section>
@@ -796,6 +828,11 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
       )}
 
       {/* LLAMADA terminada: nombre del cliente */}
+      {agregandoExtra && puedeEditar && <DialogoAgregarExtra onCancelar={() => setAgregandoExtra(false)} onAgregar={(extra) => {
+        if (!puedeEditar) return;
+        setExtrasNuevos((lista) => [...lista, { ...extra, id: siguienteExtra++ }]);
+        setAgregandoExtra(false);
+      }} />}
       <AnimatePresence>
         {nombrando && (
           <DialogoTerminarLlamada
@@ -826,7 +863,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
               exit={{ scale: 0.95, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
             >
-              <PedidoEnviado orden={orden} detalle={detalle} className="min-h-0 shadow-xl" />
+              <PedidoEnviado orden={orden} detalle={detalle} extras={extrasEnviados} className="min-h-0 shadow-xl" />
               <button
                 onClick={() => setVerHistorial(false)}
                 className="mt-3 shrink-0 w-full h-14 rounded-xl bg-white hover:bg-neutral-50 border border-neutral-200 text-lg font-semibold flex items-center justify-center gap-2 cursor-pointer"

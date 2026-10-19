@@ -68,6 +68,7 @@ export interface TicketCocina {
   tablet: string; // BD: comandas.tablet_id → tablets.nombre
   enviada_en: string; // ISO 8601. BD: comandas.enviada_en
   productos: ProductoTicketCocina[];
+  extras?: { descripcion: string; importe: number }[];
   total_piezas: number; // piezas a preparar (un paquete cuenta sus piezas) para que cocina confirme que no falta nada
   notas_generales?: string; // BD: comandas.notas
 }

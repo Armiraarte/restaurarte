@@ -21,6 +21,7 @@ import { turnoAbierto } from './turnos.js';
 import { imprimirLineas } from './impresion.js';
 import { lineasTicketCobro } from './ticketCobro.js';
 import { guardarDetallePedido, itemsValidos, terminoPermitido, type ItemPedido, type PapasPedido } from './detallePedido.js';
+import { extrasValidos, guardarExtrasPedido, recalcularTotalOrden } from './extrasPedido.js';
 
 // Opciones por renglón; las mismas constantes que OrdenDetalle en Laravel.
 /** Categorías que ofrecen SIN QUESO. */
@@ -67,7 +68,7 @@ pedidosRouter.get('/menu', async (_req, res) => {
   const [complementos] = await pool!.query<RowDataPacket[]>(
     `SELECT phc.producto_id, c.id, c.nombre
        FROM producto_has_complemento phc JOIN complementos c ON c.id = phc.complemento_id
-      WHERE c.estatus = 1 ORDER BY c.id`,
+      WHERE c.estatus = 1 ORDER BY c.nombre, c.id`,
   );
 
   const complementosDe = new Map<number, { id: number; nombre: string }[]>();
@@ -92,7 +93,7 @@ pedidosRouter.get('/menu', async (_req, res) => {
           grupo: p.grupo,
           precio: Number(p.precio),
           imagen: p.imagen,
-          complementos: complementosDe.get(p.id) ?? [],
+          complementos: (complementosDe.get(p.id) ?? []).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' })),
         })),
     })),
   });
@@ -122,7 +123,11 @@ async function ordenConDetalle(idOrden: number) {
     [idOrden],
   );
   const o = ordenes[0];
+  const [extras] = await pool!.query<RowDataPacket[]>(
+    'SELECT id, descripcion, importe, creado_en FROM orden_extra WHERE idOrden = ? ORDER BY id', [idOrden],
+  );
   return {
+    extras: extras.map((e) => ({ ...e, importe: Number(e.importe) })),
     // Sin sesión de tablet = la abrió la caja.
     orden: { ...o, total: Number(o.total), etiqueta: etiquetaOrden(o.nombre), abierta_por: o.abierta_por ?? 'Caja' },
     detalle: detalle.map((d) => ({
@@ -154,7 +159,7 @@ pedidosRouter.post('/ordenes/:idOrden/pedir-cuenta', async (req, res) => {
     res.status(404).json({ error: 'La orden no existe.' });
     return;
   }
-  if (actual.detalle.length === 0) {
+  if (actual.detalle.length === 0 && actual.extras.length === 0) {
     res.status(409).json({ error: 'La orden no tiene productos; no hay cuenta que cobrar.' });
     return;
   }
@@ -202,6 +207,7 @@ async function imprimirTicketCobro(idOrden: number, recibido: number | null, cob
         cobro,
         fecha: new Date(),
         productos: [...porProducto.values()],
+        extras: datos.extras as unknown as { descripcion: string; importe: number }[],
         total: o.total,
         recibido,
         cambio: recibido === null ? null : redondear(recibido - o.total),
@@ -267,12 +273,13 @@ pedidosRouter.post('/ordenes/:idOrden/pedido', async (req, res) => {
   const items: ItemPedido[] = Array.isArray(req.body?.items)
     ? req.body.items
     : [];
+  const extras = req.body?.extras ?? [];
   if (!Number.isSafeInteger(idOrden) || idOrden < 1) {
     res.status(400).json({ error: 'Orden no válida.' });
     return;
   }
-  if (!itemsValidos(items)) {
-    res.status(400).json({ error: 'El pedido necesita al menos un producto con cantidad mayor que cero.' });
+  if ((req.body?.items !== undefined && !Array.isArray(req.body.items)) || !extrasValidos(extras) || (items.length > 0 && !itemsValidos(items)) || (items.length === 0 && extras.length === 0)) {
+    res.status(400).json({ error: 'Agrega productos válidos o extras con descripción e importe mayor que cero (hasta dos decimales).' });
     return;
   }
 
@@ -305,7 +312,7 @@ pedidosRouter.post('/ordenes/:idOrden/pedido', async (req, res) => {
       `SELECT p.id, p.nombre, p.tamano, p.precio, p.categoria_id, c.nombre AS categoria
          FROM producto p JOIN categorias c ON c.id = p.categoria_id
         WHERE p.id IN (?) AND p.estatus = 1`,
-      [ids],
+      [ids.length ? ids : [0]],
     );
     const porId = new Map(productos.map((p) => [p.id as number, p]));
     const faltante = ids.find((id) => !porId.has(id));
@@ -349,7 +356,7 @@ pedidosRouter.post('/ordenes/:idOrden/pedido', async (req, res) => {
 
     const [relaciones] = await conexion.query<RowDataPacket[]>(
       `SELECT phc.producto_id, c.id, c.nombre FROM producto_has_complemento phc
-       JOIN complementos c ON c.id = phc.complemento_id WHERE phc.producto_id IN (?) AND c.estatus = 1`, [ids],
+       JOIN complementos c ON c.id = phc.complemento_id WHERE phc.producto_id IN (?) AND c.estatus = 1 ORDER BY c.nombre, c.id`, [ids.length ? ids : [0]],
     );
     const complementos = new Map<number, { id: number; nombre: string }[]>();
     for (const c of relaciones) {
@@ -357,7 +364,7 @@ pedidosRouter.post('/ordenes/:idOrden/pedido', async (req, res) => {
     }
     const [rellenos] = await conexion.query<RowDataPacket[]>(
       'SELECT nombre, categoria_id FROM producto WHERE categoria_id IN (?) AND estatus = 1',
-      [[...new Set(productos.map((p) => p.categoria_id))]],
+      [[...new Set(productos.map((p) => p.categoria_id)), 0]],
     );
     if (items.some((i) =>
       i.sin?.some((id) => !complementos.get(i.idProducto)?.some((c) => c.id === id)) ||
@@ -383,14 +390,11 @@ pedidosRouter.post('/ordenes/:idOrden/pedido', async (req, res) => {
     }
     const ahora = new Date();
     const guardados = await guardarDetallePedido(conexion, idOrden, items, porId, complementos, ahora, papas);
-    await conexion.execute(
-      `UPDATE orden SET total = (SELECT COALESCE(SUM(subtotal), 0) FROM orden_has_detalle WHERE idOrden = ?), actualizado_en = ?
-        WHERE idOrden = ?`,
-      [idOrden, ahora, idOrden],
-    );
+    const extrasGuardados = await guardarExtrasPedido(conexion, idOrden, extras, ahora);
+    await recalcularTotalOrden(conexion, idOrden, ahora);
     await conexion.commit();
 
-    res.status(201).json({ ...(await ordenConDetalle(idOrden)), guardados });
+    res.status(201).json({ ...(await ordenConDetalle(idOrden)), guardados, extrasGuardados });
   } catch (err) {
     await conexion.rollback();
     console.error('[pedidos] No se pudo registrar el pedido:', err);

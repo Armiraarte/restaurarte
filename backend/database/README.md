@@ -322,17 +322,18 @@ en el orden de los items enviados: el ticket usa sus IDs y grupos definitivos.
 En cocina cada grupo se imprime como «MIX n · UN SOLO PLATO», con las opciones
 de cada producto. El cobro conserva los importes individuales.
 
-Tacos, Sopes, Quesadillas, Hamburguesas y Lonches usan un único botón
-«CON QUESO»: inicia apagado y al activarlo agrega queso. Apagado registra
-`sin_queso = true`; encendido registra `con_queso = true`. El Sope de
-Queso es un producto aparte y no necesita ese botón. Estas opciones no
-añaden cargos al precio; las elecciones anteriores se conservan en el detalle.
-Para actualizar una base existente, después de respaldarla y antes de publicar
-la API y el frontend, ejecutar desde `backend/`:
+Tacos, Sopes, Quesadillas, Hamburguesas y Lonches ofrecen Queso dentro de
+Complementos, sin botón independiente. Inicia apagado y se agrega al tocarlo;
+la elección mantiene `sin_queso` / `con_queso` para el historial y los tickets.
+El producto Queso de Sopes es independiente y no necesita ese complemento.
+Los complementos se muestran en orden alfabético en español. Seleccionarlos
+no añade cargos al precio; las elecciones anteriores se conservan en el detalle.
+Para instalar MIX en una base anterior, después de respaldarla y antes de
+publicar la API y el frontend, ejecutar desde `backend/`:
 
 ```powershell
 .\artisan.ps1 migrate --force --path=database/migrations/2026_10_18_000025_agregar_mix_y_opciones_a_orden_has_detalle.php
-.\artisan.ps1 db:seed --class=QuesoMenuSeeder --force
+.\artisan.ps1 db:seed --class=QuesoComplementoSeeder --force
 ```
 
 El seeder puntual conserva precios y los demás complementos. Evitar ejecutar
@@ -365,8 +366,8 @@ precio de las papas en ese momento. No requiere una tabla ni columna nueva.
 El ticket de cocina, el historial y el cobro indican «CON PAPAS · Orden completa».
 Los renglones con y sin papas se mantienen separados en la cuenta.
 
-En Hamburguesas, queso, carne extra y papas comparten una fila con tres
-columnas iguales. En Lonches, queso y papas se reparten la fila por mitades.
+En Hamburguesas, carne extra y papas comparten una fila con dos columnas
+iguales; Queso aparece en Complementos. En Lonches, papas tiene su propio botón.
 En Ensaladas, «Sin carne» queda al extremo derecho y seleccionar una proteína
 elige automáticamente tamaño Chica, que puede cambiarse a Grande.
 
@@ -375,6 +376,33 @@ Para actualizar una instalación existente después del respaldo:
 ```powershell
 .\artisan.ps1 migrate --force --path=database/migrations/2026_10_18_000026_create_termino_table.php
 .\artisan.ps1 db:seed --class=AmpliacionMenuSeeder --force
+.\artisan.ps1 db:seed --class=QuesoComplementoSeeder --force
+```
+
+### Extras como cobros libres
+
+La migración `2026_10_18_000027_create_orden_extra_table.php` crea `orden_extra`
+con `id`, `idOrden`, `descripcion`, `importe DECIMAL(12,2)` y fechas. La referencia
+a `orden` elimina los cargos en cascada al eliminar su orden. No crea productos
+de catálogo ni guarda cantidades: cada registro representa un cobro libre.
+
+El botón «+» de Nuevo pedido abre «Agregar extra», donde se captura descripción
+e importe, inicialmente vacío. El borrador conserva estos cargos al salir,
+incluidos los pedidos por teléfono. `POST /api/ordenes/:idOrden/pedido` acepta
+`extras: [{ descripcion, importe }]` junto con `items`, o sin productos. Exige
+importes positivos con hasta dos decimales y una orden abierta. En la misma
+transacción que bloquea y guarda los productos, registra los extras y recalcula
+`orden.total` como suma de ambos conceptos. La respuesta incluye `extras` y
+`extrasGuardados`; `GET /api/ordenes/:idOrden` devuelve los cargos guardados.
+
+La cuenta y el historial muestran Extras después de los productos; los tickets
+de cocina y cobro incluyen descripción e importe al final del detalle. El total
+de cobro ya los incluye y la reimpresión recupera los registros de la base.
+Para actualizar una instalación existente después del respaldo:
+
+```powershell
+.\artisan.ps1 migrate --force --path=database/migrations/2026_10_18_000027_create_orden_extra_table.php
+.\artisan.ps1 db:seed --class=QuesoComplementoSeeder --force
 ```
 
 `001_initial.sql` se conserva como referencia histórica del esquema PostgreSQL.

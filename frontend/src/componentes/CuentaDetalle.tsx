@@ -4,9 +4,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { AlertTriangle, Clock, Home, Loader2, ShoppingBag, Tablet, X } from 'lucide-react';
-import { DetalleOrdenBD, ESTATUS_ORDEN, obtenerOrden, OrdenBD } from '../services/pedidosService';
+import { DetalleOrdenBD, ESTATUS_ORDEN, ExtraOrdenBD, obtenerOrden, OrdenBD } from '../services/pedidosService';
 import { useEnVivo } from '../services/enVivo';
 import { COLOR_ESTATUS_ORDEN, EtiquetaCarneExtra, EtiquetaConPapas, EtiquetaConQueso, EtiquetaSinQueso } from './PedidoEnviado';
+import { ListaExtras } from './ListaExtras';
 
 const dinero = (n: number) => `$${n.toFixed(2)}`;
 const hora = (fecha: string) => new Date(fecha).toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' });
@@ -21,6 +22,7 @@ interface Props {
 export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones }) => {
   const [orden, setOrden] = useState<OrdenBD | null>(null);
   const [detalle, setDetalle] = useState<DetalleOrdenBD[]>([]);
+  const [extras, setExtras] = useState<ExtraOrdenBD[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const cargar = useCallback(async () => {
@@ -28,6 +30,7 @@ export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones }) 
       const datos = await obtenerOrden(idOrden);
       setOrden(datos.orden);
       setDetalle(datos.detalle);
+      setExtras(datos.extras ?? []);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cargar la cuenta.');
@@ -127,7 +130,7 @@ export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones }) 
             <div className="py-10 flex justify-center text-neutral-400">
               <Loader2 className="w-6 h-6 animate-spin" />
             </div>
-          ) : categorias.length === 0 ? (
+          ) : categorias.length === 0 && extras.length === 0 ? (
             <p className="py-8 text-center text-sm text-neutral-500">Esta orden no tiene productos.</p>
           ) : (
             categorias.map(([categoria, productos]) => (
@@ -154,6 +157,7 @@ export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones }) 
               </div>
             ))
           )}
+          <ListaExtras extras={extras} />
         </div>
 
         {/* Total */}

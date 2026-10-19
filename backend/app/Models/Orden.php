@@ -113,4 +113,9 @@ class Orden extends Model
     {
         return $this->hasMany(OrdenDetalle::class, 'idOrden');
     }
+
+    public function extras(): HasMany
+    {
+        return $this->hasMany(OrdenExtra::class, 'idOrden');
+    }
 }

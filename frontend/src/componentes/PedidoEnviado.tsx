@@ -7,9 +7,11 @@
 // de la tablet y dos o tres en la caja.
 import React from 'react';
 import { Clock, LucideIcon, Plus, Receipt, Send, Tablet } from 'lucide-react';
-import { DetalleOrdenBD, ESTATUS_ORDEN, OrdenBD, textoCarneExtra } from '../services/pedidosService';
+import { DetalleOrdenBD, ESTATUS_ORDEN, ExtraOrdenBD, OrdenBD, textoCarneExtra } from '../services/pedidosService';
 import { iconoCategoria } from './iconosCategoria';
 import { agruparMix } from '../services/pedidoMix';
+import { ListaExtras } from './ListaExtras';
+import { esQueso } from '../services/complementos';
 
 export const COLOR_ESTATUS_ORDEN: Record<number, string> = {
   0: 'bg-emerald-100 text-emerald-800 border-emerald-300',
@@ -70,12 +72,13 @@ interface Envio {
 interface Props {
   orden: OrdenBD | null;
   detalle: DetalleOrdenBD[];
+  extras?: ExtraOrdenBD[];
   className?: string;
   /** Si no hay nada enviado, muestra un botón para ir a agregar productos. */
   onAgregar?: () => void;
 }
 
-export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, className = '', onAgregar }) => {
+export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, extras = [], className = '', onAgregar }) => {
   // Envíos: renglones con la misma hora de registro.
   const envios: Envio[] = [];
   detalle.forEach((d) => {
@@ -88,7 +91,7 @@ export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, className = '',
       conPapas: !!d.opciones?.papas,
       mixGrupo: d.mix_grupo ?? null,
       termino: d.termino ?? null,
-      sin: d.opciones?.sin?.map((c) => c.nombre) ?? [],
+      sin: d.opciones?.sin?.filter((c) => !d.sin_queso || !esQueso(c)).map((c) => c.nombre) ?? [],
       carneExtra: d.carne_extra,
       categoria: d.categoria,
       subtotal: d.subtotal,
@@ -128,7 +131,7 @@ export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, className = '',
             <Dato icono={Tablet} etiqueta="Abrió" valor={orden?.abierta_por ?? '—'} />
             <Dato icono={Clock} etiqueta="Llegó" valor={orden ? hora(orden.creado_en) : '—'} />
             <Dato icono={Receipt} valor={plural(piezas, 'pieza', 'piezas')} />
-            <Dato icono={Send} valor={plural(envios.length, 'envío', 'envíos')} />
+            <Dato icono={Send} valor={plural(new Set([...detalle.map((d) => d.creado_en), ...extras.map((e) => e.creado_en)]).size, 'envío', 'envíos')} />
           </div>
         </div>
         {/* ml-auto: si no cabe junto a los datos, baja de renglón pero sigue a la derecha */}
@@ -139,7 +142,7 @@ export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, className = '',
       </header>
 
       {/* Lo ya enviado a cocina */}
-      {envios.length === 0 ? (
+      {envios.length === 0 && extras.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-3 px-4 py-10 text-center">
           <p className="text-base text-neutral-600">Aún no se ha enviado nada a cocina.</p>
           {onAgregar && (
@@ -210,6 +213,7 @@ export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, className = '',
               </article>
             ))}
           </div>
+          <ListaExtras extras={extras} />
         </div>
       )}
     </section>

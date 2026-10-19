@@ -25,6 +25,7 @@ export interface DatosTicketCobro {
   cobro: string; // usuario que cobró
   fecha: Date;
   productos: { cantidad: number; nombre: string; importe: number }[];
+  extras?: { descripcion: string; importe: number }[];
   total: number;
   /** null al reimprimir desde Ventas: el monto recibido no se guarda, así que no se imprime efectivo ni cambio. */
   recibido: number | null;
@@ -52,6 +53,10 @@ export function lineasTicketCobro(t: DatosTicketCobro): LineaTicket[] {
     { separador: true },
   ];
   for (const p of t.productos) lineas.push({ texto: `${p.cantidad}  ${p.nombre}`, derecha: dinero(p.importe) });
+  if (t.extras?.length) {
+    lineas.push({ separador: true }, { texto: 'EXTRAS', negrita: true });
+    for (const extra of t.extras) lineas.push({ texto: extra.descripcion, derecha: dinero(extra.importe) });
+  }
   lineas.push(
     { separador: true },
     { texto: 'TOTAL', derecha: dinero(t.total), grande: true },

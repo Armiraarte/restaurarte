@@ -22,6 +22,7 @@ import {
   PapasMenu,
   textoCarneExtra,
 } from '../services/pedidosService';
+import { esQueso, ordenarComplementos } from '../services/complementos';
 
 /** Cómo se llama la elección principal en cada categoría (igual que el menú anterior). */
 const NOMBRE_ELECCION: Record<string, string> = {
@@ -81,9 +82,7 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
   const [elegidos, setElegidos] = useState<string[]>(nombres.length === 1 ? [nombres[0]] : []);
   const nombre = elegidos[0] ?? null;
   const [tamano, setTamano] = useState<string | null>(esEnsalada ? 'Chica' : null);
-  const [quitados, setQuitados] = useState<number[]>([]);
-  // El queso se agrega solo al activar el botón; sin seleccionar se registra SIN QUESO.
-  const [conQueso, setConQueso] = useState(false);
+  const [quitados, setQuitados] = useState<number[]>(() => categoria.productos.flatMap((p) => p.complementos.filter(esQueso).map((c) => c.id)));
   const [conPapas, setConPapas] = useState(false);
   const [termino, setTermino] = useState<TerminoMenu | null>(null);
   // Hamburguesas: cada toque suma una carne (DOBLE, luego TRIPLE) y el siguiente la quita.
@@ -101,11 +100,11 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
         ? tamanos.find((p) => p.tamano === tamano)
         : delNombre[0];
   // Complementos: los de todos los elegidos, sin repetir (o del primero con ese nombre mientras se elige tamaño).
-  const complementos = [
+  const complementos = ordenarComplementos([
     ...new Map(
       categoria.productos.filter((p) => elegidos.includes(p.nombre)).flatMap((p) => p.complementos).map((c) => [c.id, c])
     ).values(),
-  ].filter((c) => !CATEGORIAS_CON_QUESO.includes(categoria.nombre) || c.nombre.toLowerCase() !== 'queso');
+  ].filter((c) => !elegidos.includes('Queso') || !esQueso(c)));
   const textoElegidos = elegidos.join(' con ');
   // La de queso ya es queso: ahí no aplica.
   const puedeConQueso = CATEGORIAS_CON_QUESO.includes(categoria.nombre) && !!nombre && !elegidos.includes('Queso');
@@ -124,8 +123,7 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
   // Al cambiar de producto se reinician tamaño y complementos (todos incluidos).
   useEffect(() => {
     setTamano(esEnsalada ? 'Chica' : null);
-    setQuitados([]);
-    setConQueso(false);
+    setQuitados(complementos.filter(esQueso).map((c) => c.id));
     setConPapas(false);
     setTermino(null);
     setCarneExtra(0);
@@ -149,8 +147,9 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
   const agregar = () => {
     if (!producto) return;
     const sin = complementos.filter((c) => quitados.includes(c.id));
-    const quesoFuera = puedeConQueso && !conQueso;
-    onAgregar(producto, cantidad, sin, elegidos.length > 1 ? elegidos : [], { sinQueso: quesoFuera, conQueso: puedeConQueso && conQueso, carneExtra: carnesExtra, termino, papas });
+    const quesoIncluido = complementos.some((c) => esQueso(c) && !quitados.includes(c.id));
+    const quesoFuera = puedeConQueso && !quesoIncluido;
+    onAgregar(producto, cantidad, sin, elegidos.length > 1 ? elegidos : [], { sinQueso: quesoFuera, conQueso: puedeConQueso && quesoIncluido, carneExtra: carnesExtra, termino, papas });
     setAgregado(
       `${cantidad} × ${elegidos.length > 1 ? textoElegidos : producto.nombre}${producto.tamano ? ` (${producto.tamano})` : ''}${
         quesoFuera ? ' · SIN QUESO' : puedeConQueso ? ' · CON QUESO' : ''
@@ -158,8 +157,7 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
     );
     setElegidos(nombres.length === 1 ? [nombres[0]] : []);
     setTamano(esEnsalada ? 'Chica' : null);
-    setQuitados([]);
-    setConQueso(false);
+    setQuitados(complementos.filter(esQueso).map((c) => c.id));
     setConPapas(false);
     setTermino(null);
     setCarneExtra(0);
@@ -196,7 +194,7 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
         </div>
       </div>
 
-      <div data-opciones-scroll={categoria.nombre} className={pantallaCompleta ? 'flex-1 min-h-0 flex flex-col gap-2 overflow-y-auto overscroll-contain' : 'space-y-5'}>
+      <div data-opciones-scroll={categoria.nombre} className={pantallaCompleta ? `flex-1 min-h-0 flex flex-col ${esHamburguesa ? 'gap-1' : 'gap-2'} overflow-y-auto overscroll-contain` : 'space-y-5'}>
         {/* 1. Elige una: productos de la categoría */}
         {nombres.length > 1 && (
           <div {...grupo(nombres.length)}>
@@ -281,7 +279,7 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
           <div {...grupo(complementos.length)}>
             <div className="shrink-0 flex items-center justify-between gap-2">
               <div className="text-sm font-semibold text-neutral-700">
-                {++paso}. Complementos <span className="font-normal text-neutral-500">· todos incluidos, quita los que no quieran</span>
+                {++paso}. Complementos <span className="font-normal text-neutral-500">· toca para incluir o quitar</span>
               </div>
               <button
                 onClick={() => setQuitados(todosIncluidos ? complementos.map((c) => c.id) : [])}
@@ -290,7 +288,7 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
                 {todosIncluidos ? 'Quitar todo' : 'Con todo'}
               </button>
             </div>
-            <div className={rejillaComplementos}>
+            <div data-complementos className={rejillaComplementos}>
               {complementos.map((c) => {
                 const incluido = !quitados.includes(c.id);
                 return (
@@ -311,22 +309,12 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
           </div>
         )}
 
-        {(puedeConQueso || puedeCarneExtra || puedePapas) && (
-          <div {...grupo(1)}>
+        {(puedeCarneExtra || puedePapas) && (
+          <div {...grupo(esHamburguesa ? 3 : 1)}>
             <div className="shrink-0 text-sm font-semibold text-neutral-700">
               {++paso}. Opciones
             </div>
-            <div data-fila-opciones className="flex-1 min-h-0 grid auto-rows-fr gap-2" style={{ gridTemplateColumns: `repeat(${Number(puedeConQueso) + Number(puedeCarneExtra) + Number(puedePapas)}, minmax(0, 1fr))` }}>
-              {puedeConQueso && <button
-                onClick={() => setConQueso((v) => !v)}
-                aria-pressed={conQueso}
-                className={`${boton} px-2 border-2 font-black tracking-wide flex items-center justify-center gap-2 transition-colors cursor-pointer ${
-                  conQueso ? 'bg-violet-600 border-violet-700 text-white shadow-sm' : 'bg-white border-violet-300 text-violet-700 hover:bg-violet-50'
-                }`}
-              >
-                {conQueso && <Check className="w-5 h-5" />}
-                CON QUESO
-              </button>}
+            <div data-fila-opciones className="flex-1 min-h-0 grid auto-rows-fr gap-2" style={{ gridTemplateColumns: `repeat(${Number(puedeCarneExtra) + Number(puedePapas)}, minmax(0, 1fr))` }}>
               {puedeCarneExtra && <button
                 onClick={() => setCarneExtra((n) => (n + 1) % (MAX_CARNE_EXTRA + 1))}
                 aria-pressed={carneExtra > 0}

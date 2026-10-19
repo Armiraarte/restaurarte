@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { agruparMix } from '../src/services/pedidoMix.ts';
 import { terminosCategoria } from '../src/services/terminosPedido.ts';
-import { guardarBorrador, leerBorrador, leerMixActivo, piezasSinEnviar } from '../src/services/borradorPedido.ts';
+import { guardarBorrador, leerBorrador, leerMixActivo, leerExtrasBorrador, piezasSinEnviar } from '../src/services/borradorPedido.ts';
+import { ordenarComplementos } from '../src/services/complementos.ts';
 
 test('MIX conserva orden de grupos, cantidades y productos sueltos', () => {
   const lineas = [{ id: 1, mix: 1 }, { id: 2, mix: null }, { id: 3, mix: 1 }, { id: 4, mix: 2 }, { id: 5 }];
@@ -38,4 +39,15 @@ test('el borrador recupera el MIX activo, incluso vacío, y respeta pedidos anti
   almacen.set('pedido_borrador_3', JSON.stringify({ lineas: [{ cantidad: 1 }], guardado: Date.now() }));
   assert.equal(leerMixActivo(3), null);
   assert.equal(piezasSinEnviar(3), 1);
+  guardarBorrador(9, [], null, [{ id:1, descripcion:'Cargo libre', importe:12.5 }]);
+  assert.equal(piezasSinEnviar(9), 1);
+  assert.deepEqual(leerExtrasBorrador(9), [{ id:1, descripcion:'Cargo libre', importe:12.5 }]);
+  guardarBorrador(9, []);
+  assert.deepEqual(leerExtrasBorrador(9), []);
+});
+
+test('complementos se ordenan alfabéticamente en español sin modificar el catálogo', () => {
+  const original = ['Salsa verde','Queso','Cebolla','Aderezo','Jitomate'].map(nombre=>({nombre}));
+  assert.deepEqual(ordenarComplementos(original).map(c=>c.nombre), ['Aderezo','Cebolla','Jitomate','Queso','Salsa verde']);
+  assert.equal(original[0].nombre, 'Salsa verde');
 });

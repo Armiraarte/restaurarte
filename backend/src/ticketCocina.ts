@@ -6,6 +6,7 @@
 // El mismo tipo existe en frontend/src/types/ticketCocina.ts; si cambias uno, cambia el otro.
 import type { LineaTicket } from './impresion.js';
 import { encabezadoRestaurante } from './ticketMarca.js';
+import { extrasValidos, type ExtraPedido } from './extrasPedido.js';
 
 /** Una elección dentro de un grupo de opciones. BD: partida_opciones (partida_id, grupo, eleccion). */
 export interface OpcionTicket {
@@ -43,6 +44,7 @@ export interface TicketCocina {
   tablet: string; // BD: comandas.tablet_id → tablets.nombre
   enviada_en: string; // ISO 8601. BD: comandas.enviada_en
   productos: ProductoTicketCocina[];
+  extras?: ExtraPedido[];
   total_piezas: number; // piezas a preparar (un paquete cuenta sus piezas) para que cocina confirme que no falta nada
   notas_generales?: string; // BD: comandas.notas
 }
@@ -52,7 +54,8 @@ export function validarTicketCocina(t: any): string | null {
   if (!t || typeof t !== 'object') return 'Ticket vacío.';
   if (typeof t.orden_cocina !== 'string' || !t.orden_cocina) return 'Falta orden_cocina.';
   if (typeof t.mesa !== 'string' || !t.mesa.trim()) return 'Falta la mesa.';
-  if (!Array.isArray(t.productos) || t.productos.length === 0) return 'El ticket no tiene productos.';
+  if (!Array.isArray(t.productos) || (t.productos.length === 0 && !t.extras?.length)) return 'El ticket no tiene productos ni extras.';
+  if (t.extras !== undefined && !extrasValidos(t.extras)) return 'Extra inválido en el ticket.';
   for (const p of t.productos) {
     if (typeof p?.nombre !== 'string' || !(Number(p?.cantidad) > 0)) return 'Producto inválido en el ticket.';
     if (p.mix_grupo != null && (!Number.isSafeInteger(p.mix_grupo) || p.mix_grupo < 1)) return 'Grupo MIX inválido.';
@@ -122,6 +125,10 @@ export function lineasTicketCocina(t: TicketCocina): LineaTicket[] {
   }
 
   if (t.notas_generales) lineas.push({ separador: true }, { texto: `NOTA: ${t.notas_generales}`, negrita: true });
+  if (t.extras?.length) {
+    lineas.push({ separador: true }, { texto: 'EXTRAS', negrita: true });
+    for (const extra of t.extras) lineas.push({ texto: extra.descripcion, derecha: `$${extra.importe.toFixed(2)}` });
+  }
   // Espacio en blanco al final: el papel sale más largo y es fácil arrancarlo (≈ 3 cm).
   for (let i = 0; i < 8; i++) lineas.push({ texto: '' });
   lineas.push({ texto: '.', alinear: 'centro' }); // marca final: evita que el driver recorte el espacio en blanco

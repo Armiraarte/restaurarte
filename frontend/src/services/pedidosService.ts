@@ -50,6 +50,17 @@ export interface OrdenBD {
   abierta_por: string; // nombre de la tablet, o "Caja"
 }
 
+/** Cobro libre: el importe se captura al agregarlo, sin unidades ni producto de catálogo. */
+export interface ExtraPedido {
+  descripcion: string;
+  importe: number;
+}
+
+export interface ExtraOrdenBD extends ExtraPedido {
+  id: number;
+  creado_en: string;
+}
+
 export const ESTATUS_ORDEN: Record<number, string> = { 0: 'ABIERTA', 1: 'PAGANDO', 2: 'PAGADO' };
 
 export interface DetalleOrdenBD {
@@ -110,18 +121,19 @@ export const obtenerMenu = () => pedir<{ categorias: CategoriaMenu[]; terminos?:
   })));
 
 /** Orden con su detalle y total. */
-export const obtenerOrden = (idOrden: number) => pedir<{ orden: OrdenBD; detalle: DetalleOrdenBD[] }>(`/ordenes/${idOrden}`);
+export const obtenerOrden = (idOrden: number) => pedir<{ orden: OrdenBD; detalle: DetalleOrdenBD[]; extras: ExtraOrdenBD[] }>(`/ordenes/${idOrden}`);
 
 /** Manda productos a cocina: guarda el detalle (orden_has_detalle) y recalcula el total. */
 export const enviarPedido = (
   idOrden: number,
-  items: { idProducto: number; cantidad: number; sin?: number[]; mezcla?: string[]; sinQueso?: boolean; conQueso?: boolean; carneExtra?: number; mixGrupo?: number | null; terminoId?: number | null; conPapas?: boolean }[]
+  items: { idProducto: number; cantidad: number; sin?: number[]; mezcla?: string[]; sinQueso?: boolean; conQueso?: boolean; carneExtra?: number; mixGrupo?: number | null; terminoId?: number | null; conPapas?: boolean }[],
+  extras: ExtraPedido[] = [],
 ) =>
-  pedir<{ orden: OrdenBD; detalle: DetalleOrdenBD[]; guardados: { idDetalle_Orden: number; mix_grupo: number | null }[] }>(`/ordenes/${idOrden}/pedido`, { method: 'POST', body: JSON.stringify({ items }) });
+  pedir<{ orden: OrdenBD; detalle: DetalleOrdenBD[]; extras: ExtraOrdenBD[]; extrasGuardados: ExtraOrdenBD[]; guardados: { idDetalle_Orden: number; mix_grupo: number | null }[] }>(`/ordenes/${idOrden}/pedido`, { method: 'POST', body: JSON.stringify({ items, extras }) });
 
 /** Pide la cuenta: la orden pasa a PAGANDO (estatus 1) y la caja hace el cobro. */
 export const pedirCuenta = (idOrden: number) =>
-  pedir<{ orden: OrdenBD; detalle: DetalleOrdenBD[] }>(`/ordenes/${idOrden}/pedir-cuenta`, { method: 'POST' });
+  pedir<{ orden: OrdenBD; detalle: DetalleOrdenBD[]; extras: ExtraOrdenBD[] }>(`/ordenes/${idOrden}/pedir-cuenta`, { method: 'POST' });
 
 /** Cobra la orden (PAGANDO → PAGADO) con lo que entregó el cliente e imprime el ticket de cobro. */
 export const cobrarOrden = (idOrden: number, recibido: number) =>

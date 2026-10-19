@@ -15,6 +15,7 @@ interface Borrador<T> {
   lineas: T[];
   guardado: number;
   mixActivo?: number | null;
+  extras?: unknown[];
 }
 
 function leer<T>(clave: string): Borrador<T> | null {
@@ -39,11 +40,16 @@ export function leerMixActivo(idOrden: ClaveBorrador): number | null {
   return borrador && Date.now() - borrador.guardado < VIGENCIA_MS && typeof grupo === 'number' && Number.isSafeInteger(grupo) && grupo > 0 ? grupo : null;
 }
 
+export function leerExtrasBorrador<T>(idOrden: ClaveBorrador): T[] {
+  const borrador = leer(PREFIJO + idOrden);
+  return borrador && Date.now() - borrador.guardado < VIGENCIA_MS && Array.isArray(borrador.extras) ? borrador.extras as T[] : [];
+}
+
 /** Sin renglones ni MIX activo, borra el borrador. */
-export function guardarBorrador<T>(idOrden: ClaveBorrador, lineas: T[], mixActivo: number | null = null) {
+export function guardarBorrador<T>(idOrden: ClaveBorrador, lineas: T[], mixActivo: number | null = null, extras: unknown[] = []) {
   try {
-    if (lineas.length === 0 && mixActivo === null) localStorage.removeItem(PREFIJO + idOrden);
-    else localStorage.setItem(PREFIJO + idOrden, JSON.stringify({ lineas, guardado: Date.now(), mixActivo } satisfies Borrador<T>));
+    if (lineas.length === 0 && mixActivo === null && extras.length === 0) localStorage.removeItem(PREFIJO + idOrden);
+    else localStorage.setItem(PREFIJO + idOrden, JSON.stringify({ lineas, guardado: Date.now(), mixActivo, extras } satisfies Borrador<T>));
   } catch {
     // sin espacio o sin almacenamiento: el pedido sigue en pantalla, solo no se guarda
   }
@@ -52,7 +58,7 @@ export function guardarBorrador<T>(idOrden: ClaveBorrador, lineas: T[], mixActiv
 
 /** Piezas agregadas a la orden que todavía no se envían a cocina. */
 export function piezasSinEnviar(idOrden: ClaveBorrador): number {
-  return leerBorrador<{ cantidad: number }>(idOrden).reduce((acc, l) => acc + l.cantidad, 0);
+  return leerBorrador<{ cantidad: number }>(idOrden).reduce((acc, l) => acc + l.cantidad, 0) + leerExtrasBorrador(idOrden).length;
 }
 
 function limpiarViejos() {
