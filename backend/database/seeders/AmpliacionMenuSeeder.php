@@ -40,7 +40,7 @@ class AmpliacionMenuSeeder extends Seeder
                 ->each(fn (Producto $p) => $p->complementos()->syncWithoutDetaching([$complementos['Salsa verde']]));
 
             $bebidas = Categoria::where('nombre', 'Bebidas')->firstOrFail();
-            foreach (['Limón / Cereza' => '60.00', 'Cerveza' => '30.00'] as $nombre => $precio) {
+            foreach (['Limita' => '60.00', 'Cerveza' => '30.00'] as $nombre => $precio) {
                 // Se actualiza el producto original para conservar sus referencias en ventas anteriores.
                 Producto::updateOrCreate(
                     ['categoria_id' => $bebidas->id, 'nombre' => $nombre, 'tamano' => null],

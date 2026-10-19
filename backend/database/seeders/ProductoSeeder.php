@@ -34,7 +34,7 @@ class ProductoSeeder extends Seeder
         'Salchichas' => ['Entera', 'Picada'],
         'Bebidas' => [
             '7UP', ['Agua de Lima', 'Chica'], ['Agua de Lima', 'Mediana'], ['Agua de Lima', 'Grande'], 'Agua Mineral', 'Agua Natural',
-            'Coca 1/2', 'Coca Light', 'Coca Zero', 'Coca-Cola', 'Jumex Durazno', 'Jumex Manzana', 'Limón / Cereza',
+            'Coca 1/2', 'Coca Light', 'Coca Zero', 'Coca-Cola', 'Coquita 235', 'Jumex Durazno', 'Jumex Manzana', 'Limita',
             'Manzanita', 'Mirinda', 'Pepsi', 'Sangría',
         ],
     ];

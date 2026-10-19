@@ -25,7 +25,7 @@ class ProductoSeederTest extends TestCase
     {
         $this->cargar();
 
-        $this->assertSame(74, Producto::count());
+        $this->assertSame(75, Producto::count());
         $dorados = Categoria::where('nombre', 'Tacos Dorados')->firstOrFail();
         $this->assertSame(['Papa', 'Frijol', 'Jamón', 'Salchicha'], $dorados->productos()->orderBy('id')->pluck('nombre')->all());
         $this->assertNull(Producto::where('nombre', 'Frijol')->firstOrFail()->tamano);
@@ -48,7 +48,7 @@ class ProductoSeederTest extends TestCase
         $this->cargar();
         $this->cargar();
 
-        $this->assertSame(74, Producto::count());
+        $this->assertSame(75, Producto::count());
         $this->assertSame(12, Complemento::count());
     }
 

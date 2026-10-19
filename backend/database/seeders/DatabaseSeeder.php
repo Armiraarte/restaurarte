@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
                 TipoVentaSeeder::class,
                 OrdenSeeder::class,
                 CategoriaSeeder::class,
+                AjusteBebidasSeeder::class,
                 ComplementoSeeder::class,
                 ProductoSeeder::class,
                 ProductoComplementoSeeder::class,

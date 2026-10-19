@@ -16,11 +16,11 @@ class ProductoGrupoSeeder extends Seeder
     public const GRUPOS = [
         'Bebidas' => [
             'Refrescos' => [
-                'Coca-Cola', 'Coca 1/2', 'Coca Light', 'Coca Zero', 'Pepsi', '7UP', 'Mirinda', 'Manzanita', 'Sangría',
+                'Coca-Cola', 'Coca 1/2', 'Coca Light', 'Coca Zero', 'Coquita 235', 'Pepsi', '7UP', 'Mirinda', 'Manzanita', 'Sangría',
             ],
             'Aguas' => ['Agua de Lima', 'Agua Natural', 'Agua Mineral'],
             'Jugos' => ['Jumex Durazno', 'Jumex Manzana'],
-            'Alcohol' => ['Limón / Cereza', 'Cerveza'],
+            'Alcohol' => ['Limita', 'Cerveza'],
         ],
     ];
 

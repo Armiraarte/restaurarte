@@ -22,7 +22,7 @@ class ProductoGrupoTest extends TestCase
 
         $this->assertSame(0, (clone $bebidas)->whereNull('grupo')->count());
         $porGrupo = (clone $bebidas)->get()->groupBy('grupo')->map->count()->all();
-        $this->assertSame(['Refrescos' => 9, 'Aguas' => 5, 'Jugos' => 2, 'Alcohol' => 1], $porGrupo); // Cerveza se agrega con AmpliacionMenuSeeder
+        $this->assertSame(['Refrescos' => 10, 'Aguas' => 5, 'Jugos' => 2, 'Alcohol' => 1], $porGrupo); // Cerveza se agrega con AmpliacionMenuSeeder
         $this->assertSame('Aguas', (clone $bebidas)->where('nombre', 'Agua de Lima')->where('tamano', 'Grande')->value('grupo'));
 
         // Fuera de Bebidas no hay grupos.

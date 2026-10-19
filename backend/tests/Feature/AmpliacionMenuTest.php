@@ -8,6 +8,7 @@ use App\Models\OrdenDetalle;
 use App\Models\Producto;
 use App\Models\Termino;
 use Database\Seeders\AmpliacionMenuSeeder;
+use Database\Seeders\AjusteBebidasSeeder;
 use Database\Seeders\CategoriaSeeder;
 use Database\Seeders\ComplementoSeeder;
 use Database\Seeders\ProductoComplementoSeeder;
@@ -36,11 +37,14 @@ class AmpliacionMenuTest extends TestCase
 
     public function test_agrega_catalogos_completos_sin_duplicar_ni_cambiar_ventas_anteriores(): void
     {
-        $limon = $this->producto('Bebidas', 'Limón / Cereza');
-        $limon->update(['precio' => '30.00']); // precio del catálogo anterior
+        $limon = $this->producto('Bebidas', 'Limita');
+        $limon->update(['nombre' => 'Limón / Cereza', 'precio' => '30.00']); // catálogo anterior
         $orden = Orden::create(['nombre' => '7']);
         $venta = OrdenDetalle::create(['idOrden' => $orden->idOrden, 'idProducto' => $limon->id, 'cantidad' => 2]);
         $this->producto('Tacos', 'Pollo')->update(['precio' => '22.00']);
+        $this->seed(AjusteBebidasSeeder::class);
+        $this->seed(AjusteBebidasSeeder::class);
+        $this->assertSame('30.00', $limon->fresh()->precio, 'Cambiar el nombre conserva el precio existente');
         $this->seed(AmpliacionMenuSeeder::class);
         $this->seed(AmpliacionMenuSeeder::class);
         $this->seed(ProductoPrecioSeeder::class);
@@ -55,7 +59,11 @@ class AmpliacionMenuTest extends TestCase
         $this->assertSame('15.00', $sope->precio);
         $this->assertSame(1, Producto::where('categoria_id', $sope->categoria_id)->where('nombre', 'Queso')->count());
         $this->assertTrue($this->producto('Lonches')->complementos->contains('nombre', 'Salsa verde'));
-        $this->assertSame($limon->id, $this->producto('Bebidas', 'Limón / Cereza')->id);
+        $this->assertSame($limon->id, $this->producto('Bebidas', 'Limita')->id);
+        $this->assertSame(0, Producto::where('nombre', 'Limón / Cereza')->count());
+        $this->assertSame('20.00', $this->producto('Bebidas', 'Coquita 235')->precio);
+        $this->assertSame('Refrescos', $this->producto('Bebidas', 'Coquita 235')->grupo);
+        $this->assertSame(1, Producto::where('nombre', 'Coquita 235')->count());
         $this->assertSame('60.00', $limon->fresh()->precio);
         $this->assertSame('Alcohol', $limon->fresh()->grupo);
         $this->assertSame('30.00', $this->producto('Bebidas', 'Cerveza')->precio);

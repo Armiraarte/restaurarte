@@ -366,16 +366,16 @@ const PRODUCTOS_INICIALES: ProductCatalogItem[] = [
   { id: 'b-coca-zero', name: 'Coca Zero', category: 'Bebidas', price: 30 },
   { id: 'b-coca-light', name: 'Coca Light', category: 'Bebidas', price: 30 },
   { id: 'b-coca-medio', name: 'Coca 1/2', category: 'Bebidas', price: 25 },
+  { id: 'b-coquita-235', name: 'Coquita 235', category: 'Bebidas', price: 20 },
   { id: 'b-mirinda', name: 'Mirinda', category: 'Bebidas', price: 20 },
   { id: 'b-7up', name: '7UP', category: 'Bebidas', price: 20 },
   { id: 'b-jumex-manzana', name: 'Jumex Manzana', category: 'Bebidas', price: 30 },
   { id: 'b-jumex-durazno', name: 'Jumex Durazno', category: 'Bebidas', price: 30 },
   { id: 'b-manzanita', name: 'Manzanita', category: 'Bebidas', price: 20 },
-  { id: 'b-limon-cereza', name: 'Limón / Cereza', category: 'Bebidas', price: 30 }, // nombre pendiente de confirmar
+  { id: 'b-limon-cereza', name: 'Limita', category: 'Bebidas', price: 60 },
   { id: 'b-agua-mineral', name: 'Agua Mineral', category: 'Bebidas', price: 30 },
   { id: 'b-agua-natural', name: 'Agua Natural', category: 'Bebidas', price: 20 },
   { id: 'b-sangria', name: 'Sangría', category: 'Bebidas', price: 20 },
-  // Coquita no se carga: su precio ($20 o $25) está pendiente de confirmar.
 ];
 
 /** Datos del menú que el restaurante debe confirmar antes de producción. */
@@ -384,8 +384,6 @@ export const PENDIENTES_MENU = [
   'Quesadillas: confirmar cómo funciona "OPCIÓN CON QUESO" (se cargó como Con queso / Sin queso).',
   'Enchiladas: confirmar si "Queso/Cebolla" es queso con cebolla o dos opciones (se dejó literal).',
   'Coca-Cola: confirmar la presentación de la de $30 junto a Coca Zero y Coca Light.',
-  'Coquita: confirmar si cuesta $20 o $25 (no se cargó).',
-  'Limón / Cereza: confirmar el nombre exacto.',
   'Bebidas: confirmar a qué producto corresponde la anotación de $50.',
 ];
 

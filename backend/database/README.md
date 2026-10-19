@@ -252,8 +252,6 @@ Pendientes identificados en `PENDIENTES_MENU`, antes de completar el registro:
 - Confirmar cómo funciona la opción de queso en quesadillas.
 - Confirmar si "Queso/Cebolla" en enchiladas es una o dos opciones.
 - Confirmar la presentación de Coca-Cola de `30.00`.
-- Confirmar el precio de Coquita (`20.00` o `25.00`); aún no está en el catálogo.
-- Confirmar el nombre exacto de "Limón / Cereza".
 - Identificar a qué bebida corresponde la anotación de `50.00`.
 
 ## 3. Cargar datos con seeders
@@ -355,6 +353,16 @@ y Carne de res ($20), y los complementos Mango, BFF, BBQ, Jitomate, Queso
 y Pepino. En Bebidas, Limón / Cereza cambia al grupo Alcohol y cuesta $60;
 Cerveza cuesta $30 y pertenece al mismo grupo. Se actualiza el producto
 original de Limón / Cereza sin modificar los subtotales de ventas anteriores.
+
+El nombre confirmado de esa bebida es **Limita**, dentro de Alcohol. **Coquita 235**
+pertenece a Refrescos y cuesta $20. `AjusteBebidasSeeder` renombra el registro original
+conservando su ID y precio, y registra Coquita sin duplicarla al repetir la carga.
+En `DatabaseSeeder` se ejecuta antes de `ProductoSeeder` para actualizar también
+las instalaciones que todavía tienen el nombre anterior. Para aplicar solo este ajuste:
+
+```powershell
+.\artisan.ps1 db:seed --class=AjusteBebidasSeeder --force
+```
 
 ### Orden completa de papas y distribución de opciones
 
