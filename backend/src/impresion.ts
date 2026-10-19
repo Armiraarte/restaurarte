@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import path from 'node:path';
 import { Router } from 'express';
 import { config } from './config.js';
 import { requireAuth } from './auth.js';
@@ -73,6 +75,22 @@ function ticketDePrueba(usuario: string, destino: DestinoImpresion): LineaTicket
 
 export const impresionRouter = Router();
 impresionRouter.use(requireAuth);
+
+// Instalador de las impresoras (drivers de la Star TSP143 + registro de la Axiohm) para la computadora donde se
+// conectan. Vive en la carpeta de datos del servidor (no en el repositorio, que es público): data/descargas/.
+const INSTALADOR = path.join(config.dataDir, 'descargas', 'drivers-impresoras.zip');
+
+impresionRouter.get('/instalador', (req, res) => {
+  if (!['admin', 'cajero'].includes(req.usuario!.rol)) {
+    res.status(403).json({ error: 'Solo administración o caja pueden descargar el instalador.' });
+    return;
+  }
+  if (!existsSync(INSTALADOR)) {
+    res.status(404).json({ error: 'El instalador de impresoras no está en el servidor.' });
+    return;
+  }
+  res.download(INSTALADOR, 'Drivers-impresoras-SOFT-RESTAURANTE.zip');
+});
 
 impresionRouter.get('/estado', async (_req, res) => {
   try {

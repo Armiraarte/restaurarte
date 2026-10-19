@@ -46,3 +46,29 @@ export function asignarImpresora(destino: DestinoImpresion, impresora: string): 
 export function imprimirPrueba(destino: DestinoImpresion = 'caja'): Promise<{ ok: true; impresora: string; destino: DestinoImpresion }> {
   return pedir('/prueba', { method: 'POST', body: JSON.stringify({ destino }) });
 }
+
+/**
+ * Descarga el instalador de las impresoras (drivers de la Star TSP143 y registro de la Axiohm) para abrirlo en
+ * la computadora donde están conectadas. Una página web no puede instalar drivers: se descarga y se abre
+ * INSTALAR.cmd (pide permiso de administrador).
+ */
+export async function descargarInstaladorImpresoras(): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetch('/api/impresion/instalador', { headers: { Authorization: `Bearer ${getToken()}` } });
+  } catch {
+    throw new Error('No se pudo conectar con el servidor.');
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'No se pudo descargar el instalador.');
+  }
+  const url = URL.createObjectURL(await res.blob());
+  const enlace = document.createElement('a');
+  enlace.href = url;
+  enlace.download = 'Drivers-impresoras-SOFT-RESTAURANTE.zip';
+  document.body.appendChild(enlace);
+  enlace.click();
+  enlace.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}

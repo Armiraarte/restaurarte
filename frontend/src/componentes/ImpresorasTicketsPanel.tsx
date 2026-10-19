@@ -1,6 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Banknote, Check, ChefHat, Loader2, Plug, Printer, RefreshCw, Unplug } from 'lucide-react';
-import { asignarImpresora, DestinoImpresion, EstadoImpresion, imprimirPrueba, obtenerEstadoImpresion } from '../services/impresionService';
+import { Banknote, Check, ChefHat, Download, Loader2, Plug, Printer, RefreshCw, Unplug, Wrench } from 'lucide-react';
+import {
+  asignarImpresora,
+  descargarInstaladorImpresoras,
+  DestinoImpresion,
+  EstadoImpresion,
+  imprimirPrueba,
+  obtenerEstadoImpresion,
+} from '../services/impresionService';
 
 const INTERVALO_REVISION_MS = 30_000;
 
@@ -83,6 +90,12 @@ export const ImpresorasTicketsPanel: React.FC = () => {
     .filter((i) => i.usb || Object.values(nombres).includes(i.nombre));
   const conectadas = impresoras.filter((i) => i.conectada).length;
   const desconectadas = impresoras.length - conectadas;
+  // Sin agente, sin impresoras de tickets o con una asignada que no está: se ofrece el instalador.
+  const faltanImpresoras =
+    !!estado &&
+    (!estado.agente ||
+      impresoras.length === 0 ||
+      DESTINOS.some(({ id }) => !nombres[id] || !(estado.destinos?.[id] ?? estado.impresoras?.find((i) => i.nombre === nombres[id]))?.conectada));
 
   return (
     <div className="bg-white border border-neutral-200 rounded-xl p-5 space-y-5">
@@ -148,6 +161,8 @@ export const ImpresorasTicketsPanel: React.FC = () => {
           </div>
         </div>
       )}
+
+      <InstalarImpresoras destacado={faltanImpresoras} />
 
       {aviso && (
         <div
@@ -244,3 +259,75 @@ export const ImpresorasTicketsPanel: React.FC = () => {
     </div>
   );
 };
+
+/**
+ * Instalar las impresoras desde aquí: descarga el instalador (drivers de la Star TSP143 y registro de la Axiohm)
+ * para abrirlo en la computadora donde están conectadas. Destacado cuando no se detectan; si no, un enlace discreto.
+ */
+function InstalarImpresoras({ destacado }: { destacado: boolean }) {
+  const [descargando, setDescargando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [listo, setListo] = useState(false);
+
+  const descargar = async () => {
+    setDescargando(true);
+    setError(null);
+    try {
+      await descargarInstaladorImpresoras();
+      setListo(true);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setDescargando(false);
+    }
+  };
+
+  const boton = (
+    <button
+      type="button"
+      onClick={descargar}
+      disabled={descargando}
+      className={`flex items-center justify-center gap-2 rounded-lg font-semibold cursor-pointer disabled:opacity-60 ${
+        destacado
+          ? 'px-4 py-2.5 text-sm bg-amber-500 hover:bg-amber-400 text-neutral-950'
+          : 'px-3 py-1.5 text-xs border border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-700'
+      }`}
+    >
+      {descargando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+      {descargando ? 'Descargando…' : 'Descargar instalador de impresoras'}
+    </button>
+  );
+
+  if (!destacado) {
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-neutral-500">
+        <span>¿Vas a conectar las impresoras en otra computadora?</span>
+        {boton}
+        {error && <span className="w-full text-rose-700">{error}</span>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-4 space-y-3">
+      <div className="flex items-start gap-2.5">
+        <Wrench className="w-5 h-5 shrink-0 mt-0.5 text-amber-700" />
+        <div>
+          <div className="text-sm font-bold text-amber-950">¿No aparecen las impresoras? Instálalas desde aquí</div>
+          <p className="text-xs text-amber-900 mt-0.5">En la computadora donde están conectadas por USB (Star TSP143 de cocina y Axiohm de caja):</p>
+        </div>
+      </div>
+      <ol className="list-decimal pl-9 text-xs text-amber-950 space-y-0.5">
+        <li>Descarga el instalador y descomprímelo (clic derecho → Extraer todo).</li>
+        <li>Conecta y enciende las impresoras.</li>
+        <li>Doble clic en <b>INSTALAR.cmd</b> y acepta el permiso de administrador.</li>
+        <li>Regresa aquí y toca «Volver a revisar».</li>
+      </ol>
+      <div className="flex flex-wrap items-center gap-3">
+        {boton}
+        {listo && <span className="text-xs font-medium text-emerald-800">Descargado: ábrelo en esa computadora.</span>}
+        {error && <span className="text-xs text-rose-700">{error}</span>}
+      </div>
+    </div>
+  );
+}
