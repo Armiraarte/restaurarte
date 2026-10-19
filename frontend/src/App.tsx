@@ -160,7 +160,7 @@ function PosDashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () =>
   const tabletsTotal = tabletsEnLinea?.length ?? 0;
   const sinTurno = turnoCaja === null;
   const enOrdenes = !verConfiguracion && currentTab === 'mesas' && !sinTurno;
-  const contenidoAjustado = enOrdenes || (!verConfiguracion && currentTab === 'turnos');
+  const contenidoAjustado = enOrdenes || (!verConfiguracion && (currentTab === 'turnos' || currentTab === 'ventas'));
   const [avisoTurnoVisto, setAvisoTurnoVisto] = useState(false);
 
   // Sync with shared central data service

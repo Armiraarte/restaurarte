@@ -5,13 +5,11 @@
 //   GET  /api/turnos/:id/resumen           resumen de un corte anterior
 //   POST /api/turnos/:id/imprimir-corte    reimprimir
 // Se actualiza sola con los avisos en vivo (órdenes y turno).
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertTriangle,
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
   Clock,
   MoonStar,
   Eye,
@@ -39,6 +37,7 @@ import {
 } from '../services/turnosService';
 import { useEnVivo } from '../services/enVivo';
 import { SeccionSinTurno } from './TurnoRequerido';
+import { ListaPaginada } from './ListaPaginada';
 import type { MainNavTab } from './SeccionesNav';
 
 const dinero = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -222,55 +221,6 @@ const Indicador: React.FC<{
     {nota && <div className={`text-xs mt-0.5 ${destacado ? 'text-neutral-400' : alerta ? 'text-amber-800' : 'text-neutral-500'}`}>{nota}</div>}
   </div>
 );
-
-/** Calcula cuántos registros caben; los demás siguen accesibles con las flechas. */
-function ListaPaginada<T>({ items, etiqueta, altoFila, columnas = false, clave, renderizar, vacio = 'No hay registros.' }: {
-  items: T[];
-  etiqueta: string;
-  altoFila: number;
-  columnas?: boolean;
-  clave: (item: T) => React.Key;
-  renderizar: (item: T) => React.ReactNode;
-  vacio?: string;
-}) {
-  const espacio = useRef<HTMLDivElement>(null);
-  const [tamano, setTamano] = useState({ filas: 1, columnas: 1 });
-  const [pagina, setPagina] = useState(0);
-  useLayoutEffect(() => {
-    const elemento = espacio.current;
-    if (!elemento) return;
-    const medir = () => {
-      const cantidadColumnas = columnas ? (elemento.clientWidth >= 960 ? 3 : elemento.clientWidth >= 560 ? 2 : 1) : 1;
-      const filas = Math.max(1, Math.floor(elemento.clientHeight / altoFila));
-      setTamano((anterior) => anterior.filas === filas && anterior.columnas === cantidadColumnas ? anterior : { filas, columnas: cantidadColumnas });
-    };
-    medir();
-    const observador = new ResizeObserver(medir);
-    observador.observe(elemento);
-    return () => observador.disconnect();
-  }, [altoFila, columnas]);
-  const capacidad = tamano.filas * tamano.columnas;
-  const paginas = Math.max(1, Math.ceil(items.length / capacidad));
-  const actual = Math.min(pagina, paginas - 1);
-  useEffect(() => setPagina((anterior) => Math.min(anterior, paginas - 1)), [paginas]);
-  const inicio = actual * capacidad;
-  return (
-    <div data-lista-paginada={etiqueta} className="flex-1 min-h-0 flex flex-col px-3 pb-2 pt-1">
-      <div ref={espacio} data-registros className="flex-1 min-h-0 grid content-start gap-x-4 overflow-hidden" style={{ gridTemplateColumns: `repeat(${tamano.columnas}, minmax(0, 1fr))`, gridAutoRows: altoFila }}>
-        {items.slice(inicio, inicio + capacidad).map((item) => <div key={clave(item)} className="min-w-0">{renderizar(item)}</div>)}
-        {items.length === 0 && <p className="col-span-full text-xs py-2 text-neutral-500">{vacio}</p>}
-      </div>
-      <nav aria-label={`Páginas de ${etiqueta}`} className="shrink-0 h-9 border-t border-neutral-100 flex items-center justify-between gap-2 text-xs text-neutral-500">
-        <span>{items.length ? `${inicio + 1}–${Math.min(inicio + capacidad, items.length)} de ${items.length}` : `0 ${etiqueta}`}</span>
-        <span className="flex items-center gap-2">
-          <button onClick={() => setPagina(actual - 1)} disabled={actual === 0} aria-label={`Anterior: ${etiqueta}`} className="w-8 h-8 rounded-lg border border-neutral-200 flex items-center justify-center cursor-pointer disabled:opacity-30"><ChevronLeft className="w-4 h-4" /></button>
-          <span className="font-mono">{actual + 1}/{paginas}</span>
-          <button onClick={() => setPagina(actual + 1)} disabled={actual + 1 >= paginas} aria-label={`Siguiente: ${etiqueta}`} className="w-8 h-8 rounded-lg border border-neutral-200 flex items-center justify-center cursor-pointer disabled:opacity-30"><ChevronRight className="w-4 h-4" /></button>
-        </span>
-      </nav>
-    </div>
-  );
-}
 
 const ProductosVendidos: React.FC<{ productos: ResumenTurno['productos']; sinTitulo?: boolean }> = ({ productos, sinTitulo }) => (
   <div data-productos-vendidos className="flex-1 min-h-0 flex flex-col">
