@@ -5,11 +5,13 @@
 //   GET  /api/turnos/:id/resumen           resumen de un corte anterior
 //   POST /api/turnos/:id/imprimir-corte    reimprimir
 // Se actualiza sola con los avisos en vivo (órdenes y turno).
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   MoonStar,
   Eye,
@@ -56,6 +58,8 @@ export const TurnosView: React.FC<{ onIrA: (tab: MainNavTab) => void }> = ({ onI
   const [confirmando, setConfirmando] = useState(false);
   const [corteHecho, setCorteHecho] = useState<{ resumen: ResumenTurno; impresion: Impresion } | null>(null);
   const [verCorte, setVerCorte] = useState<number | null>(null);
+  const [listado, setListado] = useState<'productos' | 'pendientes'>('productos');
+  const [panelMovil, setPanelMovil] = useState<'productos' | 'historial'>('productos');
 
   const cargar = useCallback(async () => {
     try {
@@ -77,17 +81,17 @@ export const TurnosView: React.FC<{ onIrA: (tab: MainNavTab) => void }> = ({ onI
   const pendientes = resumen?.pendientes ?? [];
 
   return (
-    <div className="space-y-6">
-      <div>
+    <div data-turnos className="h-full min-h-0 flex flex-col gap-2">
+      <div className="shrink-0">
         <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
           <Clock className="w-5 h-5 text-red-500" />
           <span>Turnos</span>
         </h2>
-        <p className="text-xs text-neutral-500 mt-0.5">Turno de caja actual, corte de turno y cortes anteriores.</p>
+        <p className="text-xs text-neutral-500 mt-0.5 [@media(max-height:700px)]:hidden">Turno de caja actual, corte de turno y cortes anteriores.</p>
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 text-sm text-rose-700 bg-rose-50 border border-rose-200 px-3 py-2 rounded-lg">
+        <div className="shrink-0 flex items-center gap-2 text-sm text-rose-700 bg-rose-50 border border-rose-200 px-3 py-2 rounded-lg">
           <AlertTriangle className="w-4 h-4 shrink-0" /> {error}
         </div>
       )}
@@ -100,8 +104,8 @@ export const TurnosView: React.FC<{ onIrA: (tab: MainNavTab) => void }> = ({ onI
       ) : resumen === null ? (
         <SeccionSinTurno seccion="El corte" />
       ) : (
-        <section className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
-          <div className="px-5 py-4 flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200">
+        <section className="shrink-0 bg-white border border-neutral-200 rounded-2xl overflow-hidden">
+          <div className="px-4 py-1.5 flex flex-wrap items-center justify-between gap-2 border-b border-neutral-200">
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-lg font-bold">Turno #{resumen.turno.idTurno}</span>
@@ -118,14 +122,14 @@ export const TurnosView: React.FC<{ onIrA: (tab: MainNavTab) => void }> = ({ onI
               onClick={() => setConfirmando(true)}
               disabled={pendientes.length > 0}
               title={pendientes.length > 0 ? 'Cobra las órdenes pendientes antes del corte' : undefined}
-              className="h-12 px-5 rounded-xl bg-red-500 hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold flex items-center gap-2 cursor-pointer"
+              className="h-10 px-4 rounded-xl bg-red-500 hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold flex items-center gap-2 cursor-pointer"
             >
               <Scissors className="w-5 h-5" /> Hacer corte de turno
             </button>
           </div>
 
           {/* Indicadores */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 p-5">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-2">
             <Indicador icono={TrendingUp} titulo="Vendido" valor={dinero(resumen.totalVendido)} destacado />
             <Indicador icono={Receipt} titulo="Órdenes cobradas" valor={String(resumen.ordenes.pagadas)} />
             <Indicador
@@ -143,54 +147,41 @@ export const TurnosView: React.FC<{ onIrA: (tab: MainNavTab) => void }> = ({ onI
             />
           </div>
 
-          {/* Pendientes que bloquean el corte */}
-          {pendientes.length > 0 && (
-            <div className="mx-5 mb-5 rounded-xl border border-amber-300 bg-amber-50 p-4 space-y-2">
-              <div className="flex items-center gap-2 text-sm font-semibold text-amber-900">
-                <Lock className="w-4 h-4" /> Para hacer el corte, cobra primero estas órdenes:
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {pendientes.map((p) => (
-                  <span key={p.idOrden} className="text-xs px-2.5 py-1 rounded-lg bg-white border border-amber-200">
-                    <b>{p.nombre}</b> · {dinero(p.total)} · {p.estatus === 1 ? 'pidió la cuenta' : 'abierta'}
-                  </span>
-                ))}
-              </div>
-              <div className="flex gap-2 pt-1">
-                <button onClick={() => onIrA('cajas')} className="h-9 px-3 rounded-lg bg-white border border-amber-300 text-sm font-semibold cursor-pointer">
-                  Ir a Cajas
-                </button>
-                <button onClick={() => onIrA('mesas')} className="h-9 px-3 rounded-lg bg-white border border-amber-300 text-sm font-semibold cursor-pointer">
-                  Ir a Órdenes
-                </button>
-              </div>
-            </div>
-          )}
-
-          <ProductosVendidos productos={resumen.productos} />
         </section>
       )}
 
-      {/* Historial de cortes */}
-      <section className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-neutral-200 flex items-center gap-2">
-          <History className="w-5 h-5 text-neutral-500" />
-          <h3 className="font-bold">Cortes anteriores</h3>
-        </div>
-        {historial === null ? (
-          <div className="py-8 flex justify-center text-neutral-400">
-            <Loader2 className="w-5 h-5 animate-spin" />
+      <div className="shrink-0 md:hidden grid grid-cols-2 gap-2">
+        <button onClick={() => setPanelMovil('productos')} aria-pressed={panelMovil === 'productos'} className="h-9 rounded-lg border bg-white aria-pressed:bg-neutral-900 aria-pressed:text-white font-semibold text-sm">Productos vendidos</button>
+        <button onClick={() => setPanelMovil('historial')} aria-pressed={panelMovil === 'historial'} className="h-9 rounded-lg border bg-white aria-pressed:bg-neutral-900 aria-pressed:text-white font-semibold text-sm">Cortes anteriores</button>
+      </div>
+
+      <div className="flex-1 min-h-0 grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
+        <section className={(panelMovil === 'productos' ? 'flex ' : 'hidden ') + 'md:flex min-h-0 flex-col bg-white border border-neutral-200 rounded-2xl overflow-hidden'}>
+          <div className="shrink-0 px-4 py-2 border-b border-neutral-200 flex items-center gap-2">
+            <h3 className="font-bold text-sm">{listado === 'pendientes' && pendientes.length > 0 ? 'Órdenes por cobrar' : 'Productos vendidos'}</h3>
+            {pendientes.length > 0 && <button onClick={() => setListado((actual) => actual === 'productos' ? 'pendientes' : 'productos')} aria-pressed={listado === 'pendientes'} className="ml-auto h-8 px-2 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 text-xs font-bold flex items-center gap-1"><Lock className="w-3.5 h-3.5" />{listado === 'pendientes' ? 'Ver productos' : `Por cobrar (${pendientes.length})`}</button>}
           </div>
-        ) : historial.length === 0 ? (
-          <p className="px-5 py-8 text-center text-sm text-neutral-500">Aún no se ha hecho ningún corte.</p>
-        ) : (
-          <div className="divide-y divide-neutral-100">
-            {historial.map((t) => (
-              <FilaCorte key={t.idTurno} turno={t} onVer={() => setVerCorte(t.idTurno)} />
-            ))}
+          {listado === 'pendientes' && pendientes.length > 0 ? (
+            <>
+              <div className="shrink-0 px-3 py-2 flex flex-wrap items-center gap-2 text-xs text-amber-900">
+                <span className="flex-1">Cobra estas órdenes antes del corte.</span>
+                <button onClick={() => onIrA('cajas')} className="h-8 px-2 rounded-lg border border-amber-300 font-semibold">Ir a Cajas</button>
+                <button onClick={() => onIrA('mesas')} className="h-8 px-2 rounded-lg border border-amber-300 font-semibold">Ir a Órdenes</button>
+              </div>
+              <ListaPaginada items={pendientes} etiqueta="órdenes pendientes" altoFila={32} columnas clave={(p) => p.idOrden} renderizar={(p) => <div title={p.nombre} className="h-full flex items-center gap-2 border-b border-neutral-100 text-xs"><b className="flex-1 min-w-0 truncate">{p.nombre}</b><span>{p.estatus === 1 ? 'Pidió cuenta' : 'Abierta'}</span><span className="font-mono">{dinero(p.total)}</span></div>} />
+            </>
+          ) : <ProductosVendidos productos={resumen?.productos ?? []} sinTitulo />}
+        </section>
+
+        <section className={(panelMovil === 'historial' ? 'flex ' : 'hidden ') + 'md:flex min-h-0 flex-col bg-white border border-neutral-200 rounded-2xl overflow-hidden'}>
+          <div className="shrink-0 px-4 py-2 border-b border-neutral-200 flex items-center gap-2">
+            <History className="w-4 h-4 text-neutral-500" />
+            <h3 className="font-bold text-sm">Cortes anteriores</h3>
           </div>
-        )}
-      </section>
+          {historial === null ? <div className="py-6 flex justify-center text-neutral-400"><Loader2 className="w-5 h-5 animate-spin" /></div>
+            : <ListaPaginada items={historial} etiqueta="cortes" altoFila={144} clave={(t) => t.idTurno} vacio="Aún no se ha hecho ningún corte." renderizar={(t) => <FilaCorte turno={t} onVer={() => setVerCorte(t.idTurno)} />} />}
+        </section>
+      </div>
 
       <AnimatePresence>
         {confirmando && resumen && (
@@ -220,34 +211,77 @@ const Indicador: React.FC<{
   alerta?: boolean;
 }> = ({ icono: Icono, titulo, valor, nota, destacado, alerta }) => (
   <div
-    className={`rounded-xl border p-4 ${
+    className={`rounded-xl border px-3 py-1.5 ${
       destacado ? 'bg-neutral-900 text-white border-neutral-900' : alerta ? 'bg-amber-50 border-amber-300' : 'bg-white border-neutral-200'
     }`}
   >
     <div className={`flex items-center gap-1.5 text-xs ${destacado ? 'text-neutral-400' : 'text-neutral-500'}`}>
       <Icono className="w-4 h-4" /> {titulo}
     </div>
-    <div className="text-2xl font-bold font-mono mt-1">{valor}</div>
+    <div className="text-xl font-bold font-mono mt-0.5">{valor}</div>
     {nota && <div className={`text-xs mt-0.5 ${destacado ? 'text-neutral-400' : alerta ? 'text-amber-800' : 'text-neutral-500'}`}>{nota}</div>}
   </div>
 );
 
-const ProductosVendidos: React.FC<{ productos: ResumenTurno['productos'] }> = ({ productos }) => (
-  <div className="border-t border-neutral-200">
-    <div className="px-5 py-3 text-xs font-bold uppercase tracking-widest text-neutral-500">Productos vendidos</div>
-    {productos.length === 0 ? (
-      <p className="px-5 pb-5 text-sm text-neutral-500">Todavía no hay órdenes cobradas en este turno.</p>
-    ) : (
-      <div className="px-5 pb-4 max-h-80 overflow-y-auto">
-        {productos.map((p) => (
-          <div key={p.nombre} className="flex items-baseline gap-3 py-1.5 border-b border-neutral-100 last:border-0 text-sm">
-            <span className="w-10 text-right font-mono font-bold">{p.cantidad}</span>
-            <span className="flex-1 min-w-0 truncate">{p.nombre}</span>
-            <span className="font-mono font-semibold">{dinero(p.importe)}</span>
-          </div>
-        ))}
+/** Calcula cuántos registros caben; los demás siguen accesibles con las flechas. */
+function ListaPaginada<T>({ items, etiqueta, altoFila, columnas = false, clave, renderizar, vacio = 'No hay registros.' }: {
+  items: T[];
+  etiqueta: string;
+  altoFila: number;
+  columnas?: boolean;
+  clave: (item: T) => React.Key;
+  renderizar: (item: T) => React.ReactNode;
+  vacio?: string;
+}) {
+  const espacio = useRef<HTMLDivElement>(null);
+  const [tamano, setTamano] = useState({ filas: 1, columnas: 1 });
+  const [pagina, setPagina] = useState(0);
+  useLayoutEffect(() => {
+    const elemento = espacio.current;
+    if (!elemento) return;
+    const medir = () => {
+      const cantidadColumnas = columnas ? (elemento.clientWidth >= 960 ? 3 : elemento.clientWidth >= 560 ? 2 : 1) : 1;
+      const filas = Math.max(1, Math.floor(elemento.clientHeight / altoFila));
+      setTamano((anterior) => anterior.filas === filas && anterior.columnas === cantidadColumnas ? anterior : { filas, columnas: cantidadColumnas });
+    };
+    medir();
+    const observador = new ResizeObserver(medir);
+    observador.observe(elemento);
+    return () => observador.disconnect();
+  }, [altoFila, columnas]);
+  const capacidad = tamano.filas * tamano.columnas;
+  const paginas = Math.max(1, Math.ceil(items.length / capacidad));
+  const actual = Math.min(pagina, paginas - 1);
+  useEffect(() => setPagina((anterior) => Math.min(anterior, paginas - 1)), [paginas]);
+  const inicio = actual * capacidad;
+  return (
+    <div data-lista-paginada={etiqueta} className="flex-1 min-h-0 flex flex-col px-3 pb-2 pt-1">
+      <div ref={espacio} data-registros className="flex-1 min-h-0 grid content-start gap-x-4 overflow-hidden" style={{ gridTemplateColumns: `repeat(${tamano.columnas}, minmax(0, 1fr))`, gridAutoRows: altoFila }}>
+        {items.slice(inicio, inicio + capacidad).map((item) => <div key={clave(item)} className="min-w-0">{renderizar(item)}</div>)}
+        {items.length === 0 && <p className="col-span-full text-xs py-2 text-neutral-500">{vacio}</p>}
       </div>
-    )}
+      <nav aria-label={`Páginas de ${etiqueta}`} className="shrink-0 h-9 border-t border-neutral-100 flex items-center justify-between gap-2 text-xs text-neutral-500">
+        <span>{items.length ? `${inicio + 1}–${Math.min(inicio + capacidad, items.length)} de ${items.length}` : `0 ${etiqueta}`}</span>
+        <span className="flex items-center gap-2">
+          <button onClick={() => setPagina(actual - 1)} disabled={actual === 0} aria-label={`Anterior: ${etiqueta}`} className="w-8 h-8 rounded-lg border border-neutral-200 flex items-center justify-center cursor-pointer disabled:opacity-30"><ChevronLeft className="w-4 h-4" /></button>
+          <span className="font-mono">{actual + 1}/{paginas}</span>
+          <button onClick={() => setPagina(actual + 1)} disabled={actual + 1 >= paginas} aria-label={`Siguiente: ${etiqueta}`} className="w-8 h-8 rounded-lg border border-neutral-200 flex items-center justify-center cursor-pointer disabled:opacity-30"><ChevronRight className="w-4 h-4" /></button>
+        </span>
+      </nav>
+    </div>
+  );
+}
+
+const ProductosVendidos: React.FC<{ productos: ResumenTurno['productos']; sinTitulo?: boolean }> = ({ productos, sinTitulo }) => (
+  <div data-productos-vendidos className="flex-1 min-h-0 flex flex-col">
+    {!sinTitulo && <div className="shrink-0 px-4 py-2 text-xs font-bold uppercase tracking-widest text-neutral-500">Productos vendidos</div>}
+    <ListaPaginada items={productos} etiqueta="productos" altoFila={32} columnas clave={(p) => p.nombre} vacio="Todavía no hay órdenes cobradas en este turno." renderizar={(p) => (
+      <div className="h-full flex items-center gap-2 border-b border-neutral-100 text-xs">
+        <span className="w-7 shrink-0 text-right font-mono font-bold">{p.cantidad}</span>
+        <span title={p.nombre} className="flex-1 min-w-0 truncate">{p.nombre}</span>
+        <span className="shrink-0 font-mono font-semibold">{dinero(p.importe)}</span>
+      </div>
+    )} />
   </div>
 );
 
@@ -263,21 +297,18 @@ const FilaCorte: React.FC<{ turno: TurnoCerrado; onVer: () => void }> = ({ turno
     }
   };
   return (
-    <div className="px-5 py-3 flex flex-wrap items-center gap-x-5 gap-y-2">
-      <div className="flex-1 min-w-48">
-        <div className="font-bold">Turno #{t.idTurno}</div>
-        <div className="text-xs text-neutral-500">
-          {fechaHora(t.fecha_inicio)} → {fechaHora(t.fecha_fin)} · {duracion(t.fecha_inicio, t.fecha_fin)} · abrió {t.abrio}
-          {textoCierre(t.cierre_tipo, t.cerro) && ` · ${textoCierre(t.cierre_tipo, t.cerro)}`}
-        </div>
-        <EtiquetasCierre tipo={t.cierre_tipo} pendientes={t.ordenes_pendientes} />
+    <div className="h-full py-2 border-b border-neutral-100 flex flex-col gap-1.5">
+      <div className="flex items-center justify-between gap-2"><b className="text-sm">Turno #{t.idTurno}</b><span className="font-bold font-mono">{dinero(t.total_vendido)}</span></div>
+      <div className="flex-1 min-h-0 text-[11px] text-neutral-500">
+        <div>{fechaHora(t.fecha_inicio)} → {fechaHora(t.fecha_fin)}</div>
+        {!impresion.texto && <>
+          <div className="truncate" title={`Abrió ${t.abrio} · ${textoCierre(t.cierre_tipo, t.cerro)}`}>Abrió {t.abrio} · {duracion(t.fecha_inicio, t.fecha_fin)}{textoCierre(t.cierre_tipo, t.cerro) && ` · ${textoCierre(t.cierre_tipo, t.cerro)}`}</div>
+          <EtiquetasCierre tipo={t.cierre_tipo} pendientes={t.ordenes_pendientes} compacta />
+        </>}
+        {impresion.texto && <p role="status" className={`truncate ${impresion.ok ? 'text-emerald-700' : 'text-amber-700'}`} title={impresion.texto}>{impresion.texto}</p>}
       </div>
-      <div className="text-right">
-        <div className="text-lg font-bold font-mono">{dinero(t.total_vendido)}</div>
-        <div className="text-xs text-neutral-500">{t.ordenes_cobradas} órdenes</div>
-      </div>
-      <div className="flex items-center gap-2">
-        {impresion.texto && <span className={`text-xs ${impresion.ok ? 'text-emerald-700' : 'text-amber-700'}`}>{impresion.texto}</span>}
+      <div className="shrink-0 flex items-center gap-2">
+        <span className="flex-1 text-xs text-neutral-500">{t.ordenes_cobradas} órdenes</span>
         <button onClick={onVer} className="h-9 px-3 rounded-lg border border-neutral-200 hover:bg-neutral-50 text-sm font-semibold flex items-center gap-1.5 cursor-pointer">
           <Eye className="w-4 h-4" /> Ver
         </button>
@@ -474,7 +505,7 @@ const VerCorte: React.FC<{ idTurno: number; onCerrar: () => void }> = ({ idTurno
       ) : (
         r && (
           <>
-            <div className="flex-1 min-h-0 overflow-y-auto">
+            <div className="h-[min(24rem,45dvh)] min-h-0 flex flex-col">
               <ProductosVendidos productos={r.productos} />
             </div>
             <div className="shrink-0 border-t-2 border-dashed border-neutral-200 px-5 py-4 bg-amber-50/60 flex items-end justify-between">
@@ -492,18 +523,18 @@ const VerCorte: React.FC<{ idTurno: number; onCerrar: () => void }> = ({ idTurno
 };
 
 /** Cierre automático (nadie hizo el corte) y órdenes que quedaron sin cobrar al cerrar el turno. */
-function EtiquetasCierre({ tipo, pendientes }: { tipo: TipoCierre | null; pendientes: number }) {
+function EtiquetasCierre({ tipo, pendientes, compacta = false }: { tipo: TipoCierre | null; pendientes: number; compacta?: boolean }) {
   if (tipo !== 'automatico' && pendientes === 0) return null;
   return (
-    <div className="mt-1 flex flex-wrap gap-1.5">
+    <div className={`mt-1 flex gap-1.5 ${compacta ? 'flex-nowrap' : 'flex-wrap'}`}>
       {tipo === 'automatico' && (
         <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[11px] font-bold text-indigo-800">
-          <MoonStar className="w-3.5 h-3.5" /> Cierre automático · sin corte
+          <MoonStar className="w-3.5 h-3.5 shrink-0" /> {compacta ? 'Automático' : 'Cierre automático · sin corte'}
         </span>
       )}
       {pendientes > 0 && (
         <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-800">
-          <AlertTriangle className="w-3.5 h-3.5" /> {pendientes} {pendientes === 1 ? 'orden quedó' : 'órdenes quedaron'} sin cobrar
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {pendientes} {!compacta && (pendientes === 1 ? 'orden quedó' : 'órdenes quedaron')} sin cobrar
         </span>
       )}
     </div>
