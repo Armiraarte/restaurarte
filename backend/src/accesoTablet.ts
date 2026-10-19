@@ -1,25 +1,19 @@
-// Entrada a la app de las tablets: el dispositivo elige su tablet (Tablet 01…05) sin usuario ni PIN.
+// Entrada a la app de las tablets: la tablet elige cuál es (Tablet 01…05), sin usuario ni contraseña.
 //
-//   POST /api/acceso-tablet/autorizar   { usuario, password } de caja (admin o cajero) → { dispositivo }
-//                                        una sola vez por dispositivo (ver dispositivos.ts)
-//   GET  /api/acceso-tablet/tablets      header X-Dispositivo → { turnoAbierto, tablets: [{ numero, nombre, enUso }] }
-//   POST /api/acceso-tablet/entrar       header X-Dispositivo, { numero } → { token, usuario }
-//                                        solo con turno abierto y si nadie más está usando esa tablet
+//   GET  /api/acceso-tablet/tablets   → { turnoAbierto, tablets: [{ numero, nombre, enUso }] }
+//   POST /api/acceso-tablet/entrar    { numero } → { token, usuario }
+//                                       solo con turno abierto y si nadie más está usando esa tablet
 //
-// Al hacer el corte de turno se cierran las sesiones de todas las tablets (sesionesTablet.cerrarSesionesTablet)
-// y cada una vuelve a esta pantalla a esperar el siguiente turno.
-import { Router, type Request } from 'express';
-import bcrypt from 'bcryptjs';
-import { emitirToken, HASH_FALSO } from './auth.js';
-import { aPublico, buscarPorUsuario, listarUsuarios, mysqlDisponible, buscarPorId } from './usuarios.js';
+// Sin turno abierto la tablet se queda esperando. Al hacer el corte de turno se cierran las sesiones de todas
+// las tablets (sesionesTablet.cerrarSesionesTablet) y cada una vuelve a esta pantalla a esperar el siguiente turno.
+import { Router } from 'express';
+import { emitirToken } from './auth.js';
+import { aPublico, listarUsuarios, mysqlDisponible, buscarPorId } from './usuarios.js';
 import { abrirSesionTablet, sesionEnUso } from './sesionesTablet.js';
-import { autorizarDispositivo, dispositivoAutorizado } from './dispositivos.js';
 import { turnoAbierto } from './turnos.js';
 import { pool } from './db.js';
 
 export const accesoTabletRouter = Router();
-
-const ROLES_QUE_AUTORIZAN = ['admin', 'cajero'];
 
 /** Cuentas de tablet ordenadas por número (Tablet 01, 02…). */
 const cuentasDeTablet = () =>
@@ -27,35 +21,9 @@ const cuentasDeTablet = () =>
     .filter((u) => u.rol === 'tablet' && u.tablet)
     .sort((a, b) => Number(a.tablet!.numero) - Number(b.tablet!.numero));
 
-const autorizado = (req: Request) => dispositivoAutorizado(req.headers['x-dispositivo']);
-
 const hayTurno = async () => !!pool && mysqlDisponible() && !!(await turnoAbierto());
 
-accesoTabletRouter.post('/autorizar', async (req, res) => {
-  const { usuario, password } = req.body ?? {};
-  if (typeof usuario !== 'string' || typeof password !== 'string' || !usuario.trim() || !password) {
-    res.status(400).json({ error: 'Escribe el usuario y la contraseña de caja.' });
-    return;
-  }
-  const encontrado = buscarPorUsuario(usuario);
-  const valido = await bcrypt.compare(password, encontrado?.passwordHash ?? HASH_FALSO);
-  if (!encontrado || !valido) {
-    res.status(401).json({ error: 'Usuario o contraseña incorrectos.' });
-    return;
-  }
-  if (!ROLES_QUE_AUTORIZAN.includes(encontrado.rol)) {
-    res.status(403).json({ error: 'Solo administración o caja pueden autorizar una tablet.' });
-    return;
-  }
-  console.log(`[acceso-tablet] ${encontrado.nombre} autorizó un dispositivo.`);
-  res.status(201).json({ dispositivo: autorizarDispositivo(encontrado.id) });
-});
-
-accesoTabletRouter.get('/tablets', async (req, res) => {
-  if (!autorizado(req)) {
-    res.status(401).json({ error: 'Esta tablet aún no está autorizada.', sinAutorizar: true });
-    return;
-  }
+accesoTabletRouter.get('/tablets', async (_req, res) => {
   try {
     res.json({
       turnoAbierto: await hayTurno(),
@@ -68,10 +36,6 @@ accesoTabletRouter.get('/tablets', async (req, res) => {
 });
 
 accesoTabletRouter.post('/entrar', async (req, res) => {
-  if (!autorizado(req)) {
-    res.status(401).json({ error: 'Esta tablet aún no está autorizada.', sinAutorizar: true });
-    return;
-  }
   const numero = String(req.body?.numero ?? '');
   const cuenta = cuentasDeTablet().find((u) => Number(u.tablet!.numero) === Number(numero));
   if (!cuenta) {
