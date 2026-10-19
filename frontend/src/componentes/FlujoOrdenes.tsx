@@ -1,5 +1,6 @@
 // Flujo compartido de Órdenes en caja y tablet: alta, llamada, borradores y pedido.
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AlertTriangle, ArrowLeft, Hash, Loader2, Phone, Plus, Send, User } from 'lucide-react';
 import { BORRADOR_LLAMADA, piezasSinEnviar } from '../services/borradorPedido';
@@ -290,11 +291,11 @@ function DialogoNuevaCuenta({
   };
 
   const claseOpcion = (activo: boolean) =>
-    `rounded-xl border-2 px-3 py-2.5 space-y-1.5 transition-colors cursor-pointer ${
-      activo ? 'border-emerald-400 bg-emerald-50/50' : 'border-neutral-200 bg-white hover:border-neutral-300'
+    `h-10 min-w-0 rounded-lg border-2 px-2 flex items-center justify-center gap-1.5 text-[11px] sm:text-xs font-bold transition-colors cursor-pointer ${
+      activo ? 'border-emerald-400 bg-emerald-50 text-emerald-800' : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300'
     }`;
 
-  return (
+  return createPortal(
     <motion.div
       className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-black/30"
       initial={{ opacity: 0 }}
@@ -302,67 +303,70 @@ function DialogoNuevaCuenta({
       exit={{ opacity: 0 }}
       onClick={onCancelar}
     >
-      {/* Sin scroll: en horizontal va en dos columnas (llamada y nombre | mesa y tipo) para que quepa completo. */}
+      {/* 20% menos de ancho; las tres opciones comparten una fila y muestran solo el campo necesario. */}
       <motion.div
         role="dialog"
         aria-labelledby="nueva-cuenta-titulo"
-        className="w-full max-w-sm landscape:max-w-3xl max-h-full overflow-hidden bg-white rounded-2xl shadow-xl p-4 flex flex-col gap-3"
+        className="w-full max-w-[19.2rem] landscape:max-w-[38.4rem] max-h-full overflow-hidden bg-white rounded-xl shadow-xl p-3 flex flex-col gap-2"
         initial={{ scale: 0.95, y: 10 }}
         animate={{ scale: 1, y: 0 }}
         exit={{ scale: 0.95, opacity: 0 }}
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 id="nueva-cuenta-titulo" className="text-base font-bold">
-          Abrir cuenta
+        <h2 id="nueva-cuenta-titulo" className="text-sm font-bold">
+          Agregar orden
         </h2>
 
-        <div className="grid gap-3 landscape:grid-cols-2">
-          <div className="flex flex-col gap-3">
-            {/* Pedido por teléfono: se toma de una vez y el nombre se guarda al colgar */}
-            <button
-              type="button"
-              onClick={onLlamada}
-              className="neon-solido neon-azul w-full rounded-xl px-4 py-3 flex items-center gap-3 text-left cursor-pointer"
-            >
-              <Phone className="w-7 h-7 shrink-0" />
-              <span>
-                <span className="block text-lg font-black tracking-wide">LLAMADA</span>
-                <span className="block text-xs font-medium opacity-90">Toma el pedido ya; el nombre se guarda al terminar</span>
-              </span>
-            </button>
+        <div className="grid grid-cols-3 gap-2">
+          <button
+            type="button"
+            onClick={onLlamada}
+            className="neon-solido neon-azul h-10 min-w-0 rounded-lg px-2 flex items-center justify-center gap-1.5 text-[11px] sm:text-xs font-bold cursor-pointer"
+          >
+            <Phone className="w-4 h-4 shrink-0" /> LLAMADA
+          </button>
+          <button
+            type="button"
+            aria-pressed={modo === 'nombre'}
+            onClick={() => { setModo('nombre'); setError(null); }}
+            className={claseOpcion(modo === 'nombre')}
+          >
+            <User className="w-4 h-4 shrink-0" /> NOMBRE
+          </button>
+          <button
+            type="button"
+            aria-pressed={modo === 'mesa'}
+            onClick={() => { setModo('mesa'); setError(null); }}
+            className={claseOpcion(modo === 'mesa')}
+          >
+            <Hash className="w-4 h-4 shrink-0" /> MESA
+          </button>
+        </div>
 
-            {/* Opción 1: por nombre (cuentas.tipo_identificador = 'nombre') */}
-            <div className={claseOpcion(modo === 'nombre')} onClick={() => setModo('nombre')}>
-              <div className="flex items-center gap-2 text-sm font-semibold">
-                <User className="w-4 h-4 text-neutral-500" /> Por nombre
-              </div>
-              <input
-                value={nombre}
-                onChange={(e) => setNombre(e.target.value)}
-                onFocus={() => setModo('nombre')}
-                placeholder="Nombre del cliente"
-                className="w-full h-10 px-3 rounded-lg border border-neutral-300 bg-white text-sm focus:outline-none focus:border-amber-500 select-text"
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-3">
-            {/* Número automático: continúa hasta el 9 y después reutiliza el menor libre. */}
-            <div className={claseOpcion(modo === 'mesa')} onClick={() => setModo('mesa')}>
-              <div className="flex items-center gap-2 text-sm font-semibold">
-                <Hash className="w-4 h-4 text-neutral-500" /> Núm. de mesa
-              </div>
-              <div aria-label="Número de mesa" aria-live="polite" className="h-10 flex items-center justify-center rounded-lg border border-neutral-300 bg-white font-mono text-lg font-bold">
+        <div className="min-h-12 flex flex-col justify-center">
+          {modo === 'nombre' ? (
+            <input
+              autoFocus
+              aria-label="Nombre del cliente"
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+              placeholder="Nombre del cliente"
+              className="w-full h-9 px-3 rounded-lg border border-neutral-300 bg-white text-sm focus:outline-none focus:border-amber-500 select-text"
+            />
+          ) : (
+            <>
+              <div aria-label="Número de mesa" aria-live="polite" className="h-8 flex items-center justify-center rounded-lg border border-neutral-300 bg-white font-mono text-base font-bold">
                 {siguienteMesa === null ? 'Sin mesas libres' : `Mesa ${siguienteMesa}`}
               </div>
-              <p className={`text-[11px] ${siguienteMesa === null ? 'text-rose-700' : 'text-neutral-500'}`}>
+              <p className={`mt-1 text-[10px] leading-3 ${siguienteMesa === null ? 'text-rose-700' : 'text-neutral-500'}`}>
                 {siguienteMesa === null ? 'Las 9 mesas están ocupadas. Cobra una para liberar su número.' : 'Asignación automática · Mesas del 1 al 9'}
               </p>
-            </div>
+            </>
+          )}
+        </div>
 
-            {/* cuentas.para_llevar */}
-            <SelectorTipoOrden paraLlevar={paraLlevar} onChange={setParaLlevar} compacto />
-          </div>
+        <div className="[&_button]:h-9 [&_button]:text-xs">
+          <SelectorTipoOrden paraLlevar={paraLlevar} onChange={setParaLlevar} compacto />
         </div>
 
         {error && (
@@ -373,19 +377,20 @@ function DialogoNuevaCuenta({
         )}
 
         <div className="grid grid-cols-2 gap-2">
-          <button onClick={onCancelar} className="h-11 rounded-xl text-sm text-neutral-600 hover:bg-neutral-100 font-medium cursor-pointer">
+          <button onClick={onCancelar} className="h-9 rounded-lg text-xs text-neutral-600 hover:bg-neutral-100 font-medium cursor-pointer">
             Cancelar
           </button>
           <button
             onClick={confirmar}
             disabled={!listo || guardando}
-            className="h-11 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:bg-neutral-200 disabled:text-neutral-500 disabled:cursor-not-allowed text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer"
+            className="h-9 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:bg-neutral-200 disabled:text-neutral-500 disabled:cursor-not-allowed text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer"
           >
             {guardando && <Loader2 className="w-4 h-4 animate-spin" />}
-            {guardando ? 'Guardando…' : 'Abrir'}
+            {guardando ? 'Guardando…' : 'Agregar'}
           </button>
         </div>
       </motion.div>
-    </motion.div>
+    </motion.div>,
+    document.body,
   );
 }
