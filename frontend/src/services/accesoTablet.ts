@@ -38,9 +38,43 @@ async function pedir<T>(ruta: string, cuerpo?: unknown): Promise<T> {
 /** Las tablets registradas y si hay turno abierto (sin turno no se puede entrar). */
 export const listarTablets = () => pedir<{ turnoAbierto: boolean; tablets: TabletSeleccionable[] }>('/tablets');
 
-/** Entra como esa tablet: abre su sesión (queda guardada como la de cualquier inicio de sesión). */
+/**
+ * Entra como esa tablet: abre su sesión (queda guardada como la de cualquier inicio de sesión) y el dispositivo
+ * recuerda cuál es, para entrar solo en cuanto caja abra el siguiente turno.
+ */
 export async function entrarComoTablet(numero: string): Promise<Usuario> {
   const { token, usuario } = await pedir<{ token: string; usuario: Usuario }>('/entrar', { numero });
   guardarToken(token);
+  recordarTablet(numero);
   return usuario;
+}
+
+/* ---------- La tablet de este dispositivo ---------- */
+
+const CLAVE_TABLET = 'tablet_de_este_dispositivo'; // sin prefijo pos_ para no disparar la sincronización
+
+/** Número de la tablet que este dispositivo eligió la última vez (entra sola al abrirse el turno), o null. */
+export function tabletRecordada(): string | null {
+  try {
+    return localStorage.getItem(CLAVE_TABLET);
+  } catch {
+    return null;
+  }
+}
+
+function recordarTablet(numero: string) {
+  try {
+    localStorage.setItem(CLAVE_TABLET, numero);
+  } catch {
+    // sin almacenamiento: cada turno se elige a mano
+  }
+}
+
+/** «Cerrar sesión» a propósito: el dispositivo ya no entra solo; se vuelve a elegir la tablet. */
+export function olvidarTablet() {
+  try {
+    localStorage.removeItem(CLAVE_TABLET);
+  } catch {
+    // sin almacenamiento
+  }
 }

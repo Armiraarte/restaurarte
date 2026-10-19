@@ -5,6 +5,7 @@ import { Loader2, LogOut, User } from 'lucide-react';
 import { posDataService } from '../services/dataService';
 import { FlujoOrdenes } from './FlujoOrdenes';
 import { SeleccionTablet } from './SeleccionTablet';
+import { olvidarTablet } from '../services/accesoTablet';
 import {
   logout as cerrarSesionCuenta,
   obtenerSesion,
@@ -154,8 +155,10 @@ export default function AppTablet() {
     setTabletId(null);
   };
 
-  // Cierra la sesión de la cuenta: la tablet vuelve a la pantalla de elegir tablet.
+  // Cierra la sesión de la cuenta: la tablet vuelve a la pantalla de elegir tablet. Como se cerró a propósito,
+  // el dispositivo olvida cuál tablet era (ya no entra solo al abrirse el turno; se vuelve a elegir).
   const handleCerrarCuenta = () => {
+    olvidarTablet();
     handleLogout();
     salirDeLinea().catch(() => {}); // antes de borrar el token, para que caja deje de verla en línea
     cerrarSesionTablet().catch(() => {}); // cierra su sesión del turno (BD: sesiones_tablet.cerrada_en)

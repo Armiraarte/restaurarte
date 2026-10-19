@@ -29,6 +29,8 @@ export interface ErrorApp {
 const CLAVE = 'app_errores'; // sin prefijo pos_ para no disparar la sincronización entre pestañas
 const MAXIMO = 20;
 const LARGO_DETALLE = 4_000;
+/** Desde esta memoria (MB) un cierre de golpe sí se avisa como posible falta de memoria. */
+const MEMORIA_ALTA_MB = 150;
 
 let errores: ErrorApp[] = leerGuardados();
 const oyentes = new Set<() => void>();
@@ -36,7 +38,13 @@ const oyentes = new Set<() => void>();
 function leerGuardados(): ErrorApp[] {
   try {
     const guardados = JSON.parse(localStorage.getItem(CLAVE) ?? '[]');
-    return Array.isArray(guardados) ? guardados : [];
+    if (!Array.isArray(guardados)) return [];
+    // Se quitan los avisos de «se cerró sola» que se guardaron con poca memoria: eran falsas alarmas.
+    return guardados.filter((e: ErrorApp) => {
+      if (e.origen !== 'cierre') return true;
+      const mb = Number(/memoria de la app en ese momento: (\d+) MB/i.exec(e.detalle ?? '')?.[1]);
+      return mb >= MEMORIA_ALTA_MB;
+    });
   } catch {
     return [];
   }
@@ -157,13 +165,16 @@ function revisarCierreAnterior() {
     return;
   }
   if (previo?.estado !== 'visible') return;
+  // Solo se avisa si la app usaba mucha memoria. Con poca (p. ej. 4 MB) no fue por memoria: lo normal es que
+  // se haya forzado el cierre o reiniciado la tablet, y no es una falla de la app.
+  if (previo.memoriaMb === null || previo.memoriaMb < MEMORIA_ALTA_MB) return;
   const memoriaEquipo = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
   registrarError(
-    'La app se cerró sola mientras estaba en pantalla (posible falta de memoria de la tablet).',
+    `La app se cerró sola mientras estaba en pantalla; usaba ${previo.memoriaMb} MB de memoria (la tablet se quedó sin memoria).`,
     'cierre',
     [
       `Último registro: ${new Date(previo.en).toLocaleString('es-MX')} en ${previo.ruta}`,
-      previo.memoriaMb !== null ? `Memoria de la app en ese momento: ${previo.memoriaMb} MB` : '',
+      `Memoria de la app en ese momento: ${previo.memoriaMb} MB`,
       memoriaEquipo ? `Memoria del equipo: ~${memoriaEquipo} GB` : '',
     ]
       .filter(Boolean)

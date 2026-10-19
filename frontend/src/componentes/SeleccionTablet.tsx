@@ -1,21 +1,33 @@
 // Entrada de la app de las tablets: sin usuario ni contraseña, se elige cuál tablet es (Tablet 01…05).
 //   - Sin turno abierto en caja se queda esperando (revisa sola cada pocos segundos) y no deja elegir.
-//   - En cuanto detecta el turno abierto, las tablets libres se pueden tocar.
+//   - En cuanto detecta el turno abierto se activan las tablets, y la que este dispositivo ya había elegido
+//     entra sola (no hay que tocar nada cada turno).
 //   - Una tablet que otra está usando aparece «En uso».
+//   - Mientras espera, si se publicó una versión nueva de la app, se actualiza sola.
 // Al hacer el corte de turno las tablets vuelven aquí solas.
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Info, Loader2, Tablet } from 'lucide-react';
 import { Usuario } from '../services/authService';
-import { entrarComoTablet, listarTablets, TabletSeleccionable } from '../services/accesoTablet';
+import { entrarComoTablet, listarTablets, TabletSeleccionable, tabletRecordada } from '../services/accesoTablet';
 import { cadaTantoVisible } from '../services/sincronizacion';
+import { useVersionNueva } from '../services/pwaService';
 import { LogoRestaurante } from './Marca';
 
-const INTERVALO_MS = 4_000;
+const INTERVALO_MS = 3_000;
 
 export const SeleccionTablet: React.FC<{ aviso?: string | null; onEntrar: (u: Usuario) => void }> = ({ aviso = null, onEntrar }) => {
   const [datos, setDatos] = useState<{ turnoAbierto: boolean; tablets: TabletSeleccionable[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [entrando, setEntrando] = useState<string | null>(null);
+  const recordada = tabletRecordada();
+  // Solo un intento automático por turno: si falla (p. ej. otra la tomó), se queda para elegir a mano.
+  const intentoAutomatico = useRef(false);
+
+  // Aquí no hay nada a medias: si salió una versión nueva de la app, se recarga sola.
+  const versionNueva = useVersionNueva();
+  useEffect(() => {
+    if (versionNueva && entrando === null) window.location.reload();
+  }, [versionNueva, entrando]);
 
   // Todo cabe en la pantalla, sin scroll (misma escala que el inicio de sesión, ver html.inicio-sesion).
   useEffect(() => {
@@ -51,6 +63,18 @@ export const SeleccionTablet: React.FC<{ aviso?: string | null; onEntrar: (u: Us
   };
 
   const turnoAbierto = !!datos?.turnoAbierto;
+  const esta = recordada ? datos?.tablets.find((t) => Number(t.numero) === Number(recordada)) : undefined;
+
+  // Al abrirse el turno, la tablet de este dispositivo entra sola si está libre.
+  useEffect(() => {
+    if (!turnoAbierto) {
+      intentoAutomatico.current = false;
+      return;
+    }
+    if (intentoAutomatico.current || entrando !== null || !esta || esta.enUso) return;
+    intentoAutomatico.current = true;
+    elegir(esta);
+  }, [turnoAbierto, esta?.numero, esta?.enUso, entrando]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="h-dvh overflow-hidden flex flex-col bg-gradient-to-br from-red-600 via-red-700 to-red-900 text-crema select-none">
@@ -72,6 +96,12 @@ export const SeleccionTablet: React.FC<{ aviso?: string | null; onEntrar: (u: Us
             <span className="inline-flex items-center gap-2 rounded-full bg-amber-100 text-amber-900 px-4 py-2 text-base font-bold">
               <Loader2 className="w-5 h-5 animate-spin" /> {datos === null ? 'Revisando el turno…' : 'Esperando a que caja inicie el turno…'}
             </span>
+          )}
+          {esta && !turnoAbierto && (
+            <p className="text-base font-semibold text-crema/90">Al abrir el turno entra sola como {esta.nombre}.</p>
+          )}
+          {esta && turnoAbierto && entrando === esta.numero && (
+            <p className="text-base font-semibold text-crema/90">Entrando como {esta.nombre}…</p>
           )}
         </div>
 
@@ -106,6 +136,7 @@ export const SeleccionTablet: React.FC<{ aviso?: string | null; onEntrar: (u: Us
               >
                 {entrando === t.numero ? <Loader2 className="w-12 h-12 animate-spin" /> : <Tablet className="w-12 h-12" />}
                 <span className="text-2xl font-black">{t.nombre}</span>
+                {t === esta && <span className="text-xs font-black tracking-wide uppercase text-red-700">Esta tablet</span>}
                 <span
                   className={`rounded-full px-3 py-1 text-sm font-bold ${
                     t.enUso ? 'bg-black/30 text-crema' : turnoAbierto ? 'bg-emerald-600 text-white' : 'bg-neutral-200 text-neutral-600'
