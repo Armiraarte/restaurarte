@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -60,14 +61,51 @@ class Turno extends Model
         }
 
         // Bloquea el turno abierto (si lo hay) para que dos cajas no abran dos turnos al mismo tiempo.
-        return DB::transaction(fn () => static::where('estatus', self::ABIERTO)->lockForUpdate()->first()
-            ?? static::create(['idUsuario' => $usuario->id, 'fecha_inicio' => now(), 'estatus' => self::ABIERTO]));
+        return DB::transaction(function () use ($usuario): self {
+            $abierto = static::where('estatus', self::ABIERTO)->lockForUpdate()->first();
+            if ($abierto) {
+                return $abierto;
+            }
+            $turno = static::create(['idUsuario' => $usuario->id, 'fecha_inicio' => now(), 'estatus' => self::ABIERTO]);
+            // Órdenes sin cobrar de un turno que se cerró solo (nadie hizo el corte): pasan a este turno para cobrarlas.
+            Orden::whereIn('idTurno', CierreTurno::where('tipo', CierreTurno::AUTOMATICO)->select('turno_id'))
+                ->where(fn ($q) => $q->where('estatus', Orden::PAGANDO)->orWhere(fn ($q) => $q->where('estatus', Orden::ABIERTA)->where('total', '>', 0)))
+                ->update(['idTurno' => $turno->idTurno]);
+
+            return $turno;
+        });
     }
 
-    public function cerrar(): void
+    /**
+     * Cierra el turno y guarda su registro (cierres_turno) con lo vendido y lo que quedó sin cobrar.
+     * Con usuario es el corte de caja; sin usuario, el cierre automático (fin = la medianoche).
+     */
+    public function cerrar(?Usuario $quien = null, ?\DateTimeInterface $fin = null): CierreTurno
     {
-        $this->update(['fecha_fin' => now(), 'estatus' => self::CERRADO]);
-        $this->sesionesTablet()->whereNull('cerrada_en')->update(['cerrada_en' => now()]);
+        return DB::transaction(function () use ($quien, $fin): CierreTurno {
+            $fin ??= now();
+            $ordenes = $this->ordenes()->get(['estatus', 'total']);
+            $cobradas = $ordenes->where('estatus', 2);
+            $cierre = CierreTurno::create([
+                'turno_id' => $this->idTurno,
+                'tipo' => $quien ? CierreTurno::CORTE : CierreTurno::AUTOMATICO,
+                'usuario_id' => $quien?->id,
+                'cerrado_en' => $fin,
+                'ordenes_cobradas' => $cobradas->count(),
+                'total_vendido' => number_format((float) $cobradas->sum('total'), 2, '.', ''),
+                'ordenes_pendientes' => $ordenes->filter(fn ($o) => $o->estatus === 1 || ($o->estatus === 0 && (float) $o->total > 0))->count(),
+            ]);
+            $this->update(['fecha_fin' => $fin, 'estatus' => self::CERRADO]);
+            $this->sesionesTablet()->whereNull('cerrada_en')->update(['cerrada_en' => $fin]);
+
+            return $cierre;
+        });
+    }
+
+    /** Registro de su cierre (null mientras está abierto). */
+    public function cierre(): HasOne
+    {
+        return $this->hasOne(CierreTurno::class, 'turno_id', 'idTurno');
     }
 
     public function usuario(): BelongsTo

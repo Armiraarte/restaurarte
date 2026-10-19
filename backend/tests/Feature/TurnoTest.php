@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\CierreTurno;
 use App\Models\Orden;
 use App\Models\SesionTablet;
 use App\Models\Tablet;
@@ -50,6 +51,73 @@ class TurnoTest extends TestCase
         $this->assertSame(Turno::CERRADO, $turno->estatus);
         $this->assertNotNull($turno->fecha_fin);
         $this->assertNull(Turno::actual());
+    }
+
+    public function test_el_corte_guarda_el_registro_del_cierre_con_lo_vendido(): void
+    {
+        $turno = Turno::iniciar($this->admin);
+        Orden::create(['codigo' => '1', 'idTurno' => $turno->idTurno, 'total' => '120.00', 'estatus' => Orden::PAGADO]);
+        Orden::create(['codigo' => '2', 'idTurno' => $turno->idTurno, 'total' => '80.50', 'estatus' => Orden::PAGADO]);
+
+        $cierre = $turno->cerrar($this->admin);
+
+        $this->assertSame(CierreTurno::CORTE, $cierre->tipo);
+        $this->assertSame('u-admin', $cierre->usuario_id);
+        $this->assertSame(2, $cierre->ordenes_cobradas);
+        $this->assertSame('200.50', $cierre->fresh()->total_vendido);
+        $this->assertSame(0, $cierre->ordenes_pendientes);
+        $this->assertTrue($turno->fresh()->cierre->is($cierre));
+    }
+
+    public function test_el_cierre_automatico_queda_registrado_a_la_medianoche_con_lo_pendiente(): void
+    {
+        $turno = Turno::iniciar($this->admin);
+        Orden::create(['codigo' => '3', 'idTurno' => $turno->idTurno, 'total' => '45.00', 'estatus' => Orden::PAGANDO]);
+        $medianoche = now()->startOfDay();
+
+        $cierre = $turno->cerrar(null, $medianoche);
+
+        $this->assertSame(CierreTurno::AUTOMATICO, $cierre->tipo);
+        $this->assertNull($cierre->usuario_id);
+        $this->assertSame(1, $cierre->ordenes_pendientes);
+        $this->assertTrue($medianoche->equalTo($turno->fresh()->fecha_fin));
+    }
+
+    public function test_lo_que_quedo_sin_cobrar_en_un_cierre_automatico_pasa_al_siguiente_turno(): void
+    {
+        $ayer = Turno::iniciar($this->admin);
+        $porCobrar = Orden::create(['codigo' => '4', 'idTurno' => $ayer->idTurno, 'total' => '60.00', 'estatus' => Orden::PAGANDO]);
+        $conPedido = Orden::create(['codigo' => '5', 'idTurno' => $ayer->idTurno, 'total' => '30.00', 'estatus' => Orden::ABIERTA]);
+        $vacia = Orden::create(['codigo' => '6', 'idTurno' => $ayer->idTurno, 'total' => '0.00', 'estatus' => Orden::ABIERTA]);
+        $cobrada = Orden::create(['codigo' => '7', 'idTurno' => $ayer->idTurno, 'total' => '90.00', 'estatus' => Orden::PAGADO]);
+        $ayer->cerrar(null, now()->startOfDay());
+
+        $hoy = Turno::iniciar($this->admin);
+
+        $this->assertSame($hoy->idTurno, $porCobrar->fresh()->idTurno);
+        $this->assertSame($hoy->idTurno, $conPedido->fresh()->idTurno);
+        $this->assertSame($ayer->idTurno, $vacia->fresh()->idTurno);
+        $this->assertSame($ayer->idTurno, $cobrada->fresh()->idTurno);
+    }
+
+    public function test_tras_un_corte_normal_no_se_mueve_ninguna_orden(): void
+    {
+        $ayer = Turno::iniciar($this->admin);
+        $pendiente = Orden::create(['codigo' => '8', 'idTurno' => $ayer->idTurno, 'total' => '60.00', 'estatus' => Orden::PAGANDO]);
+        $ayer->cerrar($this->admin);
+
+        Turno::iniciar($this->admin);
+
+        $this->assertSame($ayer->idTurno, $pendiente->fresh()->idTurno);
+    }
+
+    public function test_un_turno_solo_tiene_un_registro_de_cierre(): void
+    {
+        $turno = Turno::iniciar($this->admin);
+        $turno->cerrar($this->admin);
+
+        $this->expectException(QueryException::class);
+        CierreTurno::create(['turno_id' => $turno->idTurno, 'tipo' => CierreTurno::AUTOMATICO, 'cerrado_en' => now()]);
     }
 
     public function test_solo_caja_abre_turno(): void

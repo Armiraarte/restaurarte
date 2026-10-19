@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock,
+  MoonStar,
   Eye,
   History,
   Loader2,
@@ -30,6 +31,8 @@ import {
   obtenerResumenTurno,
   reimprimirCorte,
   ResumenTurno,
+  textoCierre,
+  TipoCierre,
   TurnoCerrado,
 } from '../services/turnosService';
 import { useEnVivo } from '../services/enVivo';
@@ -265,7 +268,9 @@ const FilaCorte: React.FC<{ turno: TurnoCerrado; onVer: () => void }> = ({ turno
         <div className="font-bold">Turno #{t.idTurno}</div>
         <div className="text-xs text-neutral-500">
           {fechaHora(t.fecha_inicio)} → {fechaHora(t.fecha_fin)} · {duracion(t.fecha_inicio, t.fecha_fin)} · abrió {t.abrio}
+          {textoCierre(t.cierre_tipo, t.cerro) && ` · ${textoCierre(t.cierre_tipo, t.cerro)}`}
         </div>
+        <EtiquetasCierre tipo={t.cierre_tipo} pendientes={t.ordenes_pendientes} />
       </div>
       <div className="text-right">
         <div className="text-lg font-bold font-mono">{dinero(t.total_vendido)}</div>
@@ -452,8 +457,10 @@ const VerCorte: React.FC<{ idTurno: number; onCerrar: () => void }> = ({ idTurno
           {r && (
             <div className="text-xs text-neutral-300 mt-1">
               {fechaHora(r.turno.fecha_inicio)} → {fechaHora(r.turno.fecha_fin)} · abrió {r.turno.abrio}
+              {textoCierre(r.cierre?.tipo, r.cierre?.cerro) && ` · ${textoCierre(r.cierre?.tipo, r.cierre?.cerro)}`}
             </div>
           )}
+          {r?.cierre && <EtiquetasCierre tipo={r.cierre.tipo} pendientes={r.cierre.ordenes_pendientes} />}
         </div>
         <button onClick={onCerrar} aria-label="Cerrar" className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10 cursor-pointer">
           <X className="w-5 h-5" />
@@ -483,3 +490,22 @@ const VerCorte: React.FC<{ idTurno: number; onCerrar: () => void }> = ({ idTurno
     </Fondo>
   );
 };
+
+/** Cierre automático (nadie hizo el corte) y órdenes que quedaron sin cobrar al cerrar el turno. */
+function EtiquetasCierre({ tipo, pendientes }: { tipo: TipoCierre | null; pendientes: number }) {
+  if (tipo !== 'automatico' && pendientes === 0) return null;
+  return (
+    <div className="mt-1 flex flex-wrap gap-1.5">
+      {tipo === 'automatico' && (
+        <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[11px] font-bold text-indigo-800">
+          <MoonStar className="w-3.5 h-3.5" /> Cierre automático · sin corte
+        </span>
+      )}
+      {pendientes > 0 && (
+        <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-800">
+          <AlertTriangle className="w-3.5 h-3.5" /> {pendientes} {pendientes === 1 ? 'orden quedó' : 'órdenes quedaron'} sin cobrar
+        </span>
+      )}
+    </div>
+  );
+}

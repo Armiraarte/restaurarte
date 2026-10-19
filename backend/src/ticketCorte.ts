@@ -38,11 +38,17 @@ export function lineasTicketCorte(r: ResumenTurno, corto: string, reimpresion = 
     { texto: 'Inicio', derecha: fecha(r.turno.fecha_inicio) },
     { texto: 'Fin', derecha: fecha(r.turno.fecha_fin) },
     { texto: 'Abrió', derecha: r.turno.abrio },
-    { texto: 'Cortó', derecha: corto },
+    // Cierre automático: nadie hizo el corte y el turno se cerró solo a la medianoche.
+    r.cierre?.tipo === 'automatico'
+      ? { texto: 'Cierre', derecha: 'AUTOMÁTICO (medianoche)' }
+      : { texto: 'Cortó', derecha: r.cierre?.cerro ?? corto },
     { separador: true },
     { texto: 'Órdenes cobradas', derecha: String(r.ordenes.pagadas) },
     { texto: 'TOTAL VENDIDO', derecha: dinero(r.totalVendido), grande: true },
   ];
+  if ((r.cierre?.ordenes_pendientes ?? 0) > 0) {
+    lineas.push({ texto: 'Quedaron sin cobrar', derecha: String(r.cierre!.ordenes_pendientes), negrita: true });
+  }
   if (r.ordenes.sinPedido > 0) lineas.push({ texto: 'Órdenes sin pedido', derecha: String(r.ordenes.sinPedido) });
   lineas.push({ separador: true }, { texto: 'PRODUCTOS VENDIDOS', negrita: true });
   if (r.productos.length === 0) lineas.push({ texto: 'Sin ventas en este turno.' });

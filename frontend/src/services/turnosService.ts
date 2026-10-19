@@ -29,7 +29,8 @@ async function pedir<T>(ruta: string, metodo: 'GET' | 'POST' = 'POST'): Promise<
 }
 
 /** Caja (admin/cajero): inicia el turno; si ya hay uno abierto, devuelve ese. */
-export const iniciarTurno = () => pedir<{ turno: { idTurno: number }; nuevo: boolean }>('/iniciar');
+/** ordenesTraidas: órdenes sin cobrar de un turno que se cerró solo a la medianoche, que pasan a este turno. */
+export const iniciarTurno = () => pedir<{ turno: { idTurno: number }; nuevo: boolean; ordenesTraidas?: number }>('/iniciar');
 
 /** Tablet: abre su sesión dentro del turno de caja. Lanza SinTurnoError si la caja no ha iniciado turno. */
 export const iniciarSesionTablet = () => pedir<{ turno: { idTurno: number }; sesion: { id: number } }>('/sesion-tablet');
@@ -58,7 +59,12 @@ export interface ResumenTurno {
   pendientes: { idOrden: number; nombre: string; total: number; estatus: number }[];
   productos: { categoria: string; nombre: string; cantidad: number; importe: number }[];
   tablets: { usadas: number; conectadas: number };
+  /** Registro del cierre (BD: cierres_turno); null mientras el turno está abierto. */
+  cierre: { tipo: TipoCierre; cerro: string | null; cerrado_en: string; ordenes_pendientes: number } | null;
 }
+
+/** 'corte': la caja hizo el corte. 'automatico': nadie lo hizo y el turno se cerró solo a la medianoche. */
+export type TipoCierre = 'corte' | 'automatico';
 
 export interface TurnoCerrado {
   idTurno: number;
@@ -67,7 +73,15 @@ export interface TurnoCerrado {
   fecha_fin: string;
   ordenes_cobradas: number;
   total_vendido: number;
+  /** null en turnos cerrados antes de que existiera el registro del cierre. */
+  cierre_tipo: TipoCierre | null;
+  cerro: string | null;
+  ordenes_pendientes: number;
 }
+
+/** «cortó Ana» / «cierre automático a medianoche». */
+export const textoCierre = (tipo: TipoCierre | null | undefined, cerro: string | null | undefined) =>
+  tipo === 'automatico' ? 'cierre automático a medianoche' : cerro ? `cortó ${cerro}` : '';
 
 type Impresion = { ok: boolean; error?: string };
 
