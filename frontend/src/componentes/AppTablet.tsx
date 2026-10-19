@@ -19,8 +19,15 @@ import { Account, ProductCatalogItem, TabletDevice } from '../types/pos';
 import { posDataService } from '../services/dataService';
 import { SelectorTipoOrden } from './AppTabletCuenta';
 import { PedidoOrden } from './PedidoOrden';
-import { InicioSesion } from './InicioSesion';
-import { logout as cerrarSesionCuenta, obtenerSesion, ROLES_APP_MESEROS, tomarAvisoSesion, Usuario } from '../services/authService';
+import { SeleccionTablet } from './SeleccionTablet';
+import {
+  logout as cerrarSesionCuenta,
+  obtenerSesion,
+  ROLES_APP_MESEROS,
+  SesionReemplazadaError,
+  tomarAvisoSesion,
+  Usuario,
+} from '../services/authService';
 import { salirDeLinea } from '../services/tabletsService';
 import { esOrdenActiva, etiquetaMesaRegistrada, listarMesasTurno, MesaRegistrada, registrarMesa } from '../services/mesasService';
 import { useEnVivo } from '../services/enVivo';
@@ -99,12 +106,14 @@ export default function AppTablet() {
   // Mientras haya cuenta, la tablet avisa a caja que está en línea y atiende "Verificar conexión".
   // Si se entró con esta cuenta en otro dispositivo, aquí se sale sin cerrar nada en el servidor:
   // la sesión del turno ya es del otro dispositivo.
-  const faseVerificacion = useLatidoTablet(!!cuenta, sesionActiva ? tablet.number : null, null, (aviso) => {
+  // Igual si se hizo el corte de turno: la tablet vuelve a elegir tablet y espera el siguiente turno.
+  const salirSinCerrar = (aviso: string) => {
     handleLogout();
     cerrarSesionCuenta();
     setCuenta(null);
     setAvisoInicio(aviso);
-  });
+  };
+  const faseVerificacion = useLatidoTablet(!!cuenta, sesionActiva ? tablet.number : null, null, salirSinCerrar);
 
   // Al iniciar sesión con la cuenta, la tablet entra directo: su número sale de la cuenta (tablets.numero)
   // y quien atiende es la propia tablet ("Tablet 01"); ya no se elige mesero.
@@ -115,12 +124,16 @@ export default function AppTablet() {
   // Si la caja aún no inicia turno, espera y reintenta.
   const [turno, setTurno] = useState<'pendiente' | 'ok' | 'sinTurno' | 'error'>('pendiente');
   const [errorTurno, setErrorTurno] = useState<string | null>(null);
+  const salirRef = useRef(salirSinCerrar);
+  salirRef.current = salirSinCerrar;
   const abrirSesionTurno = useCallback(async () => {
     try {
       await iniciarSesionTablet();
       setTurno('ok');
       setErrorTurno(null);
     } catch (err) {
+      // Corte de turno (o la tablet se abrió en otro dispositivo): de vuelta a elegir tablet.
+      if (err instanceof SesionReemplazadaError) return salirRef.current(err.message);
       setTurno(err instanceof SinTurnoError ? 'sinTurno' : 'error');
       setErrorTurno(err instanceof Error ? err.message : 'No se pudo iniciar la sesión de la tablet.');
     }
@@ -162,7 +175,7 @@ export default function AppTablet() {
     setTabletId(null);
   };
 
-  // Cierra la sesión de la cuenta: la tablet vuelve a pedir usuario y contraseña/PIN.
+  // Cierra la sesión de la cuenta: la tablet vuelve a la pantalla de elegir tablet.
   const handleCerrarCuenta = () => {
     handleLogout();
     salirDeLinea().catch(() => {}); // antes de borrar el token, para que caja deje de verla en línea
@@ -176,8 +189,8 @@ export default function AppTablet() {
     pantalla = <div className="h-dvh" />;
   } else if (!cuenta) {
     pantalla = (
-      <InicioSesion
-        app="meseros"
+      // Sin usuario ni PIN: se elige cuál tablet es (Tablet 01…05), solo con turno abierto.
+      <SeleccionTablet
         aviso={avisoInicio}
         onEntrar={(u) => {
           setAvisoInicio(null);

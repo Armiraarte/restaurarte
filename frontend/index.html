@@ -4,11 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>SOFT RESTAURANTE</title>
-    <!-- El navegador recibe el manifiesto correcto antes de cargar React o permitir instalar. -->
+    <!-- El navegador recibe el manifiesto correcto antes de cargar React o permitir instalar.
+         En una tablet (pantalla táctil sin mouse) siempre se instala la versión tablet. -->
     <link id="manifest" rel="manifest" />
     <script>
       document.getElementById('manifest').setAttribute('href',
-        /^\/tablet(?:\/|$)/.test(window.location.pathname)
+        /^\/tablet(?:\/|$)/.test(window.location.pathname) || window.matchMedia('(hover: none) and (pointer: coarse)').matches
           ? '/manifest-tablet.webmanifest'
           : '/manifest.webmanifest');
     </script>

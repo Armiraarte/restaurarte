@@ -15,6 +15,15 @@ import { imprimirLineas } from './impresion.js';
 import { lineasTicketCorte } from './ticketCorte.js';
 import { emitirEvento } from './eventos.js';
 import { siguienteMedianoche } from './horario.js';
+import { cerrarSesionesTablet } from './sesionesTablet.js';
+import { olvidarTabletsEnLinea } from './tablets.js';
+
+/** Al cerrar el turno se cierra la sesión de todas las tablets: vuelven a elegir tablet y esperan el siguiente turno. */
+function cerrarTablets() {
+  const cerradas = cerrarSesionesTablet();
+  olvidarTabletsEnLinea(cerradas);
+  if (cerradas.length > 0) console.log(`[turnos] Corte: se cerró la sesión de ${cerradas.length} tablet(s).`);
+}
 
 export interface TurnoFila extends RowDataPacket {
   idTurno: number;
@@ -119,6 +128,7 @@ export function cerrarTurnosVencidos(): Promise<void> {
     }
     if (cerrados > 0) {
       console.log(`[turnos] Cierre automático a la medianoche: ${cerrados} turno(s) que seguían abiertos.`);
+      cerrarTablets();
       emitirEvento('turno', 'ordenes'); // las pantallas abiertas pasan a «sin turno»
     }
     // Un turno abierto solo puede vencer a partir de la siguiente medianoche: hasta entonces no se revisa.
@@ -327,6 +337,7 @@ turnosRouter.post('/cerrar', soloRoles('admin', 'cajero'), async (req, res) => {
     // Registro del cierre (quién hizo el corte y lo vendido) y cierre del turno, en la misma transacción.
     await registrarCierre(conexion, turno.idTurno, { tipo: 'corte', usuarioId: req.usuario!.id, fin: new Date() });
     await conexion.commit();
+    cerrarTablets();
 
     const resumen = (await resumenTurno(turno.idTurno))!;
     res.json({ resumen, impresion: await imprimirCorte(resumen, req.usuario!.nombre) });

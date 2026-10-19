@@ -124,6 +124,11 @@ tabletsRouter.post('/:usuarioId/verificar', soloRoles('admin'), (req, res) => {
   res.status(202).json({ tablet: aRespuesta(t, Date.now()) });
 });
 
+/** Corte de turno: esas cuentas dejan de aparecer en línea (sus sesiones ya se cerraron). */
+export function olvidarTabletsEnLinea(usuarioIds: string[]) {
+  for (const id of usuarioIds) enLinea.delete(id);
+}
+
 /** La tablet cerró sesión: deja de aparecer en línea y su cuenta queda libre para otro dispositivo. */
 tabletsRouter.post('/salir', (req, res) => {
   enLinea.delete(req.usuario!.id);

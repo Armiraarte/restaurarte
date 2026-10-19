@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { config } from './config.js';
 import { aPublico, buscarPorId, buscarPorUsuario, type Usuario, type UsuarioPublico } from './usuarios.js';
-import { abrirSesionTablet, sesionTabletVigente } from './sesionesTablet.js';
+import { abrirSesionTablet, estadoSesionTablet } from './sesionesTablet.js';
 
 declare global {
   namespace Express {
@@ -16,7 +16,7 @@ declare global {
 }
 
 // Hash fijo para comparar cuando el usuario no existe y no revelar por tiempo de respuesta si existe.
-const HASH_FALSO = bcrypt.hashSync('usuario-inexistente', 10);
+export const HASH_FALSO = bcrypt.hashSync('usuario-inexistente', 10);
 
 export const authRouter = Router();
 
@@ -46,16 +46,18 @@ authRouter.post('/login', async (req, res) => {
     }
   }
 
-  const token = jwt.sign({ sub: encontrado.id, rol: encontrado.rol, ...(sid && { sid }) }, config.jwtSecret, {
-    expiresIn: config.jwtExpiresIn,
-  });
-  res.json({ token, usuario: aPublico(encontrado) });
+  res.json({ token: emitirToken(encontrado, sid), usuario: aPublico(encontrado) });
 });
+
+/** Token de sesión; las tablets llevan el id de su sesión (sid, ver sesionesTablet.ts). */
+export function emitirToken(usuario: Usuario, sid?: string): string {
+  return jwt.sign({ sub: usuario.id, rol: usuario.rol, ...(sid && { sid }) }, config.jwtSecret, { expiresIn: config.jwtExpiresIn });
+}
 
 /** Usuario dueño del token o, si ya no sirve, la respuesta 401. */
 export function usuarioDelToken(
   token: string,
-): { usuario: Usuario; sesionId?: string } | { error: string; sesionReemplazada?: true } {
+): { usuario: Usuario; sesionId?: string } | { error: string; sesionReemplazada?: true; sesionCerrada?: true } {
   let payload: jwt.JwtPayload;
   try {
     payload = jwt.verify(token, config.jwtSecret) as jwt.JwtPayload;
@@ -68,8 +70,13 @@ export function usuarioDelToken(
 
   // Token de tablet de antes de la sesión única: se vuelve a iniciar sesión una vez.
   if (typeof payload.sid !== 'string') return { error: 'Sesión inválida o expirada.' };
-  if (!sesionTabletVigente(usuario.id, payload.sid)) {
+  const estado = estadoSesionTablet(usuario.id, payload.sid);
+  if (estado === 'reemplazada') {
     return { error: `Se inició sesión con ${usuario.nombre} en otro dispositivo.`, sesionReemplazada: true };
+  }
+  if (estado === 'cerrada') {
+    // La tablet lo trata igual que una sesión reemplazada: vuelve a elegir tablet (y espera el siguiente turno).
+    return { error: 'Se hizo el corte de turno. Elige tu tablet cuando caja inicie el siguiente turno.', sesionReemplazada: true, sesionCerrada: true };
   }
   return { usuario, sesionId: payload.sid };
 }

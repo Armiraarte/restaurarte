@@ -8,14 +8,14 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
-  Banknote,
   Eye,
   EyeOff,
-  HandPlatter,
   Info,
   Loader2,
   Lock,
   LucideIcon,
+  Monitor,
+  TabletSmartphone,
   User,
 } from 'lucide-react';
 import { login, logout, ROLES_APP_MESEROS, Usuario } from '../services/authService';
@@ -43,33 +43,33 @@ interface Lado {
 
 const LADOS: Record<AppInicio, Lado> = {
   meseros: {
-    titulo: 'Meseros',
-    descripcion: 'Toma órdenes desde la tablet.',
-    accion: 'Entrar como mesero',
-    etiqueta: 'App de meseros',
+    titulo: 'Tablet',
+    descripcion: 'Meseros: órdenes y pedidos a cocina.',
+    accion: 'Abrir versión tablet',
+    etiqueta: 'Versión tablet',
     ayuda: 'Entra con la cuenta de esta tablet.',
     campoPassword: 'Contraseña o PIN',
     faltanDatos: 'Ingresa tu usuario y tu contraseña o PIN.',
-    Icono: HandPlatter,
+    Icono: TabletSmartphone,
     fondo: 'bg-gradient-to-br from-red-600 via-red-700 to-red-900',
     brillos: ['-top-24 -left-24 bg-fuego/30', '-bottom-28 -right-20 bg-diablito/25'],
     puedeEntrar: (u) => ROLES_APP_MESEROS.includes(u.rol),
     sinAcceso: 'Esta cuenta no tiene acceso a la app de meseros.',
   },
   caja: {
-    titulo: 'Caja',
-    descripcion: 'Cobros, turnos y cortes.',
-    accion: 'Entrar a caja',
-    etiqueta: 'Caja',
+    titulo: 'PC',
+    descripcion: 'Caja: cobros, turnos y cortes.',
+    accion: 'Entrar a la PC',
+    etiqueta: 'Versión PC',
     ayuda: 'Entra con tu usuario de caja.',
     campoPassword: 'Contraseña',
     faltanDatos: 'Ingresa tu usuario y tu contraseña.',
-    Icono: Banknote,
+    Icono: Monitor,
     fondo: 'bg-gradient-to-br from-neutral-800 via-amber-950 to-red-950',
     brillos: ['-top-24 -right-24 bg-fuego/20', '-bottom-28 -left-20 bg-queso/10'],
     // Las cuentas de tablet solo usan la app de meseros (App.tsx también las manda a /tablet).
     puedeEntrar: (u) => u.rol !== 'tablet',
-    sinAcceso: 'Esta es una cuenta de tablet: entra por Meseros.',
+    sinAcceso: 'Esta es una cuenta de tablet: entra por la versión tablet.',
   },
 };
 
@@ -136,7 +136,7 @@ function SelectorApp({ onElegir }: { onElegir: (lado: AppInicio) => void }) {
 
       <p className="pointer-events-none absolute top-5 inset-x-0 text-center">
         <span className="inline-block rounded-full bg-black/35 backdrop-blur-sm px-5 py-2 text-base font-semibold text-crema">
-          ¿Cómo vas a entrar?
+          ¿Qué versión vas a usar?
         </span>
       </p>
       <p className="pointer-events-none absolute bottom-3 inset-x-0 text-center text-xs text-crema/80">
@@ -268,7 +268,7 @@ function FormularioInicio({
               className="-ml-2 mb-1 inline-flex min-h-11 items-center gap-1.5 rounded-xl px-2 text-base font-semibold text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50 transition-colors cursor-pointer"
             >
               <ArrowLeft className="w-5 h-5" />
-              Meseros o caja
+              Tablet o PC
             </button>
             <h1 className="text-3xl font-extrabold tracking-tight text-neutral-900">Iniciar sesión</h1>
             <p className="mt-1 text-base text-neutral-600">{l.ayuda}</p>

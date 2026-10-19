@@ -37,7 +37,8 @@ export function configurarAppPwa(esTablet: boolean) {
   document.documentElement.classList.toggle('app-tablet', esTablet);
 }
 
-function esStandalone(): boolean {
+/** Abierta como app instalada (no como página del navegador). */
+export function esStandalone(): boolean {
   return (
     window.matchMedia('(display-mode: standalone)').matches ||
     (navigator as Navigator & { standalone?: boolean }).standalone === true

@@ -6,8 +6,9 @@ import { instalarPwa, useInstalacionPwa, useVersionNueva } from '../services/pwa
  * Botón para instalar la app; si el navegador no tiene diálogo, muestra los pasos a mano.
  * variante: 'oscuro' (relleno negro) o 'contorno' (secundario, para no competir con el botón principal).
  */
-export const BotonInstalarPwa: React.FC<{ nombreApp: string; variante?: 'oscuro' | 'contorno' }> = ({
+export const BotonInstalarPwa: React.FC<{ nombreApp: string; variante?: 'oscuro' | 'contorno' | 'grande'; texto?: string }> = ({
   nombreApp,
+  texto,
   variante = 'oscuro',
 }) => {
   const estado = useInstalacionPwa();
@@ -35,11 +36,13 @@ export const BotonInstalarPwa: React.FC<{ nombreApp: string; variante?: 'oscuro'
         className={`w-full flex items-center justify-center gap-2 font-semibold py-3 rounded-xl transition-colors cursor-pointer ${
           variante === 'contorno'
             ? 'bg-white hover:bg-neutral-50 border-2 border-neutral-300 text-neutral-800 text-base'
-            : 'bg-neutral-900 hover:bg-neutral-800 text-white text-sm'
+            : variante === 'grande'
+              ? 'min-h-16 bg-amber-500 hover:bg-amber-400 text-neutral-950 text-xl font-black shadow-lg shadow-amber-500/30'
+              : 'bg-neutral-900 hover:bg-neutral-800 text-white text-sm'
         }`}
       >
         <Download className="w-5 h-5" />
-        <span>Instalar app {nombreApp}</span>
+        <span>{texto ?? `Instalar app ${nombreApp}`}</span>
       </button>
 
       {/* Los pasos flotan sobre el botón: abrirlos no cambia el alto del inicio de sesión, que no tiene scroll. */}

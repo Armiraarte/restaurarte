@@ -4,13 +4,20 @@ import { AvisoVersionNueva } from './componentes/InstalarPwa.tsx';
 import { AlertasErrores, LimiteDeErrores } from './componentes/AlertasErrores.tsx';
 import { configurarAppPwa, iniciarPwa, pantallaCompletaAlTocar } from './services/pwaService.ts';
 import { appActual } from './services/appNavigation.ts';
+import { esTabletEnNavegador, esTabletInstalada } from './services/accesoTablet.ts';
+import { DescargarApp } from './componentes/DescargarApp.tsx';
 import { registrarError, vigilarErrores } from './services/errores.ts';
 import './index.css';
 
 // Antes que todo: los errores se muestran en alertas en vez de cerrar la app (ver services/errores.ts).
 vigilarErrores();
 
-configurarAppPwa(appActual() === 'meseros');
+// Tablets: en el navegador solo se ofrece descargar la versión tablet; ya descargada, solo esa versión.
+// (En la PC sigue el inicio con las dos versiones: TABLET y PC.)
+const tabletEnNavegador = esTabletEnNavegador();
+const tabletInstalada = esTabletInstalada();
+if (tabletInstalada && appActual() !== 'meseros') window.history.replaceState(null, '', '/tablet');
+configurarAppPwa(tabletEnNavegador || appActual() === 'meseros');
 // También se activa en el selector inicial: cambiar de acceso conserva el documento.
 pantallaCompletaAlTocar();
 
@@ -55,6 +62,8 @@ function Aplicacion() {
   const [app, setApp] = useState(appActual);
   useEffect(() => {
     const actualizar = () => {
+      // La app descargada en una tablet nunca pasa a la versión PC.
+      if (tabletInstalada && appActual() !== 'meseros') window.history.replaceState(null, '', '/tablet');
       const actual = appActual();
       configurarAppPwa(actual === 'meseros');
       setApp(actual);
@@ -62,6 +71,15 @@ function Aplicacion() {
     window.addEventListener('popstate', actualizar);
     return () => window.removeEventListener('popstate', actualizar);
   }, []);
+
+  if (tabletEnNavegador) {
+    return (
+      <>
+        <DescargarApp />
+        <AlertasErrores />
+      </>
+    );
+  }
 
   return (
     <>

@@ -92,6 +92,11 @@ export async function obtenerSesion(): Promise<Usuario | null> {
   return data.usuario;
 }
 
+/** Guarda el token de una sesión iniciada sin el formulario (p. ej. al elegir la tablet). */
+export function guardarToken(token: string) {
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
 export function logout() {
   try {
     localStorage.removeItem(TOKEN_KEY);
