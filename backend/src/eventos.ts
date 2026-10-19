@@ -9,6 +9,7 @@
 // EventSource no permite mandar el header Authorization, por eso el token va en la URL.
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { usuarioDelToken } from './auth.js';
+import { avisarDisponibilidadTablets } from './disponibilidadTablets.js';
 
 export type TipoEvento = 'ordenes' | 'turno';
 
@@ -16,6 +17,7 @@ const clientes = new Set<Response>();
 
 /** Avisa a todas las pantallas conectadas. */
 export function emitirEvento(...tipos: TipoEvento[]) {
+  if (tipos.includes('turno')) avisarDisponibilidadTablets();
   for (const tipo of tipos) {
     const mensaje = `data: ${JSON.stringify({ tipo, en: Date.now() })}\n\n`;
     for (const res of clientes) res.write(mensaje);

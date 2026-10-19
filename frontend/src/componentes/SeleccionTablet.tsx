@@ -8,7 +8,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Info, Loader2, Tablet } from 'lucide-react';
 import { Usuario } from '../services/authService';
-import { entrarComoTablet, listarTablets, TabletSeleccionable, tabletRecordada } from '../services/accesoTablet';
+import { entrarComoTablet, escucharDisponibilidadTablets, listarTablets, TabletSeleccionable, tabletRecordada } from '../services/accesoTablet';
 import { cadaTantoVisible } from '../services/sincronizacion';
 import { useVersionNueva } from '../services/pwaService';
 import { LogoRestaurante } from './Marca';
@@ -22,6 +22,8 @@ export const SeleccionTablet: React.FC<{ aviso?: string | null; onEntrar: (u: Us
   const recordada = tabletRecordada();
   // Solo un intento automático por turno: si falla (p. ej. otra la tomó), se queda para elegir a mano.
   const intentoAutomatico = useRef(false);
+  const consultando = useRef(false);
+  const repetirConsulta = useRef(false);
 
   // Aquí no hay nada a medias: si salió una versión nueva de la app, se recarga sola.
   const versionNueva = useVersionNueva();
@@ -36,18 +38,36 @@ export const SeleccionTablet: React.FC<{ aviso?: string | null; onEntrar: (u: Us
   }, []);
 
   const cargar = useCallback(async () => {
+    if (consultando.current) {
+      repetirConsulta.current = true;
+      return;
+    }
+    consultando.current = true;
     try {
-      setDatos(await listarTablets());
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo cargar las tablets.');
+      do {
+        repetirConsulta.current = false;
+        try {
+          const nuevos = await listarTablets();
+          setDatos((previos) => JSON.stringify(previos) === JSON.stringify(nuevos) ? previos : nuevos);
+          setError(null);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'No se pudo cargar las tablets.');
+        }
+      } while (repetirConsulta.current);
+    } finally {
+      consultando.current = false;
     }
   }, []);
 
-  // Se revisa sola cada pocos segundos: en cuanto caja abre el turno, ya se puede elegir.
+  // Se actualiza al tomar o liberar una tablet y al abrir el turno. El sondeo queda de respaldo.
   useEffect(() => {
     cargar();
-    return cadaTantoVisible(cargar, INTERVALO_MS);
+    const dejarDeEscuchar = escucharDisponibilidadTablets(cargar);
+    const dejarDeConsultar = cadaTantoVisible(cargar, INTERVALO_MS);
+    return () => {
+      dejarDeEscuchar();
+      dejarDeConsultar();
+    };
   }, [cargar]);
 
   const elegir = async (t: TabletSeleccionable) => {

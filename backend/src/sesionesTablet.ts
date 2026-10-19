@@ -12,6 +12,7 @@ import crypto from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { config } from './config.js';
+import { avisarDisponibilidadTablets } from './disponibilidadTablets.js';
 
 const ARCHIVO = path.join(config.dataDir, 'sesiones-tablet.json');
 
@@ -78,6 +79,7 @@ export function abrirSesionTablet(usuarioId: string): string | null {
   const sid = crypto.randomUUID();
   sesiones.set(usuarioId, { sid, ultimoUso: Date.now(), liberada: false });
   guardar();
+  avisarDisponibilidadTablets();
   return sid;
 }
 
@@ -88,6 +90,7 @@ export function estadoSesionTablet(usuarioId: string, sid: string): EstadoSesion
     // Sin registro (se perdió el archivo): el primer dispositivo que llega se queda con la sesión.
     sesiones.set(usuarioId, { sid, ultimoUso: Date.now(), liberada: false });
     guardar();
+    avisarDisponibilidadTablets();
     return 'vigente';
   }
   if (actual.sid !== sid) return 'reemplazada';
@@ -102,6 +105,7 @@ export function liberarSesionTablet(usuarioId: string, sid: string | undefined) 
   if (!actual || actual.sid !== sid || actual.liberada) return;
   actual.liberada = true;
   guardar();
+  avisarDisponibilidadTablets();
 }
 
 /** Corte de turno: cierra la sesión de todas las tablets. Devuelve las cuentas que tenían sesión abierta. */
@@ -113,6 +117,9 @@ export function cerrarSesionesTablet(): string[] {
     s.cerradaPorCorte = true;
     s.liberada = true;
   }
-  if (cerradas.length > 0) guardar();
+  if (cerradas.length > 0) {
+    guardar();
+    avisarDisponibilidadTablets();
+  }
   return cerradas;
 }

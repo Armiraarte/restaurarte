@@ -10,7 +10,7 @@
     "lint": "tsc --noEmit",
     "test:impresion": "node --import tsx --test tests-node/impresion.test.mjs",
     "test:pedidos": "node --import tsx --test tests-node/pedido-mix.test.mjs tests-node/extras.test.mjs",
-    "test:turnos": "node --import tsx --test tests-node/horario.test.mjs tests-node/sesiones-tablet.test.mjs"
+    "test:turnos": "node --import tsx --test tests-node/horario.test.mjs tests-node/sesiones-tablet.test.mjs tests-node/disponibilidad-tablets.test.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

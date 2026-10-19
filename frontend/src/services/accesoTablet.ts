@@ -38,6 +38,16 @@ async function pedir<T>(ruta: string, cuerpo?: unknown): Promise<T> {
 /** Las tablets registradas y si hay turno abierto (sin turno no se puede entrar). */
 export const listarTablets = () => pedir<{ turnoAbierto: boolean; tablets: TabletSeleccionable[] }>('/tablets');
 
+/** Aviso inmediato para los selectores abiertos en otros dispositivos, aun sin sesión. */
+export function escucharDisponibilidadTablets(alCambiar: () => void): () => void {
+  if (typeof EventSource === 'undefined') return () => {};
+  const fuente = new EventSource('/api/acceso-tablet/eventos');
+  fuente.onmessage = alCambiar;
+  // Releer al conectar también cubre cambios ocurridos mientras se abría o se recuperaba la conexión.
+  fuente.onopen = alCambiar;
+  return () => fuente.close();
+}
+
 /**
  * Entra como esa tablet: abre su sesión (queda guardada como la de cualquier inicio de sesión) y el dispositivo
  * recuerda cuál es, para entrar solo en cuanto caja abra el siguiente turno.

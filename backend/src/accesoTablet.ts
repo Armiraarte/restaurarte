@@ -12,8 +12,11 @@ import { aPublico, listarUsuarios, mysqlDisponible, buscarPorId } from './usuari
 import { abrirSesionTablet, sesionEnUso } from './sesionesTablet.js';
 import { turnoAbierto } from './turnos.js';
 import { pool } from './db.js';
+import { eventosDisponibilidadTablets } from './disponibilidadTablets.js';
 
 export const accesoTabletRouter = Router();
+
+accesoTabletRouter.get('/eventos', eventosDisponibilidadTablets);
 
 /** Cuentas de tablet ordenadas por número (Tablet 01, 02…). */
 const cuentasDeTablet = () =>
