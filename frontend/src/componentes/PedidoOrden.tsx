@@ -597,20 +597,9 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
       >
         {/* Menú desde la base */}
         <section className={`bg-white border border-neutral-200 rounded-2xl p-3 ${pantallaCompleta ? 'min-h-0 flex flex-col overflow-hidden' : 'min-h-96 flex flex-col'}`}>
-          <div className="shrink-0 flex items-center gap-3 pb-2">
-            <button
-              onClick={alternarMix}
-              disabled={!puedeEditar}
-              aria-pressed={mixActivo !== null}
-              title={mixActivo === null ? 'Agrupar los siguientes productos en un plato' : `Cerrar el MIX ${mixActivo}`}
-              className={`min-h-12 px-6 rounded-xl border-2 font-black flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 ${
-                mixActivo !== null ? 'bg-violet-600 border-violet-700 text-white' : 'bg-white border-violet-300 text-violet-800 hover:bg-violet-50'
-              }`}
-            >
-              <UtensilsCrossed className="w-5 h-5 shrink-0" /> MIX
-            </button>
-            {/* Dentro de una categoría (opciones o cuadrícula de Bebidas): regresar a las categorías */}
-            {(opcionesDe || categoriaAbierta) && (
+          {/* Dentro de una categoría (opciones o cuadrícula de Bebidas): regresar a las categorías */}
+          {(opcionesDe || categoriaAbierta) && (
+            <div className="shrink-0 flex items-center gap-3 pb-2">
               <button
                 onClick={() => {
                   setOpcionesDe(null);
@@ -620,9 +609,8 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
               >
                 <ArrowLeft className="w-5 h-5 shrink-0" /> VOLVER
               </button>
-            )}
-            {mixActivo !== null && <p role="status" className="text-sm text-violet-800 font-semibold">MIX {mixActivo} · Un solo plato</p>}
-          </div>
+            </div>
+          )}
           {menu === null ? (
             <div className="flex-1 flex items-center justify-center text-neutral-400">
               <Loader2 className="w-6 h-6 animate-spin" />
@@ -736,8 +724,28 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
           <section className={`bg-white border border-neutral-200 rounded-2xl p-4 space-y-3 ${pantallaCompleta ? 'flex-1 min-h-0 flex flex-col' : ''}`}>
             <div className="shrink-0 flex items-center justify-between gap-2">
               <h3 className="font-bold">Nuevo pedido</h3>
-              <button type="button" disabled={!puedeEditar} onClick={() => setAgregandoExtra(true)} aria-label="Agregar extra" title="Agregar extra" className="w-10 h-10 rounded-xl border-2 border-amber-300 bg-amber-50 text-amber-900 flex items-center justify-center cursor-pointer disabled:opacity-40"><Plus className="w-5 h-5" /></button>
+              <div className="flex items-center gap-2">
+                {/* MIX: los siguientes productos van en un solo plato; junto al botón de extra */}
+                <button
+                  type="button"
+                  onClick={alternarMix}
+                  disabled={!puedeEditar}
+                  aria-pressed={mixActivo !== null}
+                  title={mixActivo === null ? 'Agrupar los siguientes productos en un plato' : `Cerrar el MIX ${mixActivo}`}
+                  className={`h-10 px-3 rounded-xl border-2 text-sm font-black flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 ${
+                    mixActivo !== null ? 'bg-violet-600 border-violet-700 text-white' : 'bg-white border-violet-300 text-violet-800 hover:bg-violet-50'
+                  }`}
+                >
+                  <UtensilsCrossed className="w-4 h-4 shrink-0" /> MIX
+                </button>
+                <button type="button" disabled={!puedeEditar} onClick={() => setAgregandoExtra(true)} aria-label="Agregar extra" title="Agregar extra" className="w-10 h-10 rounded-xl border-2 border-amber-300 bg-amber-50 text-amber-900 flex items-center justify-center cursor-pointer disabled:opacity-40"><Plus className="w-5 h-5" /></button>
+              </div>
             </div>
+            {mixActivo !== null && (
+              <p role="status" className="shrink-0 text-sm text-violet-800 font-semibold">
+                MIX {mixActivo} · lo que agregues va en un solo plato
+              </p>
+            )}
             <div className={pantallaCompleta ? 'flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-2 pr-1' : 'space-y-2'}>
               {!hayNuevo ? (
                 <p className="text-sm text-neutral-500">Toca productos del menú para agregarlos.</p>
