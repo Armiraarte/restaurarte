@@ -87,7 +87,7 @@ let siguienteExtra = 1;
 const nombreLinea = (l: LineaNueva) => (l.mezcla.length > 1 ? l.mezcla.join(' con ') : nombreProducto(l.producto));
 const sinDescritos = (l: LineaNueva) => l.sin.filter((c) => !l.sinQueso || !esQueso(c));
 const textoSin = (l: LineaNueva) =>
-  `${l.mixGrupo ? ` · MIX ${l.mixGrupo}` : ''}${l.termino ? ` · ${l.termino.nombre}` : ''}${l.conQueso ? ' · CON QUESO' : ''}${l.sinQueso ? ' · SIN QUESO' : ''}${l.carneExtra ? ` · ${textoCarneExtra(l.carneExtra)}` : ''}${
+  `${l.mixGrupo ? ` · MIX ${l.mixGrupo}` : ''}${l.termino ? ` · ${l.termino.nombre}` : ''}${l.conQueso && l.sin.length > 0 ? ' · CON QUESO' : ''}${l.sinQueso ? ' · SIN QUESO' : ''}${l.carneExtra ? ` · ${textoCarneExtra(l.carneExtra)}` : ''}${
     sinDescritos(l).length ? ` · sin ${sinDescritos(l).map((c) => c.nombre.toLowerCase()).join(', ')}` : ''
   }${l.papas ? ' · CON PAPAS (orden completa)' : ''
   }`;
@@ -145,12 +145,12 @@ function ticketDe(orden: OrdenBD, lineas: LineaNueva[], ronda: number, origen: s
       cantidad: l.cantidad,
       mix_grupo: l.mixGrupo ?? null,
       opciones: [],
-      // Quesadilla sin queso: primero «SIN QUESO» (con queso no se escribe, ya se sabe).
-      // Complementos: si lleva todos, solo «TODO»; si se quitó alguno, solo lo que no quiere («Sin lechuga»).
+      // Complementos: si no se quitó ninguno (queso incluido), solo «TODO». Si se quitó alguno, solo lo que no
+      // quiere («SIN QUESO» primero, «Sin lechuga»…) y, si conserva el queso, «CON QUESO» para que no haya duda.
       descripcion: [
         ...(l.termino ? [`Término: ${l.termino.nombre}`] : []),
         ...(l.sinQueso ? ['SIN QUESO'] : []),
-        ...(l.conQueso ? ['CON QUESO'] : []),
+        ...(l.conQueso && l.sin.length > 0 ? ['CON QUESO'] : []),
         ...(l.carneExtra ? [textoCarneExtra(l.carneExtra)] : []),
         ...(l.papas ? ['CON PAPAS · Orden completa por pieza'] : []),
         ...(l.producto.complementos.length === 0

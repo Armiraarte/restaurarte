@@ -83,7 +83,8 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
   const [elegidos, setElegidos] = useState<string[]>(nombres.length === 1 ? [nombres[0]] : []);
   const nombre = elegidos[0] ?? null;
   const [tamano, setTamano] = useState<string | null>(esEnsalada ? 'Chica' : null);
-  const [quitados, setQuitados] = useState<number[]>(() => categoria.productos.flatMap((p) => p.complementos.filter(esQueso).map((c) => c.id)));
+  // Todos los complementos empiezan marcados (queso incluido); solo se desmarca lo que no quieren.
+  const [quitados, setQuitados] = useState<number[]>([]);
   const [conPapas, setConPapas] = useState(false);
   const [termino, setTermino] = useState<TerminoMenu | null>(null);
   // Hamburguesas: cada toque suma una carne (DOBLE, luego TRIPLE) y el siguiente la quita.
@@ -124,7 +125,7 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
   // Al cambiar de producto se reinician tamaño y complementos (todos incluidos).
   useEffect(() => {
     setTamano(esEnsalada ? 'Chica' : null);
-    setQuitados(complementos.filter(esQueso).map((c) => c.id));
+    setQuitados([]);
     setConPapas(false);
     setTermino(null);
     setCarneExtra(0);
@@ -153,12 +154,12 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
     onAgregar(producto, cantidad, sin, elegidos.length > 1 ? elegidos : [], { sinQueso: quesoFuera, conQueso: puedeConQueso && quesoIncluido, carneExtra: carnesExtra, termino, papas });
     setAgregado(
       `${cantidad} × ${elegidos.length > 1 ? textoElegidos : producto.nombre}${producto.tamano ? ` (${producto.tamano})` : ''}${
-        quesoFuera ? ' · SIN QUESO' : puedeConQueso ? ' · CON QUESO' : ''
+        quesoFuera ? ' · SIN QUESO' : ''
       }${carnesExtra ? ` · ${textoCarneExtra(carnesExtra)}` : ''}${papas ? ' · CON PAPAS (orden completa)' : ''}${termino ? ` · ${termino.nombre}` : ''}`
     );
     setElegidos(nombres.length === 1 ? [nombres[0]] : []);
     setTamano(esEnsalada ? 'Chica' : null);
-    setQuitados(complementos.filter(esQueso).map((c) => c.id));
+    setQuitados([]);
     setConPapas(false);
     setTermino(null);
     setCarneExtra(0);
