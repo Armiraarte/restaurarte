@@ -609,6 +609,18 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
             >
               <UtensilsCrossed className="w-5 h-5 shrink-0" /> MIX
             </button>
+            {/* Dentro de una categoría (opciones o cuadrícula de Bebidas): regresar a las categorías */}
+            {(opcionesDe || categoriaAbierta) && (
+              <button
+                onClick={() => {
+                  setOpcionesDe(null);
+                  setCategoriaAbierta(null);
+                }}
+                className="min-h-12 px-6 rounded-xl border-2 border-emerald-700 bg-emerald-600 hover:bg-emerald-500 text-white font-black flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <ArrowLeft className="w-5 h-5 shrink-0" /> VOLVER
+              </button>
+            )}
             {mixActivo !== null && <p role="status" className="text-sm text-violet-800 font-semibold">MIX {mixActivo} · Un solo plato</p>}
           </div>
           {menu === null ? (
@@ -620,20 +632,12 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
               key={opcionesDe.id}
               categoria={opcionesDe}
               pantallaCompleta={pantallaCompleta}
-              onVolver={() => setOpcionesDe(null)}
               onAgregar={(producto, cantidad, sin, mezcla, extras) => agregar(producto, opcionesDe.nombre, cantidad, sin, mezcla, extras)}
             />
           ) : categoriaAbierta ? (
             <div className="flex-1 min-h-0 flex flex-col gap-2">
-              <div className="shrink-0 flex items-center justify-between gap-3">
-                <button
-                  onClick={() => setCategoriaAbierta(null)}
-                  className="h-10 px-3 rounded-xl bg-white border border-neutral-200 hover:border-neutral-300 flex items-center gap-2 text-sm font-medium cursor-pointer"
-                >
-                  <ArrowLeft className="w-5 h-5" /> Categorías
-                </button>
-                <div className="text-lg font-bold">{categoriaAbierta.nombre}</div>
-              </div>
+              {/* Para regresar a las categorías: VOLVER, junto a MIX */}
+              <div className="shrink-0 text-lg font-bold text-right">{categoriaAbierta.nombre}</div>
               {/* Grupos de la categoría (Bebidas: Refrescos, Aguas, Jugos), como pestañas */}
               {gruposAbiertos.length > 1 && (
                 <div

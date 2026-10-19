@@ -556,7 +556,7 @@ function DialogoNuevaCuenta({
   };
 
   const claseOpcion = (activo: boolean) =>
-    `rounded-xl border-2 p-3 space-y-2 transition-colors cursor-pointer ${
+    `rounded-xl border-2 px-3 py-2.5 space-y-1.5 transition-colors cursor-pointer ${
       activo ? 'border-emerald-400 bg-emerald-50/50' : 'border-neutral-200 bg-white hover:border-neutral-300'
     }`;
 
@@ -568,10 +568,11 @@ function DialogoNuevaCuenta({
       exit={{ opacity: 0 }}
       onClick={onCancelar}
     >
+      {/* Sin scroll: en horizontal va en dos columnas (llamada y nombre | mesa y tipo) para que quepa completo. */}
       <motion.div
         role="dialog"
         aria-labelledby="nueva-cuenta-titulo"
-        className="w-full max-w-sm bg-white rounded-2xl shadow-xl p-5 space-y-3 max-h-[90vh] overflow-y-auto"
+        className="w-full max-w-sm landscape:max-w-3xl max-h-full overflow-hidden bg-white rounded-2xl shadow-xl p-4 flex flex-col gap-3"
         initial={{ scale: 0.95, y: 10 }}
         animate={{ scale: 1, y: 0 }}
         exit={{ scale: 0.95, opacity: 0 }}
@@ -581,75 +582,81 @@ function DialogoNuevaCuenta({
           Abrir cuenta
         </h2>
 
-        {/* Pedido por teléfono: se toma de una vez y el nombre se guarda al colgar */}
-        <button
-          type="button"
-          onClick={onLlamada}
-          className="neon-solido neon-azul w-full rounded-xl px-4 py-3 flex items-center gap-3 text-left cursor-pointer"
-        >
-          <Phone className="w-7 h-7 shrink-0" />
-          <span>
-            <span className="block text-lg font-black tracking-wide">LLAMADA</span>
-            <span className="block text-xs font-medium opacity-90">Toma el pedido ya; el nombre se guarda al terminar</span>
-          </span>
-        </button>
-
-        {/* Opción 1: por nombre (cuentas.tipo_identificador = 'nombre') */}
-        <div className={claseOpcion(modo === 'nombre')} onClick={() => setModo('nombre')}>
-          <div className="flex items-center gap-2 text-sm font-semibold">
-            <User className="w-4 h-4 text-neutral-500" /> Por nombre
-          </div>
-          <input
-            value={nombre}
-            onChange={(e) => setNombre(e.target.value)}
-            onFocus={() => setModo('nombre')}
-            placeholder="Nombre del cliente"
-            className="w-full h-10 px-3 rounded-lg border border-neutral-300 bg-white text-sm focus:outline-none focus:border-amber-500 select-text"
-          />
-        </div>
-
-        {/* Opción 2: número de mesa (cuentas.tipo_identificador = 'mesa'), consecutivo y sin límite */}
-        <div className={claseOpcion(modo === 'mesa')} onClick={() => setModo('mesa')}>
-          <div className="flex items-center gap-2 text-sm font-semibold">
-            <Hash className="w-4 h-4 text-neutral-500" /> Núm. de mesa
-          </div>
-          <div className="flex items-center gap-2">
+        <div className="grid gap-3 landscape:grid-cols-2">
+          <div className="flex flex-col gap-3">
+            {/* Pedido por teléfono: se toma de una vez y el nombre se guarda al colgar */}
             <button
               type="button"
-              onClick={() => {
-                setModo('mesa');
-                cambiarNumero(-1);
-              }}
-              aria-label="Mesa anterior"
-              className="w-10 h-10 rounded-lg border border-neutral-300 bg-white flex items-center justify-center cursor-pointer"
+              onClick={onLlamada}
+              className="neon-solido neon-azul w-full rounded-xl px-4 py-3 flex items-center gap-3 text-left cursor-pointer"
             >
-              <Minus className="w-4 h-4" />
+              <Phone className="w-7 h-7 shrink-0" />
+              <span>
+                <span className="block text-lg font-black tracking-wide">LLAMADA</span>
+                <span className="block text-xs font-medium opacity-90">Toma el pedido ya; el nombre se guarda al terminar</span>
+              </span>
             </button>
-            <input
-              value={numero}
-              onChange={(e) => setNumero(e.target.value.replace(/\D/g, ''))}
-              onFocus={() => setModo('mesa')}
-              inputMode="numeric"
-              aria-label="Número de mesa"
-              className="flex-1 min-w-0 h-10 px-3 rounded-lg border border-neutral-300 bg-white text-center font-mono text-base font-bold focus:outline-none focus:border-amber-500 select-text"
-            />
-            <button
-              type="button"
-              onClick={() => {
-                setModo('mesa');
-                cambiarNumero(1);
-              }}
-              aria-label="Mesa siguiente"
-              className="w-10 h-10 rounded-lg border border-neutral-300 bg-white flex items-center justify-center cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-          </div>
-          <p className="text-[11px] text-neutral-500">Siguiente consecutivo: Mesa {siguienteMesa}</p>
-        </div>
 
-        {/* cuentas.para_llevar */}
-        <SelectorTipoOrden paraLlevar={paraLlevar} onChange={setParaLlevar} compacto />
+            {/* Opción 1: por nombre (cuentas.tipo_identificador = 'nombre') */}
+            <div className={claseOpcion(modo === 'nombre')} onClick={() => setModo('nombre')}>
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <User className="w-4 h-4 text-neutral-500" /> Por nombre
+              </div>
+              <input
+                value={nombre}
+                onChange={(e) => setNombre(e.target.value)}
+                onFocus={() => setModo('nombre')}
+                placeholder="Nombre del cliente"
+                className="w-full h-10 px-3 rounded-lg border border-neutral-300 bg-white text-sm focus:outline-none focus:border-amber-500 select-text"
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            {/* Opción 2: número de mesa (cuentas.tipo_identificador = 'mesa'), consecutivo y sin límite */}
+            <div className={claseOpcion(modo === 'mesa')} onClick={() => setModo('mesa')}>
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <Hash className="w-4 h-4 text-neutral-500" /> Núm. de mesa
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModo('mesa');
+                    cambiarNumero(-1);
+                  }}
+                  aria-label="Mesa anterior"
+                  className="w-10 h-10 rounded-lg border border-neutral-300 bg-white flex items-center justify-center cursor-pointer"
+                >
+                  <Minus className="w-4 h-4" />
+                </button>
+                <input
+                  value={numero}
+                  onChange={(e) => setNumero(e.target.value.replace(/\D/g, ''))}
+                  onFocus={() => setModo('mesa')}
+                  inputMode="numeric"
+                  aria-label="Número de mesa"
+                  className="flex-1 min-w-0 h-10 px-3 rounded-lg border border-neutral-300 bg-white text-center font-mono text-base font-bold focus:outline-none focus:border-amber-500 select-text"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModo('mesa');
+                    cambiarNumero(1);
+                  }}
+                  aria-label="Mesa siguiente"
+                  className="w-10 h-10 rounded-lg border border-neutral-300 bg-white flex items-center justify-center cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
+              <p className="text-[11px] text-neutral-500">Siguiente consecutivo: Mesa {siguienteMesa}</p>
+            </div>
+
+            {/* cuentas.para_llevar */}
+            <SelectorTipoOrden paraLlevar={paraLlevar} onChange={setParaLlevar} compacto />
+          </div>
+        </div>
 
         {error && (
           <div className="flex items-center gap-2 text-xs text-rose-700 bg-rose-50 border border-rose-200 px-3 py-2 rounded-lg">

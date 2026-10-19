@@ -55,7 +55,8 @@ const BOTON_COMPLEMENTO = {
 interface Props {
   categoria: CategoriaMenu;
   pantallaCompleta: boolean;
-  onVolver: () => void;
+  /** Botón Volver propio; sin él, quien la muestra pone el suyo (el pedido: VOLVER verde junto a MIX). */
+  onVolver?: () => void;
   /**
    * mezcla: los demás productos elegidos junto con `producto` ("Papa con Frijol"); vacío si es uno solo.
    * extras.sinQueso: Quesadillas. extras.conQueso: Tacos. extras.carneExtra: Hamburguesas, 1 doble y 2 triple.
@@ -180,12 +181,16 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
   return (
     <div className={pantallaCompleta ? 'flex-1 min-h-0 flex flex-col gap-2' : 'space-y-5'}>
       <div className="flex items-center justify-between gap-3 shrink-0">
-        <button
-          onClick={onVolver}
-          className="h-10 px-3 rounded-xl bg-white border border-neutral-200 hover:border-neutral-300 flex items-center gap-2 text-sm font-medium cursor-pointer"
-        >
-          <ArrowLeft className="w-5 h-5" /> Volver
-        </button>
+        {onVolver ? (
+          <button
+            onClick={onVolver}
+            className="h-10 px-3 rounded-xl bg-white border border-neutral-200 hover:border-neutral-300 flex items-center gap-2 text-sm font-medium cursor-pointer"
+          >
+            <ArrowLeft className="w-5 h-5" /> Volver
+          </button>
+        ) : (
+          <span />
+        )}
         <div className="text-right">
           <div className="text-lg font-bold leading-tight">{categoria.nombre}</div>
           <div className="text-sm text-neutral-500 font-mono">
