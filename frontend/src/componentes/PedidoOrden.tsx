@@ -100,7 +100,7 @@ const esCuadricula = (c: CategoriaMenu) =>
 /** Grupo del producto dentro de su categoría (BD: producto.grupo); los que no tienen van en «Otras». */
 const grupoDe = (p: ProductoMenu) => p.grupo ?? 'Otras';
 
-/** Categorías que no van en el ticket de cocina (se guardan en la orden, pero no se imprimen). */
+/** Categorías que no van en el ticket de cocina: salen en su propio ticket en la impresora de caja. */
 const FUERA_DEL_TICKET = new Set(['bebidas']);
 const vaEnTicket = (l: LineaNueva) => !FUERA_DEL_TICKET.has(l.categoria.trim().toLowerCase());
 
@@ -365,32 +365,37 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
       setCategoriaAbierta(null);
       setOpcionesDe(null);
       setPestana('pedido');
-      // Las bebidas no se imprimen; si el envío solo trae bebidas, no sale ticket.
       // El servidor asigna los números definitivos, incluso si otra tablet envía al mismo tiempo.
       const confirmado = enviado.map((l, i) => ({
         ...l, id: datos.guardados[i].idDetalle_Orden, mixGrupo: datos.guardados[i].mix_grupo,
       }));
+      // Dos tickets: lo de cocina (y los extras) a la impresora de cocina, y las bebidas a la de caja,
+      // donde se preparan. Salen al mismo tiempo, cada uno en su impresora.
       const paraTicket = confirmado.filter(vaEnTicket);
+      const bebidas = confirmado.filter((l) => !vaEnTicket(l));
       const extrasTicket = datos.extrasGuardados ?? extrasDelBorrador;
-      const imprime = paraTicket.length > 0 || extrasTicket.length > 0;
+      const ronda = rondasPrevias + 1;
+      const tickets = [
+        ...(paraTicket.length > 0 || extrasTicket.length > 0
+          ? [{ nombre: 'cocina', ticket: ticketDe(datos.orden, paraTicket, ronda, origen, extrasTicket) }]
+          : []),
+        ...(bebidas.length > 0 ? [{ nombre: 'bebidas (caja)', ticket: { ...ticketDe(datos.orden, bebidas, ronda, origen), area: 'bebidas' as const } }] : []),
+      ];
       setAlerta({
         titulo: `Pedido enviado a cocina · ${datos.orden.etiqueta}`,
         detalle: [...confirmado.map((l) => `${l.cantidad} × ${l.categoria} · ${nombreLinea(l)}${textoSin(l)}`), ...extrasTicket.map((e) => `Extra: ${e.descripcion} · ${dinero(e.importe)}`)],
-        impresion:
-          imprime
-            ? { ok: null, texto: 'Imprimiendo ticket de cocina…' }
-            : { ok: true, texto: 'Solo bebidas: no se imprime ticket de cocina.' },
+        impresion: { ok: null, texto: `Imprimiendo ticket de ${tickets.map((t) => t.nombre).join(' y ')}…` },
       });
-      if (imprime) {
-        // Ticket de cocina: si la impresora no responde, el pedido ya quedó guardado; solo se avisa.
-        imprimirTicketCocina(ticketDe(datos.orden, paraTicket, rondasPrevias + 1, origen, extrasTicket))
-          .then(() => setAlerta((a) => (a ? { ...a, impresion: { ok: true, texto: 'Ticket de cocina impreso.' } } : a)))
-          .catch((err) =>
-            setAlerta((a) =>
-              a ? { ...a, impresion: { ok: false, texto: `No se imprimió el ticket: ${err instanceof Error ? err.message : 'error'}` } } : a
-            )
-          );
-      }
+      // Si una impresora no responde, el pedido ya quedó guardado; solo se avisa cuál ticket no salió.
+      Promise.allSettled(tickets.map((t) => imprimirTicketCocina(t.ticket))).then((resultados) => {
+        const fallas = resultados.flatMap((r, i) =>
+          r.status === 'rejected' ? [`${tickets[i].nombre}: ${r.reason instanceof Error ? r.reason.message : 'error'}`] : []
+        );
+        const impresion = fallas.length
+          ? { ok: false, texto: `No se imprimió el ticket de ${fallas.join(' · ')}` }
+          : { ok: true, texto: tickets.length > 1 ? 'Tickets de cocina y de bebidas impresos.' : `Ticket de ${tickets[0]?.nombre ?? 'cocina'} impreso.` };
+        setAlerta((a) => (a ? { ...a, impresion } : a));
+      });
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo enviar el pedido.');

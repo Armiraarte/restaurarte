@@ -109,7 +109,9 @@ impresionRouter.post('/cocina', async (req, res) => {
     return;
   }
   try {
-    const data = await imprimirLineas(lineasTicketCocina(ticket as TicketCocina), 'cocina');
+    // Las bebidas se preparan en caja: su ticket sale en la impresora de caja; lo demás, en la de cocina.
+    const destino: DestinoImpresion = (ticket as TicketCocina).area === 'bebidas' ? 'caja' : 'cocina';
+    const data = await imprimirLineas(lineasTicketCocina(ticket as TicketCocina), destino);
     res.json(data);
   } catch (err: any) {
     res.status(err.status || 500).json({ error: err.message });

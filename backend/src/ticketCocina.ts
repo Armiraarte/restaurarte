@@ -46,6 +46,8 @@ export interface TicketCocina {
   productos: ProductoTicketCocina[];
   extras?: ExtraPedido[];
   total_piezas: number; // piezas a preparar (un paquete cuenta sus piezas) para que cocina confirme que no falta nada
+  /** 'bebidas': el ticket de las bebidas, que se imprime en la impresora de caja (ahí se preparan). Sin valor: cocina. */
+  area?: 'cocina' | 'bebidas';
   notas_generales?: string; // BD: comandas.notas
 }
 
@@ -56,6 +58,7 @@ export function validarTicketCocina(t: any): string | null {
   if (typeof t.mesa !== 'string' || !t.mesa.trim()) return 'Falta la mesa.';
   if (!Array.isArray(t.productos) || (t.productos.length === 0 && !t.extras?.length)) return 'El ticket no tiene productos ni extras.';
   if (t.extras !== undefined && !extrasValidos(t.extras)) return 'Extra inválido en el ticket.';
+  if (t.area !== undefined && t.area !== 'cocina' && t.area !== 'bebidas') return 'Área inválida en el ticket.';
   for (const p of t.productos) {
     if (typeof p?.nombre !== 'string' || !(Number(p?.cantidad) > 0)) return 'Producto inválido en el ticket.';
     if (p.mix_grupo != null && (!Number.isSafeInteger(p.mix_grupo) || p.mix_grupo < 1)) return 'Grupo MIX inválido.';
@@ -94,7 +97,7 @@ function fechaHora(iso: string): string {
 export function lineasTicketCocina(t: TicketCocina): LineaTicket[] {
   const lineas: LineaTicket[] = [
     ...encabezadoRestaurante({ anchoMm: 35, alinear: 'izquierda' }), // logo 30% más chico que en los demás tickets
-    { texto: `Orden cocina ${t.orden_cocina}`, grande: true },
+    { texto: `${t.area === 'bebidas' ? 'BEBIDAS' : 'Orden cocina'} ${t.orden_cocina}`, grande: true },
     { texto: t.para_llevar ? `${t.mesa} · PARA LLEVAR` : t.mesa, negrita: true },
     ...(t.tablet ? [{ texto: t.tablet }] : []),
     { texto: fechaHora(t.enviada_en) },

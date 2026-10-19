@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { parseEnv } from 'node:util';
 import { AsignacionesImpresoras, esDestino } from './asignaciones.mjs';
+import { TrabajadorImpresion } from './trabajador.mjs';
 
 const DIR = import.meta.dirname;
 let variables = {};
@@ -27,6 +28,12 @@ const variable = (nombre) => process.env[nombre] ?? variables[nombre] ?? '';
 const PUERTO = Number(variable('PRINT_AGENT_PORT')) || 9101;
 const TOKEN = variable('PRINT_AGENT_TOKEN');
 const asignaciones = new AsignacionesImpresoras(path.join(DIR, 'data/asignaciones.json'), variable('IMPRESORA_TICKETS'));
+
+// Un proceso de impresión permanente por impresora (ver trabajador.mjs): cocina y caja imprimen al mismo tiempo.
+const trabajadores = {
+  cocina: new TrabajadorImpresion('cocina', path.join(DIR, 'servidor-impresion.ps1')),
+  caja: new TrabajadorImpresion('caja', path.join(DIR, 'servidor-impresion.ps1')),
+};
 
 function powershell(script, args = []) {
   return new Promise((resolve, reject) => {
@@ -70,16 +77,30 @@ async function imprimir(lineas, destino) {
     ticket = asignaciones.elegir(destino, (await listarImpresoras({ actualizar: true })).impresoras);
   }
 
+  const raw = /axiohm|apos/i.test(`${ticket.nombre} ${ticket.driver}`);
+  const datos = { impresora: ticket.nombre, anchoMm: 72, lineas };
+  try {
+    // Lo normal: el proceso de impresión de esa impresora, ya preparado (respuesta casi inmediata).
+    await trabajadores[destino].imprimir({ modo: raw ? 'raw' : 'driver', ticket: datos });
+  } catch (err) {
+    if (!err.sinProceso) throw err;
+    // El proceso no pudo arrancar: se imprime como antes, con un PowerShell nuevo para este ticket.
+    console.error(`[agente] ${err.message} Se usa el método anterior.`);
+    await imprimirConScript(raw ? 'imprimir-raw.ps1' : 'imprimir.ps1', datos);
+  }
+  return ticket;
+}
+
+/** Método anterior: un PowerShell nuevo por ticket (más lento; solo si el proceso permanente no arranca). */
+async function imprimirConScript(script, datos) {
   const dir = await mkdtemp(path.join(tmpdir(), 'ticket-'));
   const archivo = path.join(dir, 'ticket.json');
   try {
-    await writeFile(archivo, JSON.stringify({ impresora: ticket.nombre, anchoMm: 72, lineas }), 'utf8');
-    const script = /axiohm|apos/i.test(`${ticket.nombre} ${ticket.driver}`) ? 'imprimir-raw.ps1' : 'imprimir.ps1';
+    await writeFile(archivo, JSON.stringify(datos), 'utf8');
     await powershell(script, ['-Archivo', archivo]);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
-  return ticket;
 }
 
 function responder(res, status, data) {
@@ -143,3 +164,11 @@ servidor.listen(PUERTO, () => {
 const renovarLista = () => consultarImpresoras().catch((err) => console.error('[agente]', err.message));
 renovarLista();
 setInterval(renovarLista, RENOVAR_LISTA_MS);
+
+// Los procesos de impresión se preparan desde el arranque: el primer ticket ya no espera a que carguen.
+for (const [destino, trabajador] of Object.entries(trabajadores)) {
+  trabajador
+    .preparar()
+    .then(() => console.log(`[agente] Impresión de ${destino} lista.`))
+    .catch((err) => console.error('[agente]', err.message));
+}

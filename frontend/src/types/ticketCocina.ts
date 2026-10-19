@@ -70,5 +70,7 @@ export interface TicketCocina {
   productos: ProductoTicketCocina[];
   extras?: { descripcion: string; importe: number }[];
   total_piezas: number; // piezas a preparar (un paquete cuenta sus piezas) para que cocina confirme que no falta nada
+  /** 'bebidas': el ticket de las bebidas, que se imprime en la impresora de caja (ahí se preparan). Sin valor: cocina. */
+  area?: 'cocina' | 'bebidas';
   notas_generales?: string; // BD: comandas.notas
 }
