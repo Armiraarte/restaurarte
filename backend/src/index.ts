@@ -5,6 +5,7 @@ import { impresionRouter } from './impresion.js';
 import { inicializarUsuarios } from './usuarios.js';
 import { inicializarSesionesTablet } from './sesionesTablet.js';
 import { accesoTabletRouter } from './accesoTablet.js';
+import { agenteRemotoRouter } from './agenteRemoto.js';
 import { usuariosRouter } from './usuariosRouter.js';
 import { tabletsRouter } from './tablets.js';
 import { mesasRouter } from './mesas.js';
@@ -26,6 +27,8 @@ app.use('/api/impresion', impresionRouter);
 app.use('/api/usuarios', usuariosRouter);
 app.use('/api/tablets', tabletsRouter);
 app.use('/api/acceso-tablet', accesoTabletRouter);
+// Agente de impresión conectado por internet (con su token, sin sesión de usuario).
+app.use('/api/agente', agenteRemotoRouter);
 // Cada escritura que sale bien avisa a todas las pantallas para que se actualicen solas.
 app.use('/api/mesas', avisarCambios('ordenes'), mesasRouter);
 app.use('/api/turnos', avisarCambios('turno', 'ordenes'), turnosRouter);

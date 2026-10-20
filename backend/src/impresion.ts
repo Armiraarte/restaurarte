@@ -5,6 +5,7 @@ import { config } from './config.js';
 import { requireAuth } from './auth.js';
 import { lineasTicketCocina, validarTicketCocina, type TicketCocina } from './ticketCocina.js';
 import { encabezadoRestaurante } from './ticketMarca.js';
+import { agenteRemoto, pedirAlAgenteRemoto } from './agenteRemoto.js';
 
 // La impresora está conectada por USB a la PC de Windows; el backend (en Docker) no la ve,
 // así que reenvía todo al agente de impresión que corre en esa PC (carpeta print-agent/).
@@ -23,6 +24,13 @@ export interface LineaTicket {
 }
 
 async function llamarAgente(ruta: string, init?: RequestInit) {
+  // Agente conectado por internet (la computadora con las impresoras, instalada con el instalador): va primero.
+  if (agenteRemoto()) {
+    const { status, data } = await pedirAlAgenteRemoto(ruta, init?.method ?? 'GET', init?.body ? JSON.parse(String(init.body)) : undefined);
+    if (status >= 400) throw Object.assign(new Error(data?.error || 'Error del agente de impresión.'), { status });
+    return data;
+  }
+  // Si no, el agente de la PC por el túnel SSH (PRINT_AGENT_URL).
   let res: Response;
   try {
     res = await fetch(`${config.printAgent.url}${ruta}`, {
@@ -76,9 +84,10 @@ function ticketDePrueba(usuario: string, destino: DestinoImpresion): LineaTicket
 export const impresionRouter = Router();
 impresionRouter.use(requireAuth);
 
-// Instalador de las impresoras (drivers de la Star TSP143 + registro de la Axiohm) para la computadora donde se
-// conectan. Vive en la carpeta de datos del servidor (no en el repositorio, que es público): data/descargas/.
-const INSTALADOR = path.join(config.dataDir, 'descargas', 'drivers-impresoras.zip');
+// Instalador de impresión (.exe: drivers e impresoras, Node.js y el agente conectado a este servidor) para la
+// computadora donde se conectan las impresoras. Vive en la carpeta de datos del servidor (no en el repositorio, que es público): data/descargas/.
+// Lo arma print-agent/instalador/crear-instalador.ps1 (lleva dentro el token del agente) y se sube a mano al servidor.
+const INSTALADOR = path.join(config.dataDir, 'descargas', 'instalador-impresoras.exe');
 
 impresionRouter.get('/instalador', (req, res) => {
   if (!['admin', 'cajero'].includes(req.usuario!.rol)) {
@@ -89,12 +98,13 @@ impresionRouter.get('/instalador', (req, res) => {
     res.status(404).json({ error: 'El instalador de impresoras no está en el servidor.' });
     return;
   }
-  res.download(INSTALADOR, 'Drivers-impresoras-SOFT-RESTAURANTE.zip');
+  res.download(INSTALADOR, 'Instalar-impresoras-SOFT-RESTAURANTE.exe');
 });
 
 impresionRouter.get('/estado', async (_req, res) => {
   try {
-    res.json({ agente: true, ...(await llamarAgente('/impresoras')) });
+    // equipo: la computadora del agente conectado por internet (sin él, la PC del túnel).
+    res.json({ agente: true, equipo: agenteRemoto()?.equipo ?? null, ...(await llamarAgente('/impresoras')) });
   } catch (err: any) {
     res.status(err.status === 503 ? 200 : err.status || 500).json({ agente: false, error: err.message });
   }

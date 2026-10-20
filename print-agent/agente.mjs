@@ -7,7 +7,10 @@
 //
 // Variables: PRINT_AGENT_PORT (9101), IMPRESORA_TICKETS (nombre exacto; si no, se busca una térmica),
 // PRINT_AGENT_TOKEN (opcional; si se define, el backend debe mandarlo en el header X-Agent-Token).
+// SERVIDOR_URL (opcional, p. ej. https://losdiablitos.restaurarte.com.mx): el agente se conecta él mismo al
+// servidor con PRINT_AGENT_TOKEN y recibe ahí los tickets (ver conexionServidor.mjs); así no hace falta el túnel.
 import http from 'node:http';
+import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { writeFile, rm, mkdtemp } from 'node:fs/promises';
@@ -16,6 +19,7 @@ import path from 'node:path';
 import { parseEnv } from 'node:util';
 import { AsignacionesImpresoras, esDestino } from './asignaciones.mjs';
 import { TrabajadorImpresion } from './trabajador.mjs';
+import { conectarAlServidor } from './conexionServidor.mjs';
 
 const DIR = import.meta.dirname;
 let variables = {};
@@ -27,6 +31,7 @@ try {
 const variable = (nombre) => process.env[nombre] ?? variables[nombre] ?? '';
 const PUERTO = Number(variable('PRINT_AGENT_PORT')) || 9101;
 const TOKEN = variable('PRINT_AGENT_TOKEN');
+const SERVIDOR_URL = variable('SERVIDOR_URL').replace(/\/$/, '');
 const asignaciones = new AsignacionesImpresoras(path.join(DIR, 'data/asignaciones.json'), variable('IMPRESORA_TICKETS'));
 
 // Un proceso de impresión permanente por impresora (ver trabajador.mjs): cocina y caja imprimen al mismo tiempo.
@@ -103,6 +108,38 @@ async function imprimirConScript(script, datos) {
   }
 }
 
+const respuesta = (status, data) => ({ status, data });
+
+/** Atiende una petición (del servidor local o de la conexión con el servidor) y devuelve { status, data }. */
+async function atender(metodo, ruta, leerCuerpo) {
+  try {
+    if (metodo === 'GET' && ruta === '/impresoras') {
+      return respuesta(200, await listarImpresoras());
+    }
+
+    if (metodo === 'PUT' && ruta === '/asignacion') {
+      const { destino, impresora } = await leerCuerpo();
+      if (!esDestino(destino)) return respuesta(400, { error: 'El destino debe ser cocina o caja.' });
+      const { impresoras } = await listarImpresoras();
+      return respuesta(200, await asignaciones.asignar(destino, impresora, impresoras));
+    }
+
+    if (metodo === 'POST' && ruta === '/imprimir') {
+      const { lineas, destino = 'caja' } = await leerCuerpo();
+      if (!esDestino(destino)) return respuesta(400, { error: 'El destino debe ser cocina o caja.' });
+      if (!Array.isArray(lineas) || lineas.length === 0) return respuesta(400, { error: 'El ticket no tiene líneas.' });
+      const impresora = await imprimir(lineas, destino);
+      console.log(`[agente] Ticket de ${destino} enviado a "${impresora.nombre}"`);
+      return respuesta(200, { ok: true, impresora: impresora.nombre, destino });
+    }
+
+    return respuesta(404, { error: 'Ruta no encontrada.' });
+  } catch (err) {
+    console.error('[agente]', err.message);
+    return respuesta(err.status || 500, { error: err.message });
+  }
+}
+
 function responder(res, status, data) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(data));
@@ -126,39 +163,30 @@ async function leerJson(req) {
 }
 
 const servidor = http.createServer(async (req, res) => {
-  try {
-    if (TOKEN && req.headers['x-agent-token'] !== TOKEN) return responder(res, 401, { error: 'Token inválido.' });
-
-    if (req.method === 'GET' && req.url === '/impresoras') {
-      return responder(res, 200, await listarImpresoras());
-    }
-
-    if (req.method === 'PUT' && req.url === '/asignacion') {
-      const { destino, impresora } = await leerJson(req);
-      if (!esDestino(destino)) return responder(res, 400, { error: 'El destino debe ser cocina o caja.' });
-      const { impresoras } = await listarImpresoras();
-      return responder(res, 200, await asignaciones.asignar(destino, impresora, impresoras));
-    }
-
-    if (req.method === 'POST' && req.url === '/imprimir') {
-      const { lineas, destino = 'caja' } = await leerJson(req);
-      if (!esDestino(destino)) return responder(res, 400, { error: 'El destino debe ser cocina o caja.' });
-      if (!Array.isArray(lineas) || lineas.length === 0) return responder(res, 400, { error: 'El ticket no tiene líneas.' });
-      const impresora = await imprimir(lineas, destino);
-      console.log(`[agente] Ticket de ${destino} enviado a "${impresora.nombre}"`);
-      return responder(res, 200, { ok: true, impresora: impresora.nombre, destino });
-    }
-
-    responder(res, 404, { error: 'Ruta no encontrada.' });
-  } catch (err) {
-    console.error('[agente]', err.message);
-    responder(res, err.status || 500, { error: err.message });
-  }
+  if (TOKEN && req.headers['x-agent-token'] !== TOKEN) return responder(res, 401, { error: 'Token inválido.' });
+  const { status, data } = await atender(req.method, req.url, () => leerJson(req));
+  responder(res, status, data);
 });
 
-servidor.listen(PUERTO, () => {
+// Conectado al servidor por internet, el puerto local solo se abre para esta computadora (sin aviso del firewall).
+servidor.listen(PUERTO, SERVIDOR_URL ? '127.0.0.1' : undefined, () => {
   console.log(`[agente] Agente de impresión escuchando en http://localhost:${PUERTO}`);
 });
+
+if (SERVIDOR_URL) {
+  if (!TOKEN) console.error('[agente] Falta PRINT_AGENT_TOKEN: no se puede conectar al servidor.');
+  else {
+    conectarAlServidor({
+      url: SERVIDOR_URL,
+      token: TOKEN,
+      equipo: os.hostname(),
+      atender: ({ metodo, ruta, cuerpo }) => atender(metodo, ruta, async () => {
+        if (!cuerpo || typeof cuerpo !== 'object' || Array.isArray(cuerpo)) throw Object.assign(new Error('Se esperaba un objeto.'), { status: 400 });
+        return cuerpo;
+      }),
+    });
+  }
+}
 
 // Lista de impresoras lista desde el arranque y renovada cada minuto.
 const renovarLista = () => consultarImpresoras().catch((err) => console.error('[agente]', err.message));

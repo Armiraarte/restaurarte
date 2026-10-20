@@ -115,6 +115,7 @@ export const ImpresorasTicketsPanel: React.FC = () => {
                 <span className="text-emerald-700 font-medium">{conectadas} conectadas</span>
                 {' · '}
                 <span className={desconectadas > 0 ? 'text-rose-700 font-medium' : ''}>{desconectadas} desconectadas</span>
+                {estado.equipo && <span> · Imprime la computadora «{estado.equipo}»</span>}
               </>
             )}
             {ultimaRevision && <span className="text-neutral-400"> · Revisado a las {ultimaRevision}</span>}
@@ -261,19 +262,22 @@ export const ImpresorasTicketsPanel: React.FC = () => {
 };
 
 /**
- * Instalar las impresoras desde aquí: descarga el instalador (drivers de la Star TSP143 y registro de la Axiohm)
- * para abrirlo en la computadora donde están conectadas. Destacado cuando no se detectan; si no, un enlace discreto.
+ * Instalar las impresoras desde aquí: descarga el instalador (.exe) para abrirlo en la computadora donde están
+ * conectadas; deja drivers, impresoras y el programa de impresión listos y conectados a este sistema.
+ * Destacado cuando no se detectan; si no, un enlace discreto.
  */
 function InstalarImpresoras({ destacado }: { destacado: boolean }) {
   const [descargando, setDescargando] = useState(false);
+  const [avance, setAvance] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [listo, setListo] = useState(false);
 
   const descargar = async () => {
     setDescargando(true);
+    setAvance(0);
     setError(null);
     try {
-      await descargarInstaladorImpresoras();
+      await descargarInstaladorImpresoras(setAvance);
       setListo(true);
     } catch (err) {
       setError((err as Error).message);
@@ -294,7 +298,7 @@ function InstalarImpresoras({ destacado }: { destacado: boolean }) {
       }`}
     >
       {descargando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-      {descargando ? 'Descargando…' : 'Descargar instalador de impresoras'}
+      {descargando ? `Descargando… ${Math.round(avance * 100)}%` : 'Descargar instalador de impresoras'}
     </button>
   );
 
@@ -314,18 +318,18 @@ function InstalarImpresoras({ destacado }: { destacado: boolean }) {
         <Wrench className="w-5 h-5 shrink-0 mt-0.5 text-amber-700" />
         <div>
           <div className="text-sm font-bold text-amber-950">¿No aparecen las impresoras? Instálalas desde aquí</div>
-          <p className="text-xs text-amber-900 mt-0.5">En la computadora donde están conectadas por USB (Star TSP143 de cocina y Axiohm de caja):</p>
+          <p className="text-xs text-amber-900 mt-0.5">Hazlo en la computadora donde están conectadas por USB (Star TSP143 de cocina y Axiohm de caja). Instala todo solo: drivers, impresoras y el programa que imprime.</p>
         </div>
       </div>
       <ol className="list-decimal pl-9 text-xs text-amber-950 space-y-0.5">
-        <li>Descarga el instalador y descomprímelo (clic derecho → Extraer todo).</li>
         <li>Conecta y enciende las impresoras.</li>
-        <li>Doble clic en <b>INSTALAR.cmd</b> y acepta el permiso de administrador.</li>
-        <li>Regresa aquí y toca «Volver a revisar».</li>
+        <li>Descarga el instalador. Si el navegador pregunta, elige «Conservar».</li>
+        <li>Ábrelo y acepta el permiso de administrador. Si sale «Windows protegió su PC»: «Más información» → «Ejecutar de todas formas».</li>
+        <li>Espera a que diga <b>LISTO</b> (uno o dos minutos) y toca aquí «Volver a revisar».</li>
       </ol>
       <div className="flex flex-wrap items-center gap-3">
         {boton}
-        {listo && <span className="text-xs font-medium text-emerald-800">Descargado: ábrelo en esa computadora.</span>}
+        {listo && <span className="text-xs font-medium text-emerald-800">Descargado: ábrelo desde la carpeta Descargas.</span>}
         {error && <span className="text-xs text-rose-700">{error}</span>}
       </div>
     </div>

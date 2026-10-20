@@ -31,3 +31,4 @@ backend/.phpunit.cache
 # Configuracion y SQL locales con credenciales del servidor
 /db/config.local.php
 /backend/database/server-access.local.sql
+print-agent/instalador/salida/

@@ -11,6 +11,8 @@ export interface Impresora {
 
 export interface EstadoImpresion {
   agente: boolean;
+  /** Computadora que imprime cuando está conectada por internet (la del instalador). */
+  equipo?: string | null;
   impresoras?: Impresora[];
   ticket?: Impresora | null;
   asignaciones?: Record<DestinoImpresion, string | null>;
@@ -48,11 +50,11 @@ export function imprimirPrueba(destino: DestinoImpresion = 'caja'): Promise<{ ok
 }
 
 /**
- * Descarga el instalador de las impresoras (drivers de la Star TSP143 y registro de la Axiohm) para abrirlo en
- * la computadora donde están conectadas. Una página web no puede instalar drivers: se descarga y se abre
- * INSTALAR.cmd (pide permiso de administrador).
+ * Descarga el instalador de impresión (un .exe) para abrirlo en la computadora donde están conectadas las impresoras:
+ * instala drivers e impresoras, el programa de impresión y lo conecta a este sistema. Una página web no puede
+ * instalar drivers, por eso se descarga. `alAvanzar` recibe el avance de 0 a 1 (pesa unos 36 MB).
  */
-export async function descargarInstaladorImpresoras(): Promise<void> {
+export async function descargarInstaladorImpresoras(alAvanzar?: (avance: number) => void): Promise<void> {
   let res: Response;
   try {
     res = await fetch('/api/impresion/instalador', { headers: { Authorization: `Bearer ${getToken()}` } });
@@ -63,10 +65,25 @@ export async function descargarInstaladorImpresoras(): Promise<void> {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.error || 'No se pudo descargar el instalador.');
   }
-  const url = URL.createObjectURL(await res.blob());
+  const total = Number(res.headers.get('Content-Length')) || 0;
+  const partes: Uint8Array<ArrayBuffer>[] = [];
+  let recibido = 0;
+  try {
+    const lector = res.body!.getReader();
+    for (;;) {
+      const { done, value } = await lector.read();
+      if (done) break;
+      partes.push(value);
+      recibido += value.length;
+      if (total) alAvanzar?.(recibido / total);
+    }
+  } catch {
+    throw new Error('Se cortó la descarga. Vuelve a intentarlo.');
+  }
+  const url = URL.createObjectURL(new Blob(partes, { type: 'application/octet-stream' }));
   const enlace = document.createElement('a');
   enlace.href = url;
-  enlace.download = 'Drivers-impresoras-SOFT-RESTAURANTE.zip';
+  enlace.download = 'Instalar-impresoras-SOFT-RESTAURANTE.exe';
   document.body.appendChild(enlace);
   enlace.click();
   enlace.remove();
