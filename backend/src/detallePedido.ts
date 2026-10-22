@@ -18,6 +18,27 @@ export interface ItemPedido {
   conPapas?: boolean;
   /** Identificador temporal del borrador; se asigna un número definitivo bajo el bloqueo de la orden. */
   mixGrupo?: number | null;
+  /** MEZCLAR (Alitas): cuántas piezas de cada sabor en un solo renglón; suman `cantidad`. */
+  reparto?: RepartoPedido[];
+}
+
+export interface RepartoPedido {
+  nombre: string;
+  cantidad: number;
+}
+
+/** Al menos dos sabores distintos, cada uno con piezas, y que sumen la cantidad del renglón. */
+function repartoValido(reparto: unknown, cantidad: number): boolean {
+  if (!Array.isArray(reparto) || reparto.length < 2 || reparto.length > 40) return false;
+  const nombres = new Set<string>();
+  let suma = 0;
+  for (const r of reparto) {
+    if (typeof r?.nombre !== 'string' || !r.nombre.trim() || r.nombre.length > 255 || nombres.has(r.nombre)) return false;
+    if (!Number.isSafeInteger(r.cantidad) || r.cantidad < 1) return false;
+    nombres.add(r.nombre);
+    suma += r.cantidad;
+  }
+  return suma === cantidad;
 }
 
 export function itemsValidos(items: ItemPedido[]): boolean {
@@ -32,7 +53,8 @@ export function itemsValidos(items: ItemPedido[]): boolean {
     !(i.sinQueso && i.conQueso) &&
     (i.terminoId == null || (Number.isSafeInteger(i.terminoId) && i.terminoId > 0)) &&
     (i.carneExtra === undefined || (Number.isSafeInteger(i.carneExtra) && i.carneExtra >= 0 && i.carneExtra <= 2)) &&
-    (i.mixGrupo == null || (Number.isSafeInteger(i.mixGrupo) && i.mixGrupo > 0 && i.mixGrupo <= 2147483647))
+    (i.mixGrupo == null || (Number.isSafeInteger(i.mixGrupo) && i.mixGrupo > 0 && i.mixGrupo <= 2147483647)) &&
+    (i.reparto === undefined || repartoValido(i.reparto, i.cantidad))
   );
 }
 
@@ -72,6 +94,7 @@ export async function guardarDetallePedido(
     const opciones = {
       sin: (complementos.get(item.idProducto) ?? []).filter((c) => item.sin?.includes(c.id)),
       mezcla: item.mezcla ?? [],
+      ...(item.reparto && { reparto: item.reparto.map((r) => ({ nombre: r.nombre, cantidad: r.cantidad })) }),
       ...(item.conPapas && { papas }),
     };
     const [resultado] = await conexion.execute<ResultSetHeader>(

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Banknote, Check, ChefHat, Download, Loader2, Plug, Printer, RefreshCw, Unplug, Wrench } from 'lucide-react';
+import { AlertTriangle, Banknote, Check, ChefHat, Download, Loader2, Plug, Printer, RefreshCw, Unplug, Wrench } from 'lucide-react';
 import {
   asignarImpresora,
   descargarInstaladorImpresoras,
@@ -26,6 +26,7 @@ export const ImpresorasTicketsPanel: React.FC = () => {
   const revision = useRef(0);
   const [aviso, setAviso] = useState<Aviso>(null);
   const [ultimaRevision, setUltimaRevision] = useState<string | null>(null);
+  const [verInstalador, setVerInstalador] = useState(false);
 
   const revisar = useCallback(async () => {
     if (guardandoRef.current) return;
@@ -121,14 +122,28 @@ export const ImpresorasTicketsPanel: React.FC = () => {
             {ultimaRevision && <span className="text-neutral-400"> · Revisado a las {ultimaRevision}</span>}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2 self-start sm:self-auto">
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          {/* Faltan impresoras: el triángulo muestra u oculta cómo instalarlas */}
+          {faltanImpresoras && (
+            <button
+              type="button"
+              onClick={() => setVerInstalador((v) => !v)}
+              aria-expanded={verInstalador}
+              aria-label="¿No aparecen las impresoras? Ver cómo instalarlas"
+              title="¿No aparecen las impresoras? Instálalas desde aquí"
+              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-amber-50 cursor-pointer"
+            >
+              <AlertTriangle className="w-6 h-6 fill-yellow-400 text-amber-800" />
+            </button>
+          )}
           <button
             onClick={revisar}
             disabled={revisando || !!guardando}
-            className="px-3.5 py-1.5 text-xs font-semibold text-sky-800 bg-sky-50 border border-sky-200 rounded-lg hover:bg-sky-100 disabled:opacity-50 transition-colors cursor-pointer flex items-center gap-1.5"
+            aria-label="Volver a revisar"
+            title="Volver a revisar"
+            className="w-8 h-8 text-sky-800 bg-sky-50 border border-sky-200 rounded-lg hover:bg-sky-100 disabled:opacity-50 transition-colors cursor-pointer flex items-center justify-center"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${revisando ? 'animate-spin' : ''}`} />
-            Volver a revisar
+            <RefreshCw className={`w-4 h-4 ${revisando ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
@@ -163,7 +178,7 @@ export const ImpresorasTicketsPanel: React.FC = () => {
         </div>
       )}
 
-      <InstalarImpresoras destacado={faltanImpresoras} />
+      {(!faltanImpresoras || verInstalador) && <InstalarImpresoras destacado={faltanImpresoras} />}
 
       {aviso && (
         <div
@@ -325,7 +340,7 @@ function InstalarImpresoras({ destacado }: { destacado: boolean }) {
         <li>Conecta y enciende las impresoras.</li>
         <li>Descarga el instalador. Si el navegador pregunta, elige «Conservar».</li>
         <li>Ábrelo y acepta el permiso de administrador. Si sale «Windows protegió su PC»: «Más información» → «Ejecutar de todas formas».</li>
-        <li>Espera a que diga <b>LISTO</b> (uno o dos minutos) y toca aquí «Volver a revisar».</li>
+        <li>Espera a que diga <b>LISTO</b> (uno o dos minutos) y toca el botón azul de arriba para volver a revisar.</li>
       </ol>
       <div className="flex flex-wrap items-center gap-3">
         {boton}

@@ -40,6 +40,50 @@ export const ICONO_CATEGORIA: Record<string, LucideIcon> = {
 /** Ícono de la categoría; si no está en la lista, cubiertos. */
 export const iconoCategoria = (nombre: string): LucideIcon => ICONO_CATEGORIA[nombre] ?? UtensilsCrossed;
 
+// Foto de cada categoría (public/images/categorias: versiones de 256 px en WebP de public/images/PLATILLOS, ligeras para las tablets).
+const FOTO_CATEGORIA: Record<string, string> = {
+  'Tacos Dorados': 'tacos-dorados',
+  Tacos: 'tacos',
+  Quesadillas: 'quesadillas',
+  Sopes: 'sopes',
+  Enchiladas: 'enchiladas',
+  Tostadas: 'tostadas',
+  Burritas: 'burritas',
+  Lonches: 'lonches',
+  Hamburguesas: 'hamburguesas',
+  Ensaladas: 'ensaladas',
+  'Papas a la Francesa': 'papas',
+  Alitas: 'alitas',
+  Salchichas: 'salchichas',
+  Carnes: 'milanesa',
+};
+
+/** Ruta de la foto de la categoría; null si no tiene (se usa su ícono). */
+export const fotoCategoria = (nombre: string): string | null =>
+  FOTO_CATEGORIA[nombre] ? `/images/categorias/${FOTO_CATEGORIA[nombre]}.webp` : null;
+
+// Logo de la marca de cada bebida (public/images/bebidas: versiones de 160 px en WebP de public/images/marcas).
+// Varias bebidas comparten logo (Coca-Cola, Coca 1/2 y Coquita; los dos Jumex). Las aguas y la Limita no tienen.
+const LOGO_BEBIDA: Record<string, string> = {
+  'Coca-Cola': 'coca',
+  'Coca 1/2': 'coca',
+  'Coca Light': 'coca-light',
+  'Coca Zero': 'coca-zero',
+  'Coquita 235': 'coca',
+  Pepsi: 'pepsi',
+  '7UP': '7up',
+  Mirinda: 'mirinda',
+  Manzanita: 'manzanita',
+  Sangría: 'casera',
+  'Jumex Durazno': 'jumex',
+  'Jumex Manzana': 'jumex',
+  Cerveza: 'corona',
+};
+
+/** Ruta del logo de la bebida; null si no tiene. */
+export const logoBebida = (nombre: string): string | null =>
+  LOGO_BEBIDA[nombre] ? `/images/bebidas/${LOGO_BEBIDA[nombre]}.webp` : null;
+
 // Colores pastel que se reparten en orden entre las categorías.
 export const COLORES_CATEGORIA = [
   { normal: 'bg-orange-50 border-orange-200 text-orange-800', activo: 'bg-orange-100 border-orange-400 text-orange-900' },

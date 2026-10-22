@@ -78,7 +78,7 @@ export interface DetalleOrdenBD {
   mix_grupo: number | null;
   termino_id: number | null;
   termino: string | null;
-  opciones: { sin: ComplementoMenu[]; mezcla: string[]; papas?: PapasMenu } | null;
+  opciones: { sin: ComplementoMenu[]; mezcla: string[]; reparto?: RepartoPedido[]; papas?: PapasMenu } | null;
   subtotal: number;
   creado_en: string;
 }
@@ -126,7 +126,7 @@ export const obtenerOrden = (idOrden: number) => pedir<{ orden: OrdenBD; detalle
 /** Manda productos a cocina: guarda el detalle (orden_has_detalle) y recalcula el total. */
 export const enviarPedido = (
   idOrden: number,
-  items: { idProducto: number; cantidad: number; sin?: number[]; mezcla?: string[]; sinQueso?: boolean; conQueso?: boolean; carneExtra?: number; mixGrupo?: number | null; terminoId?: number | null; conPapas?: boolean }[],
+  items: { idProducto: number; cantidad: number; sin?: number[]; mezcla?: string[]; reparto?: RepartoPedido[]; sinQueso?: boolean; conQueso?: boolean; carneExtra?: number; mixGrupo?: number | null; terminoId?: number | null; conPapas?: boolean }[],
   extras: ExtraPedido[] = [],
 ) =>
   pedir<{ orden: OrdenBD; detalle: DetalleOrdenBD[]; extras: ExtraOrdenBD[]; extrasGuardados: ExtraOrdenBD[]; guardados: { idDetalle_Orden: number; mix_grupo: number | null }[] }>(`/ordenes/${idOrden}/pedido`, { method: 'POST', body: JSON.stringify({ items, extras }) });
@@ -154,3 +154,23 @@ export const reimprimirTicketCobro = (idOrden: number, recibido?: number) =>
 
 /** "Frijol" / "Milanesa (Grande)". */
 export const nombreProducto = (p: { nombre: string; tamano: string | null }) => (p.tamano ? `${p.nombre} (${p.tamano})` : p.nombre);
+
+/** MEZCLAR: cuántas piezas de cada sabor en un solo renglón (BD: orden_has_detalle.opciones.reparto). */
+export interface RepartoPedido {
+  nombre: string;
+  cantidad: number;
+}
+
+/** Categorías con el botón MEZCLAR (piezas por sabor en un mismo renglón). */
+export const CATEGORIAS_REPARTO = ['Alitas'];
+
+/** "4 BBQ + 6 Buffalo". */
+export const textoReparto = (reparto: RepartoPedido[]) => reparto.map((r) => `${r.cantidad} ${r.nombre}`).join(' + ');
+
+/** Nombre de un renglón guardado: el reparto ("4 BBQ + 6 Buffalo"), la mezcla ("Papa con Frijol") o el producto con su tamaño. */
+export const nombreDetalle = (d: Pick<DetalleOrdenBD, 'nombre' | 'tamano' | 'opciones'>) =>
+  d.opciones?.reparto?.length
+    ? textoReparto(d.opciones.reparto)
+    : d.opciones?.mezcla && d.opciones.mezcla.length > 1
+      ? d.opciones.mezcla.join(' con ')
+      : nombreProducto(d);

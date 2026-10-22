@@ -78,11 +78,12 @@ test('ticket agrupa un solo plato sin perder modificadores y separa productos su
   };
   assert.equal(validarTicketCocina(ticket), null);
   const lineas = lineasTicketCocina(ticket).map((l) => l.texto).filter(Boolean);
-  const inicio = lineas.indexOf('MIX 4 · UN SOLO PLATO');
-  assert.deepEqual(lineas.slice(inicio, inicio + 6), ['MIX 4 · UN SOLO PLATO', '1x Taco', '  - CON QUESO', '  - Sin cebolla', '1x Sope', '  - Sin crema']);
+  // El MIX solo agrupa: sin número en el ticket.
+  const inicio = lineas.indexOf('MIX · UN SOLO PLATO');
+  assert.deepEqual(lineas.slice(inicio, inicio + 6), ['MIX · UN SOLO PLATO', '1x Taco', '  - CON QUESO', '  - Sin cebolla', '1x Sope', '  - Sin crema']);
   assert.ok(lineas.indexOf('1x Suelto') > lineas.indexOf('1x Sope'));
-  assert.ok(lineas.includes('MIX 5 · UN SOLO PLATO'));
-  assert.equal(lineas.filter((l) => l.includes('UN SOLO PLATO')).length, 2);
+  assert.equal(lineas.filter((l) => l === 'MIX · UN SOLO PLATO').length, 2);
+  assert.ok(!lineas.some((l) => /MIX \d/.test(l)));
   assert.ok(validarTicketCocina({ ...ticket, productos: [producto('Mal', -1)] }));
   assert.equal(lineasTicketCocina({ ...ticket, productos: [producto('Anterior', undefined)] }).some((l) => l.texto?.includes('MIX')), false);
   for (const area of ['cocina', 'bebidas']) {
@@ -91,4 +92,26 @@ test('ticket agrupa un solo plato sin perder modificadores y separa productos su
     assert.equal(compacto.filter((l) => l.texto === '').length, 1, 'Solo queda una línea en blanco antes del corte');
     assert.ok(!compacto.some((l) => l.texto === '.'), 'No se imprime una marca que alargue el papel');
   }
+});
+
+test('MEZCLAR (Alitas): un solo renglón con las piezas de cada sabor', async () => {
+  const filas = [];
+  const conexion = { async execute(sql, v) { filas.push({ cantidad: v[2], opciones: JSON.parse(v[7]), subtotal: v[8] }); return [{ insertId: filas.length }]; } };
+  const reparto = [{ nombre: 'BBQ', cantidad: 4 }, { nombre: 'Buffalo', cantidad: 6 }];
+  const item = { idProducto: 50, cantidad: 10, mezcla: ['BBQ', 'Buffalo'], reparto };
+  assert.equal(itemsValidos([item]), true);
+  await guardarDetallePedido(conexion, 1, [item], new Map([[50, { precio: '13.00' }]]), new Map(), new Date());
+  assert.equal(filas.length, 1);
+  assert.equal(filas[0].cantidad, 10);
+  assert.equal(filas[0].subtotal, '130.00');
+  assert.deepEqual(filas[0].opciones.reparto, reparto);
+  // Las piezas deben sumar la cantidad; cada sabor una vez, con piezas; al menos dos sabores.
+  for (const malo of [
+    [{ nombre: 'BBQ', cantidad: 4 }, { nombre: 'Buffalo', cantidad: 5 }],
+    [{ nombre: 'BBQ', cantidad: 5 }, { nombre: 'BBQ', cantidad: 5 }],
+    [{ nombre: 'BBQ', cantidad: 10 }, { nombre: 'Buffalo', cantidad: 0 }],
+    [{ nombre: 'BBQ', cantidad: 10 }],
+    [{ nombre: '', cantidad: 4 }, { nombre: 'Buffalo', cantidad: 6 }],
+    'BBQ',
+  ]) assert.equal(itemsValidos([{ ...item, reparto: malo }]), false);
 });

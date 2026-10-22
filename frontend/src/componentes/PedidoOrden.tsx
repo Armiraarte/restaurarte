@@ -21,6 +21,7 @@ import {
   Printer,
   Send,
   ShoppingBag,
+  Shuffle,
   Trash2,
   UtensilsCrossed,
   User,
@@ -43,9 +44,12 @@ import {
   PapasMenu,
   ExtraPedido,
   ExtraOrdenBD,
+  CATEGORIAS_REPARTO,
+  RepartoPedido,
+  textoReparto,
 } from '../services/pedidosService';
 import { imprimirTicketCocina } from '../services/ticketCocinaService';
-import { COLORES_CATEGORIA, iconoCategoria, NEON_CATEGORIA } from './iconosCategoria';
+import { COLORES_CATEGORIA, fotoCategoria, iconoCategoria, logoBebida, NEON_CATEGORIA } from './iconosCategoria';
 import { ExtrasLinea, OpcionesCategoria } from './OpcionesCategoria';
 import { PedidoEnviado } from './PedidoEnviado';
 import { useEnVivo } from '../services/enVivo';
@@ -57,7 +61,7 @@ import { registrarError } from '../services/errores';
 import { TicketCocina } from '../types/ticketCocina';
 import { DialogoAgregarExtra } from './DialogoAgregarExtra';
 import { ListaExtras } from './ListaExtras';
-import { esQueso } from '../services/complementos';
+import { complementosTicket, esQueso } from '../services/complementos';
 
 interface LineaNueva {
   /** Cada vez que se agrega desde opciones es un plato aparte (3 y luego 5 = dos renglones). */
@@ -79,17 +83,22 @@ interface LineaNueva {
   mixGrupo?: number | null;
   termino?: TerminoMenu | null;
   papas?: PapasMenu | null;
+  /** Complementos que tenía el platillo. Puede faltar en borradores viejos (se usan los del producto). */
+  ofrecidos?: ComplementoMenu[];
+  /** MEZCLAR (Alitas): piezas de cada sabor en este mismo renglón; suman `cantidad`. */
+  reparto?: RepartoPedido[];
 }
 
 let siguienteLinea = 1;
 let siguienteExtra = 1;
-/** "Papa con Frijol" si es mezcla; si no, el nombre del producto con su tamaño. */
-const nombreLinea = (l: LineaNueva) => (l.mezcla.length > 1 ? l.mezcla.join(' con ') : nombreProducto(l.producto));
+/** "4 BBQ + 6 Buffalo" si es MEZCLAR, "Papa con Frijol" si es mezcla; si no, el nombre del producto con su tamaño. */
+const nombreLinea = (l: LineaNueva) =>
+  l.reparto?.length ? textoReparto(l.reparto) : l.mezcla.length > 1 ? l.mezcla.join(' con ') : nombreProducto(l.producto);
 const sinDescritos = (l: LineaNueva) => l.sin.filter((c) => !l.sinQueso || !esQueso(c));
 const textoSin = (l: LineaNueva) =>
-  `${l.mixGrupo ? ` · MIX ${l.mixGrupo}` : ''}${l.termino ? ` · ${l.termino.nombre}` : ''}${l.conQueso && l.sin.length > 0 ? ' · CON QUESO' : ''}${l.sinQueso ? ' · SIN QUESO' : ''}${l.carneExtra ? ` · ${textoCarneExtra(l.carneExtra)}` : ''}${
+  `${l.mixGrupo ? ' · MIX' : ''}${l.termino ? ` · ${l.termino.nombre}` : ''}${l.conQueso && l.sin.length > 0 ? ' · CON QUESO' : ''}${l.sinQueso ? ' · SIN QUESO' : ''}${l.carneExtra ? ` · ${textoCarneExtra(l.carneExtra)}` : ''}${
     sinDescritos(l).length ? ` · sin ${sinDescritos(l).map((c) => c.nombre.toLowerCase()).join(', ')}` : ''
-  }${l.papas ? ' · CON PAPAS (orden completa)' : ''
+  }${l.papas ? ' · CON PAPAS' : ''
   }`;
 /** Precio de una pieza con sus carnes extra (el servidor lo calcula igual al guardar). */
 const precioLinea = (l: LineaNueva) => l.producto.precio + (l.carneExtra ?? 0) * PRECIO_CARNE_EXTRA + (l.papas?.precio ?? 0);
@@ -123,7 +132,7 @@ interface Props {
 const dinero = (n: number) => `$${n.toFixed(2)}`;
 
 /** JSON del ticket de cocina (types/ticketCocina.ts) a partir de lo que se acaba de enviar. */
-function ticketDe(orden: OrdenBD, lineas: LineaNueva[], ronda: number, origen: string, extras: ExtraPedido[] = []): TicketCocina {
+function ticketDe(orden: OrdenBD, lineas: LineaNueva[], ronda: number, origen: string): TicketCocina {
   return {
     version: 1,
     orden_cocina: `#${String(orden.idOrden).padStart(5, '0')}-${ronda}`,
@@ -140,28 +149,23 @@ function ticketDe(orden: OrdenBD, lineas: LineaNueva[], ronda: number, origen: s
     productos: lineas.map((l) => ({
       partida_id: String(l.id),
       producto_id: String(l.producto.id),
-      nombre: `${l.categoria} · ${nombreLinea(l)}`,
+      // MEZCLAR: un solo registro («10x Alitas · MEZCLA») con las piezas de cada sabor debajo.
+      nombre: l.reparto?.length ? `${l.categoria} · MEZCLA` : `${l.categoria} · ${nombreLinea(l)}`,
       categoria: l.categoria,
       cantidad: l.cantidad,
       mix_grupo: l.mixGrupo ?? null,
       opciones: [],
-      // Complementos: si no se quitó ninguno (queso incluido), solo «TODO». Si se quitó alguno, solo lo que no
-      // quiere («SIN QUESO» primero, «Sin lechuga»…) y, si conserva el queso, «CON QUESO» para que no haya duda.
+      ...(l.reparto?.length && { reparto: l.reparto.map((r) => ({ opcion: r.nombre, cantidad: r.cantidad })) }),
+      // Complementos en los menos renglones posibles: CON TODO, SIN NADA, SOLO CON … o lo que no quiere (ver complementosTicket).
       descripcion: [
+        ...(l.reparto ?? []).map((r) => `${r.cantidad} ${r.nombre}`),
         ...(l.termino ? [`Término: ${l.termino.nombre}`] : []),
-        ...(l.sinQueso ? ['SIN QUESO'] : []),
-        ...(l.conQueso && l.sin.length > 0 ? ['CON QUESO'] : []),
         ...(l.carneExtra ? [textoCarneExtra(l.carneExtra)] : []),
-        ...(l.papas ? ['CON PAPAS · Orden completa por pieza'] : []),
-        ...(l.producto.complementos.length === 0
-          ? []
-          : l.sin.length === 0
-            ? ['TODO']
-            : sinDescritos(l).map((c) => `Sin ${c.nombre.toLowerCase()}`)),
+        ...(l.papas ? ['CON PAPAS'] : []),
+        ...complementosTicket(l.ofrecidos ?? l.producto.complementos, l.sin, { sinQueso: l.sinQueso, conQueso: l.conQueso }),
       ],
     })),
     total_piezas: lineas.reduce((acc, l) => acc + l.cantidad, 0),
-    extras,
   };
 }
 
@@ -181,6 +185,10 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
   const grupoVisible = grupoAbierto && gruposAbiertos.includes(grupoAbierto) ? grupoAbierto : gruposAbiertos[0];
   // Pantalla de opciones de una categoría (como la de antes): elige uno, tamaño, complementos y cantidad.
   const [opcionesDe, setOpcionesDe] = useState<CategoriaMenu | null>(null);
+  // MEZCLAR (Alitas): botón junto a VOLVER; se apaga al cambiar de categoría.
+  const [mezclar, setMezclar] = useState(false);
+  const puedeMezclar = !!opcionesDe && CATEGORIAS_REPARTO.includes(opcionesDe.nombre) && new Set(opcionesDe.productos.map((p) => p.nombre)).size > 1;
+  useEffect(() => setMezclar(false), [opcionesDe?.id]);
   // Lo agregado y aún no enviado se guarda en el dispositivo: si se sale a ÓRDENES, al volver sigue aquí.
   const [nuevo, setNuevo] = useState<LineaNueva[]>(() => {
     const guardado = leerBorrador<LineaNueva>(claveBorrador);
@@ -293,12 +301,12 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
     cantidad: number,
     sin: ComplementoMenu[],
     mezcla: string[],
-    { sinQueso, conQueso, carneExtra, termino, papas }: ExtrasLinea
+    { sinQueso, conQueso, carneExtra, termino, papas, ofrecidos, reparto }: ExtrasLinea
   ) => {
     if (!puedeEditar) return;
     setNuevo((lista) => [
       ...lista,
-      { id: siguienteLinea++, rapida: false, producto, categoria, cantidad, sin, mezcla, sinQueso, conQueso, carneExtra, termino, papas, mixGrupo: mixActivo },
+      { id: siguienteLinea++, rapida: false, producto, categoria, cantidad, sin, mezcla, sinQueso, conQueso, carneExtra, termino, papas, ofrecidos, reparto, mixGrupo: mixActivo },
     ]);
   };
   /** Toque en la cuadrícula rápida (Bebidas): suma 1 al renglón rápido de ese producto. */
@@ -349,6 +357,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
           cantidad: l.cantidad,
           sin: l.sin.map((c) => c.id),
           mezcla: l.mezcla,
+          ...(l.reparto?.length && { reparto: l.reparto }),
           mixGrupo: l.mixGrupo ?? null,
           terminoId: l.termino?.id ?? null,
           conPapas: !!l.papas,
@@ -369,23 +378,22 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
       const confirmado = enviado.map((l, i) => ({
         ...l, id: datos.guardados[i].idDetalle_Orden, mixGrupo: datos.guardados[i].mix_grupo,
       }));
-      // Dos tickets: lo de cocina (y los extras) a la impresora de cocina, y las bebidas a la de caja,
-      // donde se preparan. Salen al mismo tiempo, cada uno en su impresora.
+      // Dos tickets: lo de cocina a la impresora de cocina, y las bebidas a la de caja, donde se preparan.
+      // Salen al mismo tiempo, cada uno en su impresora. Los extras no se imprimen: solo van a la cuenta.
       const paraTicket = confirmado.filter(vaEnTicket);
       const bebidas = confirmado.filter((l) => !vaEnTicket(l));
-      const extrasTicket = datos.extrasGuardados ?? extrasDelBorrador;
+      const extrasEnviadosAhora = datos.extrasGuardados ?? extrasDelBorrador;
       const ronda = rondasPrevias + 1;
       const tickets = [
-        ...(paraTicket.length > 0 || extrasTicket.length > 0
-          ? [{ nombre: 'cocina', ticket: ticketDe(datos.orden, paraTicket, ronda, origen, extrasTicket) }]
-          : []),
+        ...(paraTicket.length > 0 ? [{ nombre: 'cocina', ticket: ticketDe(datos.orden, paraTicket, ronda, origen) }] : []),
         ...(bebidas.length > 0 ? [{ nombre: 'bebidas (caja)', ticket: { ...ticketDe(datos.orden, bebidas, ronda, origen), area: 'bebidas' as const } }] : []),
       ];
       setAlerta({
-        titulo: `Pedido enviado a cocina · ${datos.orden.etiqueta}`,
-        detalle: [...confirmado.map((l) => `${l.cantidad} × ${l.categoria} · ${nombreLinea(l)}${textoSin(l)}`), ...extrasTicket.map((e) => `Extra: ${e.descripcion} · ${dinero(e.importe)}`)],
-        impresion: { ok: null, texto: `Imprimiendo ticket de ${tickets.map((t) => t.nombre).join(' y ')}…` },
+        titulo: tickets.length > 0 ? `Pedido enviado a cocina · ${datos.orden.etiqueta}` : `Extra agregado a la cuenta · ${datos.orden.etiqueta}`,
+        detalle: [...confirmado.map((l) => `${l.cantidad} × ${l.categoria} · ${nombreLinea(l)}${textoSin(l)}`), ...extrasEnviadosAhora.map((e) => `Extra: ${e.descripcion} · ${dinero(e.importe)}`)],
+        ...(tickets.length > 0 && { impresion: { ok: null, texto: `Imprimiendo ticket de ${tickets.map((t) => t.nombre).join(' y ')}…` } }),
       });
+      if (tickets.length === 0) return true;
       // Si una impresora no responde, el pedido ya quedó guardado; solo se avisa cuál ticket no salió.
       Promise.allSettled(tickets.map((t) => imprimirTicketCocina(t.ticket))).then((resultados) => {
         const fallas = resultados.flatMap((r, i) =>
@@ -614,6 +622,20 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
               >
                 <ArrowLeft className="w-5 h-5 shrink-0" /> VOLVER
               </button>
+              {/* Del lado opuesto: MEZCLAR (piezas de cada sabor en un solo renglón) */}
+              {opcionesDe && puedeMezclar && (
+                <button
+                  type="button"
+                  onClick={() => setMezclar((v) => !v)}
+                  disabled={!puedeEditar}
+                  aria-pressed={mezclar}
+                  className={`ml-auto min-h-12 px-6 rounded-xl border-2 font-black flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 ${
+                    mezclar ? 'bg-orange-500 border-orange-600 text-white' : 'bg-white border-orange-300 text-orange-800 hover:bg-orange-50'
+                  }`}
+                >
+                  <Shuffle className="w-5 h-5 shrink-0" /> MEZCLAR
+                </button>
+              )}
             </div>
           )}
           {menu === null ? (
@@ -626,6 +648,8 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
               categoria={opcionesDe}
               pantallaCompleta={pantallaCompleta}
               onAgregar={(producto, cantidad, sin, mezcla, extras) => agregar(producto, opcionesDe.nombre, cantidad, sin, mezcla, extras)}
+              mezclar={mezclar}
+              onMezclaAgregada={() => setMezclar(false)}
             />
           ) : categoriaAbierta ? (
             <div className="flex-1 min-h-0 flex flex-col gap-2">
@@ -669,6 +693,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
               <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain grid grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] auto-rows-[minmax(4.5rem,1fr)] gap-2">
                 {categoriaAbierta.productos.filter((p) => gruposAbiertos.length < 2 || grupoDe(p) === grupoVisible).map((p) => {
                   const enPedido = nuevo.filter((l) => l.producto.id === p.id).reduce((acc, l) => acc + l.cantidad, 0) || undefined;
+                  const logo = categoriaAbierta.nombre === 'Bebidas' ? logoBebida(p.nombre) : null;
                   return (
                     <button
                       key={p.id}
@@ -678,6 +703,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
                         pantallaCompleta ? 'neon neon-cian' : 'border-orange-200 bg-orange-50/40 hover:bg-orange-50'
                       }`}
                     >
+                      {logo && <img src={logo} alt="" width={40} height={40} decoding="async" draggable={false} className="w-10 h-10 shrink-0 object-contain" />}
                       <span className="text-xl font-bold leading-tight">{p.nombre}</span>
                       {p.tamano && <span className="text-sm font-semibold text-orange-800">{p.tamano}</span>}
                       <span className="font-mono text-sm text-neutral-600">{dinero(p.precio)}</span>
@@ -700,6 +726,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
                 .filter((c) => c.productos.length > 0)
                 .map((c, i) => {
                   const Icono = iconoCategoria(c.nombre);
+                  const foto = fotoCategoria(c.nombre);
                   const enPedido = nuevo.filter((l) => l.categoria === c.nombre).reduce((acc, l) => acc + l.cantidad, 0);
                   return (
                     <button
@@ -710,7 +737,11 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
                         pantallaCompleta ? NEON_CATEGORIA[i % NEON_CATEGORIA.length] : COLORES_CATEGORIA[i % COLORES_CATEGORIA.length].normal
                       }`}
                     >
-                      <Icono className="w-12 h-12 shrink-0" />
+                      {foto ? (
+                        <img src={foto} alt="" width={96} height={64} decoding="async" draggable={false} className="w-24 h-16 shrink-0 object-contain" />
+                      ) : (
+                        <Icono className="w-12 h-12 shrink-0" />
+                      )}
                       <span className="text-lg font-bold leading-tight">{c.nombre}</span>
                       {enPedido > 0 && (
                         <span className="absolute top-2 right-2 min-w-6 h-6 px-1.5 rounded-full bg-orange-500 text-white text-xs font-bold flex items-center justify-center">
@@ -736,7 +767,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
                   onClick={alternarMix}
                   disabled={!puedeEditar}
                   aria-pressed={mixActivo !== null}
-                  title={mixActivo === null ? 'Agrupar los siguientes productos en un plato' : `Cerrar el MIX ${mixActivo}`}
+                  title={mixActivo === null ? 'Agrupar los siguientes productos en un plato' : 'Cerrar el MIX'}
                   className={`h-10 px-3 rounded-xl border-2 text-sm font-black flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 ${
                     mixActivo !== null ? 'bg-violet-600 border-violet-700 text-white' : 'bg-white border-violet-300 text-violet-800 hover:bg-violet-50'
                   }`}
@@ -748,7 +779,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
             </div>
             {mixActivo !== null && (
               <p role="status" className="shrink-0 text-sm text-violet-800 font-semibold">
-                MIX {mixActivo} · lo que agregues va en un solo plato
+                MIX · lo que agregues va en un solo plato
               </p>
             )}
             <div className={pantallaCompleta ? 'flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-2 pr-1' : 'space-y-2'}>
@@ -757,7 +788,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
               ) : (
                 gruposNuevos.map((grupo, indice) => (
                   <div key={grupo.grupo === null ? `suelto-${indice}` : `mix-${grupo.grupo}`} className={grupo.grupo !== null ? 'rounded-xl border-2 border-violet-200 bg-violet-50/50 p-2 space-y-2' : ''}>
-                    {grupo.grupo !== null && <div className="text-xs font-black tracking-wide text-violet-800">MIX {grupo.grupo} · UN SOLO PLATO</div>}
+                    {grupo.grupo !== null && <div className="text-xs font-black tracking-wide text-violet-800">MIX · UN SOLO PLATO</div>}
                     {grupo.lineas.map((l) => (
                   <div key={l.id} className="border-b border-neutral-100 pb-2 last:border-0 space-y-1.5">
                     <div className="flex items-start justify-between gap-2">
@@ -767,7 +798,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
                         {l.termino && <span className="block text-xs font-semibold text-orange-800">Término: {l.termino.nombre}</span>}
                         {l.sinQueso && <span className="block text-xs font-black tracking-wide text-violet-700">SIN QUESO</span>}
                         {l.conQueso && <span className="block text-xs font-black tracking-wide text-amber-700">CON QUESO</span>}
-                        {l.papas && <span className="block text-xs font-semibold text-amber-800">CON PAPAS · Orden completa (+{dinero(l.papas.precio)} c/u)</span>}
+                        {l.papas && <span className="block text-xs font-semibold text-amber-800">CON PAPAS (+{dinero(l.papas.precio)} c/u)</span>}
                         {!!l.carneExtra && (
                           <span className="block text-xs font-black tracking-wide text-red-700">{textoCarneExtra(l.carneExtra)}</span>
                         )}

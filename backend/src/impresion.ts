@@ -136,6 +136,11 @@ impresionRouter.post('/cocina', async (req, res) => {
     res.status(400).json({ error });
     return;
   }
+  // Un envío que solo trae extras (cobros libres) no tiene nada que preparar: no se gasta papel en cocina.
+  if ((ticket as TicketCocina).productos.length === 0) {
+    res.json({ omitido: true });
+    return;
+  }
   try {
     // Las bebidas se preparan en caja: su ticket sale en la impresora de caja; lo demás, en la de cocina.
     const destino: DestinoImpresion = (ticket as TicketCocina).area === 'bebidas' ? 'caja' : 'cocina';

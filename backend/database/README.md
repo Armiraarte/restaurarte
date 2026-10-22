@@ -364,6 +364,21 @@ las instalaciones que todavía tienen el nombre anterior. Para aplicar solo este
 .\artisan.ps1 db:seed --class=AjusteBebidasSeeder --force
 ```
 
+**Enchiladas de Queso**: `EnchiladaQuesoSeeder` agrega «Queso» en Enchiladas (además de
+Queso/Cebolla) con el precio de las demás enchiladas ($15) y sus complementos: Repollo,
+Lechuga, Salsa, Crema y Queso. Repetirlo no la duplica ni cambia un precio ajustado después.
+
+```powershell
+.\artisan.ps1 db:seed --class=EnchiladaQuesoSeeder --force
+```
+
+**Jitomate en Tostadas**: `TostadasJitomateSeeder` agrega el complemento Jitomate a todas las
+tostadas, sin quitar Repollo, Lechuga, Salsa, Crema ni Queso. Repetirlo no lo duplica.
+
+```powershell
+.\artisan.ps1 db:seed --class=TostadasJitomateSeeder --force
+```
+
 ### Orden completa de papas y distribución de opciones
 
 Hamburguesas y Lonches ofrecen «CON PAPAS». El precio adicional se consulta
@@ -371,7 +386,7 @@ en el producto activo de Papas a la Francesa con tamaño «Orden completa»
 (actualmente $30). El servidor suma ese precio por cada pieza marcada, junto
 con las carnes extra, y guarda en `opciones.papas` el ID, nombre, tamaño y
 precio de las papas en ese momento. No requiere una tabla ni columna nueva.
-El ticket de cocina, el historial y el cobro indican «CON PAPAS · Orden completa».
+El ticket de cocina, el historial y el cobro indican solo «CON PAPAS».
 Los renglones con y sin papas se mantienen separados en la cuenta.
 
 En Hamburguesas, carne extra y papas comparten una fila con dos columnas
@@ -403,9 +418,11 @@ transacción que bloquea y guarda los productos, registra los extras y recalcula
 `orden.total` como suma de ambos conceptos. La respuesta incluye `extras` y
 `extrasGuardados`; `GET /api/ordenes/:idOrden` devuelve los cargos guardados.
 
-La cuenta y el historial muestran Extras después de los productos; los tickets
-de cocina y cobro incluyen descripción e importe al final del detalle. El total
-de cobro ya los incluye y la reimpresión recupera los registros de la base.
+La cuenta y el historial muestran Extras después de los productos; el ticket
+de cobro incluye descripción e importe al final del detalle. El ticket de cocina
+no los imprime (no hay nada que preparar); un envío con solo extras no imprime
+nada en cocina. El total de cobro ya los incluye y la reimpresión recupera los
+registros de la base.
 Para actualizar una instalación existente después del respaldo:
 
 ```powershell

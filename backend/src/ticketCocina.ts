@@ -6,7 +6,6 @@
 // El mismo tipo existe en frontend/src/types/ticketCocina.ts; si cambias uno, cambia el otro.
 import type { LineaTicket } from './impresion.js';
 import { encabezadoRestaurante } from './ticketMarca.js';
-import { extrasValidos, type ExtraPedido } from './extrasPedido.js';
 
 /** Una elección dentro de un grupo de opciones. BD: partida_opciones (partida_id, grupo, eleccion). */
 export interface OpcionTicket {
@@ -43,8 +42,7 @@ export interface TicketCocina {
   mesero: string; // BD: comandas.mesero_id → usuarios.nombre
   tablet: string; // BD: comandas.tablet_id → tablets.nombre
   enviada_en: string; // ISO 8601. BD: comandas.enviada_en
-  productos: ProductoTicketCocina[];
-  extras?: ExtraPedido[];
+  productos: ProductoTicketCocina[]; // los extras (cobros libres) no van a cocina: solo a la cuenta y al ticket de cobro
   total_piezas: number; // piezas a preparar (un paquete cuenta sus piezas) para que cocina confirme que no falta nada
   /** 'bebidas': el ticket de las bebidas, que se imprime en la impresora de caja (ahí se preparan). Sin valor: cocina. */
   area?: 'cocina' | 'bebidas';
@@ -56,8 +54,7 @@ export function validarTicketCocina(t: any): string | null {
   if (!t || typeof t !== 'object') return 'Ticket vacío.';
   if (typeof t.orden_cocina !== 'string' || !t.orden_cocina) return 'Falta orden_cocina.';
   if (typeof t.mesa !== 'string' || !t.mesa.trim()) return 'Falta la mesa.';
-  if (!Array.isArray(t.productos) || (t.productos.length === 0 && !t.extras?.length)) return 'El ticket no tiene productos ni extras.';
-  if (t.extras !== undefined && !extrasValidos(t.extras)) return 'Extra inválido en el ticket.';
+  if (!Array.isArray(t.productos)) return 'El ticket no tiene productos.';
   if (t.area !== undefined && t.area !== 'cocina' && t.area !== 'bebidas') return 'Área inválida en el ticket.';
   for (const p of t.productos) {
     if (typeof p?.nombre !== 'string' || !(Number(p?.cantidad) > 0)) return 'Producto inválido en el ticket.';
@@ -118,7 +115,8 @@ export function lineasTicketCocina(t: TicketCocina): LineaTicket[] {
     bloque.productos.push(p);
   }
   for (const bloque of bloques) {
-    if (bloque.grupo !== null) lineas.push({ separador: true }, { texto: `MIX ${bloque.grupo} · UN SOLO PLATO`, negrita: true, escala: 1.5 });
+    // Sin número: el MIX solo agrupa; los separadores marcan dónde empieza y termina cada plato.
+    if (bloque.grupo !== null) lineas.push({ separador: true }, { texto: 'MIX · UN SOLO PLATO', negrita: true, escala: 1.5 });
     for (const p of bloque.productos) {
       lineas.push({ texto: `${p.cantidad}x ${p.nombre}`, negrita: true, escala: 1.5 });
       for (const d of p.descripcion) lineas.push({ texto: `  - ${d}`, escala: 1.5 });
@@ -128,10 +126,6 @@ export function lineasTicketCocina(t: TicketCocina): LineaTicket[] {
   }
 
   if (t.notas_generales) lineas.push({ separador: true }, { texto: `NOTA: ${t.notas_generales}`, negrita: true });
-  if (t.extras?.length) {
-    lineas.push({ separador: true }, { texto: 'EXTRAS', negrita: true });
-    for (const extra of t.extras) lineas.push({ texto: extra.descripcion, derecha: `$${extra.importe.toFixed(2)}` });
-  }
   // Una separación pequeña antes del corte, sin alargar el papel con una marca final.
   lineas.push({ texto: '' });
   return lineas;

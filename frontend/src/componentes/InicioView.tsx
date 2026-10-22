@@ -42,8 +42,9 @@ export const InicioView: React.FC<InicioViewProps> = ({
   ];
 
   return (
-    <div className="space-y-6">
-      <div>
+    // Cabe en la pantalla sin scroll: la tarjeta toma el alto que queda. En celular se apila y ahí sí se desplaza.
+    <div className="h-full min-h-0 flex flex-col gap-3 overflow-y-auto md:overflow-hidden lg:px-5 lg:py-2">
+      <div className="shrink-0">
         <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
           <Home className="w-5 h-5 text-amber-500" />
           <span>Inicio</span>

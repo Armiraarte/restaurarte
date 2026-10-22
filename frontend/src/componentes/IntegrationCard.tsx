@@ -132,15 +132,21 @@ export const IntegrationVisual: React.FC<{ nodos: NodoRed[] }> = ({ nodos: todos
   );
 };
 
+// En celular el lienzo toma el ancho (564x410); en pantallas medianas en adelante, el alto disponible de la tarjeta,
+// y el diagrama se escala para caber completo sin deformarse (las líneas del SVG siguen alineadas con los nodos).
 export const VisualContainer: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
-  <div className={`relative flex aspect-564/410 w-full items-center justify-center overflow-hidden bg-neutral-50 p-6 ${className}`}>
+  <div className={`relative flex aspect-564/410 md:aspect-auto md:h-full md:min-h-0 w-full items-center justify-center overflow-hidden bg-neutral-50 p-6 ${className}`}>
     {/* Fondo de puntos */}
     <div
       className="absolute inset-0 opacity-20"
       style={{ backgroundImage: 'radial-gradient(circle, #171717 1px, transparent 1px)', backgroundSize: '32px 32px' }}
     />
     <div className="pointer-events-none absolute inset-0 bg-linear-to-b from-white/60 from-10% via-transparent to-90% to-white/60" />
-    <div className="relative z-10 flex h-full w-full items-center justify-center">{children}</div>
+    <div className="relative z-10 flex h-full w-full items-center justify-center" style={{ containerType: 'size' }}>
+      <div className="relative" style={{ width: 'min(100cqw, 100cqh * 564 / 410)', aspectRatio: '564 / 410' }}>
+        {children}
+      </div>
+    </div>
   </div>
 );
 
@@ -152,9 +158,9 @@ interface IntegrationCardProps {
 }
 
 export const IntegrationCard: React.FC<IntegrationCardProps> = ({ visual, title, description, action }) => (
-  <div className="grid overflow-hidden rounded-2xl border border-neutral-200 bg-white md:grid-cols-[3fr_2fr]">
+  <div className="grid shrink-0 overflow-hidden rounded-2xl border border-neutral-200 bg-white md:flex-1 md:min-h-0 md:grid-cols-[3fr_2fr]">
     <VisualContainer>{visual}</VisualContainer>
-    <div className="flex flex-col justify-center gap-5 p-6 sm:p-8">
+    <div className="flex flex-col justify-center gap-5 p-6 sm:p-8 md:min-h-0 md:overflow-y-auto">
       <div className="flex flex-col gap-2">
         <h3 className="text-xl font-semibold tracking-tight sm:text-2xl">{title}</h3>
         <div className="text-sm leading-relaxed text-neutral-600">{description}</div>

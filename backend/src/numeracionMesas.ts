@@ -1,20 +1,5 @@
 import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
 
-export const MAX_MESAS = 9;
-
-/** Continúa después de la mayor ocupada; al llegar a 9, reutiliza la menor libre. */
-export function siguienteNumeroMesa(nombres: Iterable<string>): number | null {
-  const ocupadas = new Set([...nombres].filter((n) => /^[1-9]$/.test(n)).map(Number));
-  const mayor = Math.max(0, ...ocupadas);
-  for (let numero = mayor + 1; numero <= MAX_MESAS; numero++) {
-    if (!ocupadas.has(numero)) return numero;
-  }
-  for (let numero = 1; numero <= MAX_MESAS; numero++) {
-    if (!ocupadas.has(numero)) return numero;
-  }
-  return null;
-}
-
 export class ErrorAltaMesa extends Error {
   constructor(message: string, public status: number, public sinTurno = false) {
     super(message);
@@ -27,7 +12,11 @@ export function validarNumeroMesa(nombre: string): void {
   }
 }
 
-/** Se llama dentro de una transacción y mantiene el bloqueo hasta insertar y confirmar la orden. */
+/**
+ * Se llama dentro de una transacción y mantiene el bloqueo del turno hasta insertar y confirmar la orden.
+ * Croquis: la mesa que se toca es la que se abre (el número no se reasigna). Si esa mesa ya tiene una orden
+ * activa, quien llama la reutiliza; el bloqueo evita que dos tablets abran dos órdenes en la misma mesa.
+ */
 export async function asignarNombreMesa(
   conexion: Pick<PoolConnection, 'query'>,
   turnoId: number,
@@ -39,13 +28,5 @@ export async function asignarNombreMesa(
     'SELECT idTurno FROM turnos WHERE idTurno = ? AND estatus = 1 FOR UPDATE', [turnoId],
   );
   if (!turnos.length) throw new ErrorAltaMesa('La caja no ha iniciado turno; no se puede agregar la mesa.', 409, true);
-  if (!/^\d+$/.test(solicitado)) return solicitado;
-
-  // Lectura actual, incluso si otra tablet acaba de ocupar el número que se mostraba en pantalla.
-  const [activas] = await conexion.query<RowDataPacket[]>(
-    'SELECT nombre FROM orden WHERE idTurno = ? AND estatus IN (0, 1) FOR UPDATE', [turnoId],
-  );
-  const numero = siguienteNumeroMesa(activas.map((fila) => String(fila.nombre)));
-  if (numero === null) throw new ErrorAltaMesa('Las 9 mesas están ocupadas. Cobra una mesa para liberar su número.', 409);
-  return String(numero);
+  return solicitado;
 }

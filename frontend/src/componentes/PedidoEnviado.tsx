@@ -7,7 +7,7 @@
 // de la tablet y dos o tres en la caja.
 import React from 'react';
 import { Clock, LucideIcon, Plus, Receipt, Send, Tablet } from 'lucide-react';
-import { DetalleOrdenBD, ESTATUS_ORDEN, ExtraOrdenBD, OrdenBD, textoCarneExtra } from '../services/pedidosService';
+import { DetalleOrdenBD, ESTATUS_ORDEN, ExtraOrdenBD, nombreDetalle, OrdenBD, textoCarneExtra } from '../services/pedidosService';
 import { iconoCategoria } from './iconosCategoria';
 import { agruparMix } from '../services/pedidoMix';
 import { ListaExtras } from './ListaExtras';
@@ -37,7 +37,7 @@ export const EtiquetaConQueso: React.FC = () => (
 );
 
 export const EtiquetaConPapas: React.FC = () => (
-  <span className="block text-xs font-semibold text-amber-800">CON PAPAS · Orden completa</span>
+  <span className="block text-xs font-semibold text-amber-800">CON PAPAS</span>
 );
 
 /** Hamburguesa con DOBLE o TRIPLE CARNE (orden_has_detalle.carne_extra). */
@@ -85,7 +85,7 @@ export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, extras = [], cl
     const renglon: Renglon = {
       clave: d.idDetalle_Orden,
       cantidad: d.cantidad,
-      producto: d.opciones?.mezcla && d.opciones.mezcla.length > 1 ? d.opciones.mezcla.join(' con ') : d.tamano ? `${d.nombre} (${d.tamano})` : d.nombre,
+      producto: nombreDetalle(d),
       sinQueso: d.sin_queso,
       conQueso: d.con_queso,
       conPapas: !!d.opciones?.papas,
@@ -175,7 +175,7 @@ export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, extras = [], cl
                 <ul className="divide-y divide-neutral-100">
                   {agruparMix(envio.renglones, (r) => r.mixGrupo).map((grupo, indice) => (
                     <React.Fragment key={grupo.grupo === null ? `suelto-${indice}` : `mix-${grupo.grupo}`}>
-                      {grupo.grupo !== null && <li className="px-4 py-2 bg-violet-100 text-violet-900 font-bold text-sm">MIX {grupo.grupo} · UN SOLO PLATO</li>}
+                      {grupo.grupo !== null && <li className="px-4 py-2 bg-violet-100 text-violet-900 font-bold text-sm">MIX · UN SOLO PLATO</li>}
                       {grupo.lineas.map((r) => {
                     const Icono = iconoCategoria(r.categoria);
                     return (

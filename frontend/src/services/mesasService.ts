@@ -14,8 +14,8 @@ export interface MesaRegistrada {
 }
 
 /**
- * Inserta la mesa usando el siguiente número libre del 1 al 9, confirmado por el servidor.
- * Para cuentas por nombre, devuelve la misma si ya había una activa con ese nombre.
+ * Abre la orden de esa mesa del croquis (número del 1 al 9) o a nombre de un cliente.
+ * Si esa mesa o ese nombre ya tiene una orden activa, el servidor devuelve la misma.
  */
 export async function registrarMesa(codigo: string, paraLlevar: boolean): Promise<{ mesa: MesaRegistrada; creada: boolean }> {
   let res: Response;

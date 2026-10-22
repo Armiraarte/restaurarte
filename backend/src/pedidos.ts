@@ -4,7 +4,8 @@
 //
 //   GET   /api/menu                         categorías activas con sus productos (grupo, precio) y complementos
 //   GET   /api/ordenes/:idOrden             la orden con su detalle y total
-//   POST  /api/ordenes/:idOrden/pedido      { items: [{ idProducto, cantidad, sin?, mezcla?, sinQueso?, conQueso?, carneExtra?, mixGrupo? }] }
+//   POST  /api/ordenes/:idOrden/pedido      { items: [{ idProducto, cantidad, sin?, mezcla?, reparto?, sinQueso?, conQueso?, carneExtra?, mixGrupo? }] }
+//                                           reparto = MEZCLAR (Alitas): [{ nombre, cantidad }] por sabor, en un solo renglón
 //                                           Cada producto conserva precio, opciones y grupo MIX en orden_has_detalle.
 //                                           sinQueso = Quesadillas y Hamburguesas: SIN QUESO
 //                                           carneExtra = solo Hamburguesas: 1 doble, 2 triple; +$20 c/u por pieza
@@ -20,7 +21,7 @@ import { mysqlDisponible } from './usuarios.js';
 import { turnoAbierto } from './turnos.js';
 import { imprimirLineas } from './impresion.js';
 import { lineasTicketCobro } from './ticketCobro.js';
-import { guardarDetallePedido, itemsValidos, terminoPermitido, type ItemPedido, type PapasPedido } from './detallePedido.js';
+import { guardarDetallePedido, itemsValidos, terminoPermitido, type ItemPedido, type PapasPedido, type RepartoPedido } from './detallePedido.js';
 import { extrasValidos, guardarExtrasPedido, recalcularTotalOrden } from './extrasPedido.js';
 
 // Opciones por renglón; las mismas constantes que OrdenDetalle en Laravel.
@@ -183,11 +184,14 @@ async function imprimirTicketCobro(idOrden: number, recibido: number | null, cob
   // Para el cliente se junta el mismo producto aunque se haya pedido en varios envíos
   // (las quesadillas sin queso van en su propio renglón).
   const porProducto = new Map<string, { cantidad: number; nombre: string; importe: number }>();
-  type Renglon = { idProducto: number; categoria: string; nombre: string; tamano: string | null; cantidad: number; sin_queso: boolean; con_queso: boolean; carne_extra: number; subtotal: number; opciones: { mezcla?: string[]; papas?: PapasPedido } | null };
+  type Renglon = { idProducto: number; categoria: string; nombre: string; tamano: string | null; cantidad: number; sin_queso: boolean; con_queso: boolean; carne_extra: number; subtotal: number; opciones: { mezcla?: string[]; reparto?: RepartoPedido[]; papas?: PapasPedido } | null };
   for (const d of datos.detalle as unknown as Renglon[]) {
-    const nombre = d.opciones?.mezcla && d.opciones.mezcla.length > 1 ? d.opciones.mezcla.join(' con ') : d.nombre;
+    // MEZCLAR: "4 BBQ + 6 Buffalo"; mezcla sin cantidades: "Papa con Frijol".
+    const nombre = d.opciones?.reparto?.length
+      ? d.opciones.reparto.map((r) => `${r.cantidad} ${r.nombre}`).join(' + ')
+      : d.opciones?.mezcla && d.opciones.mezcla.length > 1 ? d.opciones.mezcla.join(' con ') : d.nombre;
     const clave = `${d.idProducto}-${d.sin_queso ? 1 : 0}-${d.con_queso ? 1 : 0}-${d.carne_extra}-${nombre}-${d.opciones?.papas ? 1 : 0}`;
-    const opciones = [d.sin_queso ? 'SIN QUESO' : '', d.con_queso ? 'CON QUESO' : '', textoCarneExtra(d.carne_extra), d.opciones?.papas ? 'CON PAPAS (orden completa)' : ''].filter(Boolean).join(' ');
+    const opciones = [d.sin_queso ? 'SIN QUESO' : '', d.con_queso ? 'CON QUESO' : '', textoCarneExtra(d.carne_extra), d.opciones?.papas ? 'CON PAPAS' : ''].filter(Boolean).join(' ');
     const p = porProducto.get(clave) ?? {
       cantidad: 0,
       nombre: `${d.categoria} ${nombre}${d.tamano ? ` (${d.tamano})` : ''}${opciones ? ` ${opciones}` : ''}`,
@@ -368,7 +372,8 @@ pedidosRouter.post('/ordenes/:idOrden/pedido', async (req, res) => {
     );
     if (items.some((i) =>
       i.sin?.some((id) => !complementos.get(i.idProducto)?.some((c) => c.id === id)) ||
-      i.mezcla?.some((nombre) => !rellenos.some((p) => p.categoria_id === porId.get(i.idProducto)!.categoria_id && p.nombre === nombre))
+      [...(i.mezcla ?? []), ...(i.reparto ?? []).map((r) => r.nombre)].some((nombre) =>
+        !rellenos.some((p) => p.categoria_id === porId.get(i.idProducto)!.categoria_id && p.nombre === nombre))
     )) {
       await conexion.rollback();
       res.status(400).json({ error: 'Las opciones no corresponden al producto. Vuelve a cargar el menú.' });

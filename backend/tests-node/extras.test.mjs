@@ -25,7 +25,7 @@ test('guarda extras sin crear productos y recalcula total con productos más car
   assert.deepEqual(sql[2].valores, [7,7,fecha,7]);
 });
 
-test('extras aparecen después de productos y antes del total; también en tickets sin productos', () => {
+test('extras aparecen en el cobro después de productos y antes del total; también sin productos', () => {
   const extras = [{ descripcion: 'Cargo adicional', importe: 12.5 }];
   const datos = { idOrden:7, etiqueta:'Mesa 7', paraLlevar:false, abiertaPor:'Caja', cobro:'Caja', fecha:new Date(), productos:[{ cantidad:1,nombre:'Producto',importe:20 }], extras,total:32.5,recibido:null,cambio:null };
   const cobro = lineasTicketCobro(datos);
@@ -34,8 +34,12 @@ test('extras aparecen después de productos y antes del total; también en ticke
   assert.equal(cobro[extra].derecha, '$12.50');
   assert.ok(extra < cobro.findIndex(l => l.texto === 'TOTAL'));
   assert.ok(lineasTicketCobro({...datos,productos:[],total:12.5}).some(l => l.texto === 'Cargo adicional'));
-  const ticket = {orden_cocina:'#7-1',mesa:'Mesa 7',enviada_en:new Date().toISOString(),productos:[],extras};
+});
+
+test('el ticket de cocina no imprime extras, aunque una tablet con la versión anterior los mande', () => {
+  const ticket = {orden_cocina:'#7-1',mesa:'Mesa 7',enviada_en:new Date().toISOString(),productos:[{nombre:'Tacos · Frijol',cantidad:2,descripcion:['TODO']}],extras:[{ descripcion: 'Cargo adicional', importe: 12.5 }]};
   assert.equal(validarTicketCocina(ticket), null);
-  assert.ok(lineasTicketCocina(ticket).some(l => l.texto === 'Cargo adicional' && l.derecha === '$12.50'));
-  assert.ok(validarTicketCocina({...ticket,extras:[{descripcion:'Extra',importe:-1}]}));
+  const lineas = lineasTicketCocina(ticket);
+  assert.ok(lineas.some(l => l.texto === '2x Tacos · Frijol'));
+  assert.ok(!lineas.some(l => l.texto === 'EXTRAS' || l.texto === 'Cargo adicional'));
 });

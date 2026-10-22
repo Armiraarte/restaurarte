@@ -8,11 +8,13 @@
 //   4. Carne      → solo Hamburguesas: DOBLE CARNE / TRIPLE CARNE, +$20 por carne extra
 //                   (BD: orden_has_detalle.carne_extra)
 //   Cantidad y "Agregar a la orden".
+//   MEZCLAR (Alitas, botón junto a VOLVER): piezas por sabor ("4 BBQ + 6 Buffalo") en un solo renglón.
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Check, Minus, Plus } from 'lucide-react';
 import {
   CATEGORIA_CARNE_EXTRA,
   CATEGORIAS_CON_QUESO,
+  CATEGORIAS_REPARTO,
   CategoriaMenu,
   ComplementoMenu,
   MAX_CARNE_EXTRA,
@@ -20,7 +22,9 @@ import {
   ProductoMenu,
   TerminoMenu,
   PapasMenu,
+  RepartoPedido,
   textoCarneExtra,
+  textoReparto,
 } from '../services/pedidosService';
 import { esQueso, ordenarComplementos } from '../services/complementos';
 
@@ -62,6 +66,10 @@ interface Props {
    * extras.sinQueso: Quesadillas. extras.conQueso: Tacos. extras.carneExtra: Hamburguesas, 1 doble y 2 triple.
    */
   onAgregar: (producto: ProductoMenu, cantidad: number, sin: ComplementoMenu[], mezcla: string[], extras: ExtrasLinea) => void;
+  /** MEZCLAR activo (solo CATEGORIAS_REPARTO): cada sabor suma piezas y todo va en un renglón. */
+  mezclar?: boolean;
+  /** Se agregó la mezcla: quien muestra el botón MEZCLAR lo apaga. */
+  onMezclaAgregada?: () => void;
 }
 
 export interface ExtrasLinea {
@@ -70,15 +78,22 @@ export interface ExtrasLinea {
   carneExtra: number;
   termino?: TerminoMenu | null;
   papas?: PapasMenu | null;
+  /** Complementos que tenía el platillo (de todos los de la mezcla), para resumirlos en el ticket de cocina. */
+  ofrecidos?: ComplementoMenu[];
+  /** MEZCLAR: piezas de cada sabor; suman la cantidad del renglón. */
+  reparto?: RepartoPedido[];
 }
 
-export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta, onVolver, onAgregar }) => {
+export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta, onVolver, onAgregar, mezclar = false, onMezclaAgregada }) => {
   const esEnsalada = categoria.nombre === 'Ensaladas';
   const esHamburguesa = categoria.nombre === 'Hamburguesas';
   const nombresCatalogo = [...new Set(categoria.productos.map((p) => p.nombre))];
   const nombres = esEnsalada ? [...nombresCatalogo.filter((n) => n !== 'Sin carne'), ...nombresCatalogo.filter((n) => n === 'Sin carne')] : nombresCatalogo;
+  // Con MEZCLAR (Alitas) las piezas de cada sabor se cuentan ahí; fuera de MEZCLAR se elige un solo sabor.
+  const conReparto = CATEGORIAS_REPARTO.includes(categoria.nombre);
+  const mezclando = conReparto && mezclar && nombres.length > 1;
   // Mezclar solo tiene sentido si ningún producto se vende por tamaño (Ensaladas, Papas…).
-  const permiteMezcla = categoria.nombre !== 'Carnes' && nombres.length > 1 && categoria.productos.every((p) => p.tamano === null);
+  const permiteMezcla = !conReparto && categoria.nombre !== 'Carnes' && nombres.length > 1 && categoria.productos.every((p) => p.tamano === null);
   // Elegidos en orden de toque: el primero es el principal. Sin mezcla siempre hay a lo más uno.
   const [elegidos, setElegidos] = useState<string[]>(nombres.length === 1 ? [nombres[0]] : []);
   const nombre = elegidos[0] ?? null;
@@ -91,6 +106,23 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
   const [carneExtra, setCarneExtra] = useState(0);
   const [cantidad, setCantidad] = useState(1);
   const [agregado, setAgregado] = useState<string | null>(null);
+  // MEZCLAR: piezas por sabor.
+  const [piezas, setPiezas] = useState<Record<string, number>>({});
+  const reparto: RepartoPedido[] = nombres.filter((n) => (piezas[n] ?? 0) > 0).map((n) => ({ nombre: n, cantidad: piezas[n] }));
+  const totalPiezas = reparto.reduce((acc, r) => acc + r.cantidad, 0);
+  // Se cobra el más caro de los sabores elegidos, como en cualquier mezcla (y es el que se guarda).
+  const productoMezcla = reparto.length
+    ? categoria.productos.filter((p) => reparto.some((r) => r.nombre === p.nombre)).reduce((a, b) => (b.precio > a.precio ? b : a))
+    : undefined;
+  const sumarPieza = (n: string, delta: number) =>
+    setPiezas((actual) => ({ ...actual, [n]: Math.max(0, (actual[n] ?? 0) + delta) }));
+
+  // Al entrar o salir de MEZCLAR se empieza de cero.
+  useEffect(() => {
+    setPiezas({});
+    setElegidos(nombres.length === 1 ? [nombres[0]] : []);
+    setCantidad(1);
+  }, [mezclando]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const delNombre = categoria.productos.filter((p) => p.nombre === nombre);
   const tamanos = delNombre.filter((p) => p.tamano !== null);
@@ -138,7 +170,9 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
   }, [agregado]);
 
   const etiquetaEleccion = NOMBRE_ELECCION[categoria.nombre] ?? 'Producto';
-  const faltante = !nombre ? `Elige ${etiquetaEleccion.toLowerCase()}` : !producto ? 'Elige tamaño' : null;
+  const faltante = mezclando
+    ? totalPiezas === 0 ? `Toca cada ${etiquetaEleccion.toLowerCase()} para sumar piezas` : null
+    : !nombre ? `Elige ${etiquetaEleccion.toLowerCase()}` : !producto ? 'Elige tamaño' : null;
   const precioDesde = Math.min(...categoria.productos.map((p) => p.precio));
   const precioHasta = Math.max(...categoria.productos.map((p) => p.precio));
 
@@ -147,15 +181,30 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
   const todosIncluidos = quitados.length === 0;
 
   const agregar = () => {
+    if (mezclando) {
+      if (!productoMezcla) return;
+      // Un solo sabor es un renglón normal; con varios, un renglón con las piezas de cada uno.
+      const varios = reparto.length > 1;
+      onAgregar(productoMezcla, totalPiezas, [], varios ? reparto.map((r) => r.nombre) : [], {
+        sinQueso: false,
+        conQueso: false,
+        carneExtra: 0,
+        ...(varios && { reparto }),
+      });
+      setAgregado(`${totalPiezas} × ${varios ? textoReparto(reparto) : productoMezcla.nombre}`);
+      setPiezas({});
+      onMezclaAgregada?.();
+      return;
+    }
     if (!producto) return;
     const sin = complementos.filter((c) => quitados.includes(c.id));
     const quesoIncluido = complementos.some((c) => esQueso(c) && !quitados.includes(c.id));
     const quesoFuera = puedeConQueso && !quesoIncluido;
-    onAgregar(producto, cantidad, sin, elegidos.length > 1 ? elegidos : [], { sinQueso: quesoFuera, conQueso: puedeConQueso && quesoIncluido, carneExtra: carnesExtra, termino, papas });
+    onAgregar(producto, cantidad, sin, elegidos.length > 1 ? elegidos : [], { sinQueso: quesoFuera, conQueso: puedeConQueso && quesoIncluido, carneExtra: carnesExtra, termino, papas, ofrecidos: complementos });
     setAgregado(
       `${cantidad} × ${elegidos.length > 1 ? textoElegidos : producto.nombre}${producto.tamano ? ` (${producto.tamano})` : ''}${
         quesoFuera ? ' · SIN QUESO' : ''
-      }${carnesExtra ? ` · ${textoCarneExtra(carnesExtra)}` : ''}${papas ? ' · CON PAPAS (orden completa)' : ''}${termino ? ` · ${termino.nombre}` : ''}`
+      }${carnesExtra ? ` · ${textoCarneExtra(carnesExtra)}` : ''}${papas ? ' · CON PAPAS' : ''}${termino ? ` · ${termino.nombre}` : ''}`
     );
     setElegidos(nombres.length === 1 ? [nombres[0]] : []);
     setTamano(esEnsalada ? 'Chica' : null);
@@ -201,13 +250,52 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
       </div>
 
       <div data-opciones-scroll={categoria.nombre} className={pantallaCompleta ? `flex-1 min-h-0 flex flex-col ${esHamburguesa ? 'gap-1' : 'gap-2'} overflow-y-auto overscroll-contain` : 'space-y-5'}>
+        {/* MEZCLAR: cada toque suma una pieza de ese sabor; «−» quita una */}
+        {mezclando && (
+          <div {...grupo(nombres.length)}>
+            <div className="shrink-0 text-sm font-semibold text-neutral-700">
+              {++paso}. {etiquetaEleccion}{' '}
+              <span className="font-normal text-neutral-500">· toca para sumar piezas de cada uno</span>
+              {reparto.length > 0 && <span className="ml-2 font-semibold text-orange-800">→ {textoReparto(reparto)}</span>}
+            </div>
+            <div className={rejillaEleccion}>
+              {nombres.map((n) => {
+                const cuantas = piezas[n] ?? 0;
+                return (
+                  <div key={n} className="relative min-h-0">
+                    <button
+                      onClick={() => sumarPieza(n, 1)}
+                      aria-label={`Sumar una pieza de ${n} (van ${cuantas})`}
+                      className={`w-full ${boton} px-2 border-2 font-semibold flex flex-col items-center justify-center transition-colors cursor-pointer ${
+                        cuantas > 0 ? BOTON_UNA.on : BOTON_UNA.off
+                      }`}
+                    >
+                      {n}
+                      <span className={`font-mono text-2xl font-black leading-none ${cuantas > 0 ? '' : 'text-neutral-300'}`}>{cuantas}</span>
+                    </button>
+                    {cuantas > 0 && (
+                      <button
+                        onClick={() => sumarPieza(n, -1)}
+                        aria-label={`Quitar una pieza de ${n}`}
+                        className="absolute top-1.5 left-1.5 w-9 h-9 rounded-lg border-2 border-orange-300 bg-white text-orange-800 flex items-center justify-center cursor-pointer"
+                      >
+                        <Minus className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* 1. Elige una: productos de la categoría */}
-        {nombres.length > 1 && (
+        {nombres.length > 1 && !mezclando && (
           <div {...grupo(nombres.length)}>
             <div className="shrink-0 text-sm font-semibold text-neutral-700">
               {++paso}. {etiquetaEleccion}{' '}
               <span className="font-normal text-neutral-500">
-                {permiteMezcla ? '· elige una o toca varias para mezclar' : '· elige una'}
+                {permiteMezcla ? '· elige una o toca varias para mezclar' : conReparto ? '· elige una o toca MEZCLAR para varios' : '· elige una'}
               </span>
               {elegidos.length > 1 && <span className="ml-2 font-semibold text-orange-800">→ {textoElegidos}</span>}
             </div>
@@ -347,14 +435,20 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
                 }`}
               >
                 <span className="flex items-center gap-1">{conPapas && <Check className="w-4 h-4" />} CON PAPAS</span>
-                <span className="text-sm font-semibold">{categoria.papas ? `Orden completa · +${dinero(categoria.papas.precio)}` : 'No disponibles'}</span>
+                <span className="text-sm font-semibold">{categoria.papas ? `+${dinero(categoria.papas.precio)}` : 'No disponibles'}</span>
               </button>}
             </div>
           </div>
         )}
       </div>
 
-      {/* Cantidad */}
+      {/* Cantidad (en MEZCLAR, el total de piezas de todos los sabores) */}
+      {mezclando ? (
+        <div className="shrink-0 flex items-center justify-between gap-4 rounded-2xl border border-neutral-200 px-3 py-2 min-h-[4.5rem]">
+          <div className="text-base font-semibold text-neutral-700">Total de piezas</div>
+          <span className="font-mono text-3xl font-bold">{totalPiezas}</span>
+        </div>
+      ) : (
       <div className="shrink-0 flex items-center justify-between gap-4 rounded-2xl border border-neutral-200 px-3 py-2">
         <div className="text-base font-semibold text-neutral-700">Cantidad</div>
         <div className="flex items-center gap-4">
@@ -375,6 +469,7 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
           </button>
         </div>
       </div>
+      )}
 
       <button
         onClick={agregar}
@@ -382,7 +477,10 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
         className="w-full h-14 shrink-0 rounded-2xl bg-amber-500 hover:bg-amber-400 disabled:bg-neutral-200 disabled:text-neutral-500 disabled:cursor-not-allowed text-neutral-950 text-lg font-bold flex items-center justify-center gap-2 cursor-pointer"
       >
         <Plus className="w-5 h-5" />
-        {faltante ?? `Agregar a la orden · ${dinero(precioPieza * cantidad)}`}
+        {faltante ??
+          (mezclando
+            ? `Agregar mezcla · ${totalPiezas} pzas · ${dinero((productoMezcla?.precio ?? 0) * totalPiezas)}`
+            : `Agregar a la orden · ${dinero(precioPieza * cantidad)}`)}
       </button>
 
       {agregado && (

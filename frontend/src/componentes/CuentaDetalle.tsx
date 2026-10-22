@@ -4,7 +4,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { AlertTriangle, Clock, Home, Loader2, ShoppingBag, Tablet, X } from 'lucide-react';
-import { DetalleOrdenBD, ESTATUS_ORDEN, ExtraOrdenBD, obtenerOrden, OrdenBD } from '../services/pedidosService';
+import { DetalleOrdenBD, ESTATUS_ORDEN, ExtraOrdenBD, nombreDetalle, obtenerOrden, OrdenBD } from '../services/pedidosService';
 import { useEnVivo } from '../services/enVivo';
 import { COLOR_ESTATUS_ORDEN, EtiquetaCarneExtra, EtiquetaConPapas, EtiquetaConQueso, EtiquetaSinQueso } from './PedidoEnviado';
 import { ListaExtras } from './ListaExtras';
@@ -48,7 +48,7 @@ export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones }) 
       { clave: string; nombre: string; sinQueso: boolean; conQueso: boolean; conPapas: boolean; carneExtra: number; categoria: string; cantidad: number; importe: number }
     >();
     for (const d of detalle) {
-      const nombre = d.opciones?.mezcla && d.opciones.mezcla.length > 1 ? d.opciones.mezcla.join(' con ') : d.tamano ? `${d.nombre} (${d.tamano})` : d.nombre;
+      const nombre = nombreDetalle(d);
       const clave = `${d.idProducto}-${d.sin_queso ? 1 : 0}-${d.con_queso ? 1 : 0}-${d.carne_extra}-${nombre}-${d.opciones?.papas ? 1 : 0}`;
       const p = porProducto.get(clave) ?? {
         clave,

@@ -27,6 +27,8 @@ class DatabaseSeeder extends Seeder
                 ProductoGrupoSeeder::class,
                 AmpliacionMenuSeeder::class,
                 QuesoComplementoSeeder::class,
+                EnchiladaQuesoSeeder::class,
+                TostadasJitomateSeeder::class,
             ]);
         });
     }
