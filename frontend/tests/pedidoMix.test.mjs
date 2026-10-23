@@ -3,7 +3,7 @@ import test from 'node:test';
 import { agruparMix } from '../src/services/pedidoMix.ts';
 import { terminosCategoria } from '../src/services/terminosPedido.ts';
 import { guardarBorrador, leerBorrador, leerMixActivo, leerExtrasBorrador, piezasSinEnviar } from '../src/services/borradorPedido.ts';
-import { complementosTicket, ordenarComplementos } from '../src/services/complementos.ts';
+import { complementosTicket, complementosTicketQuesoOpcional, ordenarComplementos } from '../src/services/complementos.ts';
 
 test('MIX conserva orden de grupos, cantidades y productos sueltos', () => {
   const lineas = [{ id: 1, mix: 1 }, { id: 2, mix: null }, { id: 3, mix: 1 }, { id: 4, mix: 2 }, { id: 5 }];
@@ -68,4 +68,18 @@ test('ticket de cocina: complementos en los menos renglones posibles', () => {
   // Sin complementos: nada; sin queso cuando el queso no se puede elegir: aparte, como antes.
   assert.deepEqual(complementosTicket([], []), []);
   assert.deepEqual(complementosTicket([crema, salsa], [], { sinQueso: true }), ['SIN QUESO', 'CON TODO']);
+});
+
+test('tacos: el queso no va de base; solo se imprime si lo piden', () => {
+  const [cebolla, cilantro, queso, salsa] = ['Cebolla', 'Cilantro', 'Queso', 'Salsa'].map((nombre, i) => ({ id: i + 1, nombre }));
+  const taco = [cebolla, cilantro, queso, salsa];
+  // Como sale de la pantalla: sin queso de base (está entre los quitados) y sin decir SIN QUESO.
+  assert.deepEqual(complementosTicketQuesoOpcional(taco, [queso], false), ['CON TODO']);
+  assert.deepEqual(complementosTicketQuesoOpcional(taco, [queso, cilantro], false), ['Sin cilantro']);
+  assert.deepEqual(complementosTicketQuesoOpcional(taco, [queso, cebolla, cilantro, salsa], false), ['SIN NADA']);
+  // Con queso pedido.
+  assert.deepEqual(complementosTicketQuesoOpcional(taco, [], true), ['CON TODO Y QUESO']);
+  assert.deepEqual(complementosTicketQuesoOpcional(taco, [cilantro], true), ['CON QUESO', 'Sin cilantro']);
+  assert.deepEqual(complementosTicketQuesoOpcional(taco, [cebolla, cilantro], true), ['SOLO CON SALSA Y QUESO']);
+  assert.deepEqual(complementosTicketQuesoOpcional(taco, [cebolla, cilantro, salsa], true), ['SOLO CON QUESO']);
 });

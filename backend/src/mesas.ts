@@ -11,6 +11,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import type { PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import { requireAuth } from './auth.js';
+import { config } from './config.js';
 import { esDuplicado, pool } from './db.js';
 import { mysqlDisponible } from './usuarios.js';
 import { sesionTabletAbierta, turnoAbierto } from './turnos.js';
@@ -48,6 +49,15 @@ async function siguienteCodigo(conexion: PoolConnection, turnoId: number): Promi
   return `T${turnoId}-${String(Number(filas[0].ultimo) + 1).padStart(3, '0')}`;
 }
 
+/** Órdenes de la mesa de prueba: «PRUEBA-001», «PRUEBA-002»… (no usan el consecutivo del turno). */
+async function siguienteCodigoPrueba(conexion: PoolConnection): Promise<string> {
+  const [filas] = await conexion.query<RowDataPacket[]>(
+    `SELECT COALESCE(MAX(CAST(SUBSTRING_INDEX(codigo, '-', -1) AS UNSIGNED)), 0) AS ultimo
+       FROM orden WHERE codigo LIKE 'PRUEBA-%' FOR UPDATE`,
+  );
+  return `PRUEBA-${String(Number(filas[0].ultimo) + 1).padStart(3, '0')}`;
+}
+
 const COLUMNAS =
   'idOrden AS id, codigo, nombre, total, tipo_orden AS tipo_venta_id, estatus, idTurno AS turno_id, idSesion_tablet AS sesion_tablet_id, creado_en, actualizado_en';
 
@@ -78,12 +88,16 @@ mesasRouter.get('/', async (_req, res) => {
     res.json({ turno: null, mesas: [] });
     return;
   }
+  // Con mesa de prueba (solo PC de desarrollo) también van sus órdenes, que están fuera del turno: las activas y
+  // las cobradas desde que abrió el turno (para verlas en Cajas y Ventas). Producción no las lista nunca.
+  const prueba = config.mesaPrueba;
   const [mesas] = await pool.query<MesaFila[]>(
     `SELECT ${COLUMNAS} FROM orden WHERE idTurno = ?
+       ${prueba ? 'OR (idTurno IS NULL AND nombre = ? AND (estatus IN (0, 1) OR creado_en >= ?))' : ''}
       ORDER BY nombre REGEXP '^[0-9]+$' DESC, CAST(nombre AS UNSIGNED), nombre, idOrden`,
-    [turno.idTurno],
+    prueba ? [turno.idTurno, prueba, turno.fecha_inicio] : [turno.idTurno],
   );
-  res.json({ turno: { idTurno: turno.idTurno, fecha_inicio: turno.fecha_inicio }, mesas });
+  res.json({ turno: { idTurno: turno.idTurno, fecha_inicio: turno.fecha_inicio }, mesas, mesaPrueba: prueba });
 });
 
 /**
@@ -127,11 +141,15 @@ mesasRouter.post('/', async (req, res) => {
     const nombreAsignado = await asignarNombreMesa(conexion, turno.idTurno, nombre);
     const tabletId = req.usuario!.tablet?.id;
     const sesionId = tabletId ? ((await sesionTabletAbierta(tabletId, turno.idTurno, conexion))?.id ?? null) : null;
+    // Mesa de prueba (solo PC de desarrollo): sus órdenes van fuera del turno, así producción no las ve.
+    const esPrueba = nombreAsignado === config.mesaPrueba;
     // Si esa mesa ya tiene una orden activa (ABIERTA o PAGANDO) en el turno, se usa esa; una orden PAGADA
     // nunca se reabre: la nueva Mesa 1 es otra orden con su propio código.
     const [activas] = await conexion.query<MesaFila[]>(
-      'SELECT idOrden AS id FROM orden WHERE idTurno = ? AND nombre = ? AND estatus IN (0, 1) FOR UPDATE',
-      [turno.idTurno, nombreAsignado],
+      esPrueba
+        ? 'SELECT idOrden AS id FROM orden WHERE idTurno IS NULL AND nombre = ? AND estatus IN (0, 1) FOR UPDATE'
+        : 'SELECT idOrden AS id FROM orden WHERE idTurno = ? AND nombre = ? AND estatus IN (0, 1) FOR UPDATE',
+      esPrueba ? [nombreAsignado] : [turno.idTurno, nombreAsignado],
     );
     let creada = false;
     let id: number;
@@ -139,11 +157,11 @@ mesasRouter.post('/', async (req, res) => {
     if (activas.length > 0) {
       id = activas[0].id;
     } else {
-      const codigo = await siguienteCodigo(conexion, turno.idTurno);
+      const codigo = esPrueba ? await siguienteCodigoPrueba(conexion) : await siguienteCodigo(conexion, turno.idTurno);
       const [resultado] = await conexion.execute<ResultSetHeader>(
         `INSERT INTO orden (codigo, nombre, total, tipo_orden, estatus, idTurno, idSesion_tablet, creado_en, actualizado_en)
          VALUES (?, ?, 0.00, ?, 0, ?, ?, ?, ?)`,
-        [codigo, nombreAsignado, tipoVentaId, turno.idTurno, sesionId, ahora, ahora],
+        [codigo, nombreAsignado, tipoVentaId, esPrueba ? null : turno.idTurno, sesionId, ahora, ahora],
       );
       id = resultado.insertId;
       creada = true;

@@ -23,6 +23,17 @@ export const config = {
     url: (process.env.PRINT_AGENT_URL || 'http://localhost:9101').replace(/\/$/, ''),
     token: process.env.PRINT_AGENT_TOKEN || '',
   },
+  // Solo en la PC de desarrollo (.env local, p. ej. MESA_PRUEBA=10): una mesa de prueba cuyas órdenes se guardan
+  // fuera del turno (orden.idTurno NULL), así producción no las ve en sus listas, ventas ni corte. Sin definir, no existe.
+  mesaPrueba: /^\d+$/.test(process.env.MESA_PRUEBA ?? '') ? String(Number(process.env.MESA_PRUEBA)) : null,
+  // Monitor de la computadora de las impresoras (monitorImpresion.ts). Solo lo ven estos usuarios.
+  // En la PC de desarrollo, MONITOR_REMOTO_URL y MONITOR_REMOTO_TOKEN (el PRINT_AGENT_TOKEN de producción)
+  // hacen que se vigile la conexión de la laptop con producción, que es a donde se conecta.
+  monitor: {
+    usuarios: (process.env.MONITOR_USUARIOS || 'zeerickz').split(',').map((u) => u.trim().toLowerCase()).filter(Boolean),
+    remotoUrl: (process.env.MONITOR_REMOTO_URL || '').replace(/\/$/, ''),
+    remotoToken: process.env.MONITOR_REMOTO_TOKEN || '',
+  },
   admin: {
     usuario: process.env.ADMIN_USUARIO || 'admin',
     password: process.env.ADMIN_PASSWORD || 'admin123',

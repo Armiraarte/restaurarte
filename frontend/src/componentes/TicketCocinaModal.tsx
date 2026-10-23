@@ -36,7 +36,7 @@ export const TicketCocinaPapel: React.FC<{ ticket: TicketCocina }> = ({ ticket: 
     {t.productos.map((p) => (
       <div key={p.partida_id} className="mb-2.5">
         <div className="text-base font-black leading-tight">
-          {p.cantidad} x {p.nombre}
+          {p.cantidad} {p.nombre}
         </div>
         {p.descripcion.map((d, i) => (
           <div key={i} className="pl-3">

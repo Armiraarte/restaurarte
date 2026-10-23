@@ -33,8 +33,11 @@ export async function registrarMesa(codigo: string, paraLlevar: boolean): Promis
   return data;
 }
 
-/** Mesas registradas en el turno abierto (lo único que la tablet muestra). Sin turno, la lista va vacía. */
-export async function listarMesasTurno(): Promise<{ turno: { id: number } | null; mesas: MesaRegistrada[] }> {
+/**
+ * Mesas registradas en el turno abierto (lo único que la tablet muestra). Sin turno, la lista va vacía.
+ * mesaPrueba: número de la mesa de prueba (solo en la PC de desarrollo; en producción siempre null).
+ */
+export async function listarMesasTurno(): Promise<{ turno: { id: number } | null; mesas: MesaRegistrada[]; mesaPrueba?: string | null }> {
   let res: Response;
   try {
     res = await fetch('/api/mesas', { headers: { Authorization: `Bearer ${getToken() ?? ''}` } });

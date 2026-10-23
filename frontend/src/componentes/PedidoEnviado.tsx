@@ -7,7 +7,7 @@
 // de la tablet y dos o tres en la caja.
 import React from 'react';
 import { Clock, LucideIcon, Plus, Receipt, Send, Tablet } from 'lucide-react';
-import { DetalleOrdenBD, ESTATUS_ORDEN, ExtraOrdenBD, nombreDetalle, OrdenBD, textoCarneExtra } from '../services/pedidosService';
+import { CATEGORIAS_QUESO_OPCIONAL, DetalleOrdenBD, ESTATUS_ORDEN, ExtraOrdenBD, nombreDetalle, OrdenBD, textoCarneExtra, textoComplementosExtra } from '../services/pedidosService';
 import { iconoCategoria } from './iconosCategoria';
 import { agruparMix } from '../services/pedidoMix';
 import { ListaExtras } from './ListaExtras';
@@ -40,6 +40,11 @@ export const EtiquetaConPapas: React.FC = () => (
   <span className="block text-xs font-semibold text-amber-800">CON PAPAS</span>
 );
 
+/** Complementos EXTRA: «EXTRA CREMA Y QUESO». */
+export const EtiquetaComplementosExtra: React.FC<{ nombres: string[] }> = ({ nombres }) => (
+  <span className="block text-xs font-black tracking-wide text-amber-800">{textoComplementosExtra(nombres)}</span>
+);
+
 /** Hamburguesa con DOBLE o TRIPLE CARNE (orden_has_detalle.carne_extra). */
 export const EtiquetaCarneExtra: React.FC<{ carneExtra: number }> = ({ carneExtra }) => (
   <span className="shrink-0 rounded-md border border-red-300 bg-red-100 px-1.5 py-0.5 text-[11px] font-black tracking-wide text-red-800">
@@ -54,6 +59,7 @@ interface Renglon {
   sinQueso: boolean;
   conQueso: boolean;
   conPapas: boolean;
+  complementosExtra: string[];
   mixGrupo: number | null;
   termino: string | null;
   sin: string[];
@@ -89,9 +95,11 @@ export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, extras = [], cl
       sinQueso: d.sin_queso,
       conQueso: d.con_queso,
       conPapas: !!d.opciones?.papas,
+      complementosExtra: d.opciones?.complementosExtra?.map((c) => c.nombre) ?? [],
       mixGrupo: d.mix_grupo ?? null,
       termino: d.termino ?? null,
-      sin: d.opciones?.sin?.filter((c) => !d.sin_queso || !esQueso(c)).map((c) => c.nombre) ?? [],
+      // En tacos el queso no va de base: no se muestra «sin queso».
+      sin: d.opciones?.sin?.filter((c) => !esQueso(c) || (!d.sin_queso && !CATEGORIAS_QUESO_OPCIONAL.includes(d.categoria))).map((c) => c.nombre) ?? [],
       carneExtra: d.carne_extra,
       categoria: d.categoria,
       subtotal: d.subtotal,
@@ -175,17 +183,18 @@ export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, extras = [], cl
                 <ul className="divide-y divide-neutral-100">
                   {agruparMix(envio.renglones, (r) => r.mixGrupo).map((grupo, indice) => (
                     <React.Fragment key={grupo.grupo === null ? `suelto-${indice}` : `mix-${grupo.grupo}`}>
-                      {grupo.grupo !== null && <li className="px-4 py-2 bg-violet-100 text-violet-900 font-bold text-sm">MIX · UN SOLO PLATO</li>}
+                      {grupo.grupo !== null && <li className="px-4 py-2 bg-violet-100 text-violet-900 font-bold text-sm">MIX</li>}
                       {grupo.lineas.map((r) => {
                     const Icono = iconoCategoria(r.categoria);
                     return (
                       <li key={r.clave} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-2.5">
                         <span className="min-w-11 h-10 px-2 rounded-lg bg-amber-100 text-amber-900 font-mono text-base font-bold flex items-center justify-center">
-                          {r.cantidad}×
+                          {r.cantidad}
                         </span>
                         <span className="min-w-0">
                           {r.termino && <span className="block text-xs font-semibold text-orange-800">Término: {r.termino}</span>}
                           {r.conPapas && <EtiquetaConPapas />}
+                          {r.complementosExtra.length > 0 && <EtiquetaComplementosExtra nombres={r.complementosExtra} />}
                           <span className="flex items-center gap-1.5 min-w-0">
                             <span className="font-semibold text-neutral-900 truncate">{r.producto}</span>
                             {r.sinQueso && <EtiquetaSinQueso />}

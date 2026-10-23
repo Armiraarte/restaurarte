@@ -2,6 +2,7 @@ import React from 'react';
 import { LogOut, Settings } from 'lucide-react';
 import { Usuario } from '../services/authService';
 import { IndicadorTurno } from './IndicadorTurno';
+import { IndicadorImpresora } from './MonitorImpresora';
 
 interface HeaderProps {
   usuario: Usuario;
@@ -32,8 +33,9 @@ export const Header: React.FC<HeaderProps> = ({ usuario, onLogout, onOpenConfig,
         {/* Turno de caja abierto (BD: turnos), al centro */}
         <IndicadorTurno className="hidden sm:inline-flex justify-self-center" />
 
-        {/* Usuario en sesión */}
+        {/* Usuario en sesión (y, solo para el usuario autorizado, el monitor de la computadora de las impresoras) */}
         <div className="flex items-center gap-2 justify-self-end col-start-3">
+          <IndicadorImpresora usuario={usuario} />
           <div className="text-right text-xs leading-tight">
             <div className="text-neutral-800 font-medium truncate max-w-[140px]">{usuario.nombre}</div>
             <div className="text-neutral-500 font-mono text-[10px] uppercase">{usuario.rol}</div>

@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 import { AlertTriangle, Clock, Home, Loader2, ShoppingBag, Tablet, X } from 'lucide-react';
 import { DetalleOrdenBD, ESTATUS_ORDEN, ExtraOrdenBD, nombreDetalle, obtenerOrden, OrdenBD } from '../services/pedidosService';
 import { useEnVivo } from '../services/enVivo';
-import { COLOR_ESTATUS_ORDEN, EtiquetaCarneExtra, EtiquetaConPapas, EtiquetaConQueso, EtiquetaSinQueso } from './PedidoEnviado';
+import { COLOR_ESTATUS_ORDEN, EtiquetaCarneExtra, EtiquetaConPapas, EtiquetaComplementosExtra, EtiquetaConQueso, EtiquetaSinQueso } from './PedidoEnviado';
 import { ListaExtras } from './ListaExtras';
 
 const dinero = (n: number) => `$${n.toFixed(2)}`;
@@ -45,17 +45,18 @@ export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones }) 
   const categorias = useMemo(() => {
     const porProducto = new Map<
       string,
-      { clave: string; nombre: string; sinQueso: boolean; conQueso: boolean; conPapas: boolean; carneExtra: number; categoria: string; cantidad: number; importe: number }
+      { clave: string; nombre: string; sinQueso: boolean; conQueso: boolean; conPapas: boolean; complementosExtra: string[]; carneExtra: number; categoria: string; cantidad: number; importe: number }
     >();
     for (const d of detalle) {
       const nombre = nombreDetalle(d);
-      const clave = `${d.idProducto}-${d.sin_queso ? 1 : 0}-${d.con_queso ? 1 : 0}-${d.carne_extra}-${nombre}-${d.opciones?.papas ? 1 : 0}`;
+      const clave = `${d.idProducto}-${d.sin_queso ? 1 : 0}-${d.con_queso ? 1 : 0}-${d.carne_extra}-${nombre}-${d.opciones?.papas ? 1 : 0}-${(d.opciones?.complementosExtra ?? []).map((c) => c.id).join("+")}`;
       const p = porProducto.get(clave) ?? {
         clave,
         nombre,
         sinQueso: d.sin_queso,
         conQueso: d.con_queso,
         conPapas: !!d.opciones?.papas,
+        complementosExtra: d.opciones?.complementosExtra?.map((c) => c.nombre) ?? [],
         carneExtra: d.carne_extra,
         categoria: d.categoria,
         cantidad: 0,
@@ -150,6 +151,7 @@ export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones }) 
                       </span>
                       <span className="block text-sm text-neutral-500 font-mono">{dinero(p.importe / p.cantidad)} c/u</span>
                       {p.conPapas && <EtiquetaConPapas />}
+                      {p.complementosExtra.length > 0 && <EtiquetaComplementosExtra nombres={p.complementosExtra} />}
                     </span>
                     <span className="shrink-0 font-mono font-bold text-xl">{dinero(p.importe)}</span>
                   </div>

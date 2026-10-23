@@ -2,11 +2,12 @@ import React from 'react';
 import { Trash2 } from 'lucide-react';
 import { ExtraPedido } from '../services/pedidosService';
 
-export function ListaExtras({ extras, onQuitar }: { extras: (ExtraPedido & { id: number })[]; onQuitar?: (id: number) => void }) {
+/** Cobros extra del pedido. `enMix`: los de un MIX, dentro de su recuadro (sin separación ni título grande). */
+export function ListaExtras({ extras, onQuitar, enMix = false }: { extras: (ExtraPedido & { id: number })[]; onQuitar?: (id: number) => void; enMix?: boolean }) {
   if (!extras.length) return null;
   return (
-    <section aria-label="Extras" className="mt-3 border-t-2 border-dashed border-amber-200 pt-3 space-y-2">
-      <h4 className="font-bold text-amber-900">Extras</h4>
+    <section aria-label={enMix ? 'Extras del MIX' : 'Extras'} className={enMix ? 'space-y-1.5' : 'mt-3 border-t-2 border-dashed border-amber-200 pt-3 space-y-2'}>
+      <h4 className={enMix ? 'text-xs font-black tracking-wide text-amber-900' : 'font-bold text-amber-900'}>{enMix ? 'EXTRAS' : 'Extras'}</h4>
       {extras.map((extra) => (
         <div key={extra.id} className="flex items-center gap-2 rounded-lg bg-amber-50 px-2 py-2">
           <span className="flex-1 min-w-0 break-words text-sm">{extra.descripcion}</span>

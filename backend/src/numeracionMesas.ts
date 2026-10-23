@@ -1,4 +1,5 @@
 import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
+import { config } from './config.js';
 
 export class ErrorAltaMesa extends Error {
   constructor(message: string, public status: number, public sinTurno = false) {
@@ -6,8 +7,9 @@ export class ErrorAltaMesa extends Error {
   }
 }
 
+/** Mesas del 1 al 9; la de prueba (config.mesaPrueba) solo existe en la PC de desarrollo. */
 export function validarNumeroMesa(nombre: string): void {
-  if (/^\d+$/.test(nombre) && !/^[1-9]$/.test(nombre)) {
+  if (/^\d+$/.test(nombre) && !/^[1-9]$/.test(nombre) && nombre !== config.mesaPrueba) {
     throw new ErrorAltaMesa('Las mesas solo pueden tener números del 1 al 9.', 400);
   }
 }

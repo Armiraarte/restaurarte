@@ -4,6 +4,7 @@
 //   GET /impresoras -> impresoras y asignaciones de cocina/caja
 //   PUT /asignacion -> { destino, impresora } guarda la asignación
 //   POST /imprimir -> { lineas: [...], destino: 'cocina' | 'caja' }
+//   POST /sincronizar -> vuelve a buscar las impresoras y reinicia los procesos de impresión
 //
 // Variables: PRINT_AGENT_PORT (9101), IMPRESORA_TICKETS (nombre exacto; si no, se busca una térmica),
 // PRINT_AGENT_TOKEN (opcional; si se define, el backend debe mandarlo en el header X-Agent-Token).
@@ -19,7 +20,10 @@ import path from 'node:path';
 import { parseEnv } from 'node:util';
 import { AsignacionesImpresoras, esDestino } from './asignaciones.mjs';
 import { TrabajadorImpresion } from './trabajador.mjs';
-import { conectarAlServidor } from './conexionServidor.mjs';
+import { conectarAlServidor, estadoConexion } from './conexionServidor.mjs';
+
+/** Sin señal del servidor por más de esto (con internet caído o la conexión atorada): reinicio limpio del agente. */
+const SIN_SERVIDOR_MS = 3 * 60_000;
 
 const DIR = import.meta.dirname;
 let variables = {};
@@ -124,6 +128,17 @@ async function atender(metodo, ruta, leerCuerpo) {
       return respuesta(200, await asignaciones.asignar(destino, impresora, impresoras));
     }
 
+    // «Sincronizar» (Configuración > Impresoras): vuelve a buscar las impresoras en Windows y reinicia limpio
+    // el proceso de impresión de cocina y de caja (sirve si una impresora se desconectó y se volvió a conectar).
+    if (metodo === 'POST' && ruta === '/sincronizar') {
+      await consultarImpresoras();
+      const reinicios = await Promise.allSettled(Object.values(trabajadores).map((t) => t.reiniciar()));
+      const fallas = reinicios.filter((r) => r.status === 'rejected').map((r) => r.reason?.message);
+      if (fallas.length) console.error('[agente] Sincronizar:', fallas.join(' · '));
+      console.log('[agente] Sincronizado: impresoras revisadas y procesos de impresión reiniciados.');
+      return respuesta(200, await listarImpresoras());
+    }
+
     if (metodo === 'POST' && ruta === '/imprimir') {
       const { lineas, destino = 'caja' } = await leerCuerpo();
       if (!esDestino(destino)) return respuesta(400, { error: 'El destino debe ser cocina o caja.' });
@@ -185,6 +200,14 @@ if (SERVIDOR_URL) {
         return cuerpo;
       }),
     });
+
+    // Si lleva 3 minutos sin poder hablar con el servidor, el agente se cierra y agente-siempre.ps1 lo vuelve a
+    // abrir limpio a los 3 s (conexiones, DNS y procesos de impresión nuevos). Así no hace falta reiniciar la laptop.
+    setInterval(() => {
+      if (estadoConexion.reemplazado || Date.now() - estadoConexion.ultimaSenal < SIN_SERVIDOR_MS) return;
+      console.error(`[agente] ${SIN_SERVIDOR_MS / 60_000} min sin el servidor: se reinicia el agente.`);
+      process.exit(1);
+    }, 30_000);
   }
 }
 

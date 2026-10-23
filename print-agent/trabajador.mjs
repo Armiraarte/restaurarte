@@ -112,6 +112,19 @@ export class TrabajadorImpresion {
     return tarea;
   }
 
+  /** Sincronizar: cuando termine lo que esté imprimiendo, cierra el proceso y lo vuelve a preparar limpio. */
+  reiniciar() {
+    const tarea = this.#fila.then(() => {
+      const proceso = this.#proceso;
+      this.#proceso = null;
+      this.#listo = null;
+      proceso?.kill();
+      return this.preparar();
+    });
+    this.#fila = tarea.catch(() => {});
+    return tarea;
+  }
+
   cerrar() {
     this.#proceso?.stdin.end();
   }

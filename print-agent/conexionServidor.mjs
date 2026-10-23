@@ -8,6 +8,12 @@ const REEMPLAZADO_MS = 5 * 60_000; // otra computadora tomó la impresión: se v
 
 const esperar = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * Cómo va la conexión, para que el agente se reinicie solo si lleva mucho sin servidor (ver agente.mjs).
+ * ultimaSenal: la última vez que llegó algo del servidor (los latidos cuentan); al arrancar, la hora de arranque.
+ */
+export const estadoConexion = { conectado: false, ultimaSenal: Date.now(), reemplazado: false };
+
 export async function conectarAlServidor({ url, token, equipo, atender }) {
   const encabezados = { 'X-Agent-Token': token, 'X-Agent-Equipo': equipo };
   let intentos = 0;
@@ -61,11 +67,13 @@ export async function conectarAlServidor({ url, token, equipo, atender }) {
       if (!res.ok || !res.body) throw new Error(`El servidor respondió ${res.status}.`);
       console.log(`[conexion] Conectado a ${url} como "${equipo}".`);
       intentos = 0;
+      Object.assign(estadoConexion, { conectado: true, ultimaSenal: Date.now(), reemplazado: false });
 
       const decodificador = new TextDecoder();
       let pendiente = '';
       for await (const parte of res.body) {
         reiniciarVigilante();
+        estadoConexion.ultimaSenal = Date.now();
         pendiente += decodificador.decode(parte, { stream: true });
         let fin;
         while ((fin = pendiente.indexOf('\n\n')) !== -1) {
@@ -81,10 +89,13 @@ export async function conectarAlServidor({ url, token, equipo, atender }) {
       }
       throw new Error('El servidor cerró la conexión.');
     } catch (err) {
+      estadoConexion.conectado = false;
       if (reemplazado) {
         reemplazado = false;
         console.error('[conexion] Otra computadora se conectó como agente de impresión. Reintento en 5 min.');
+        estadoConexion.reemplazado = true; // esperar a propósito no es una falla: no se reinicia el agente
         await esperar(REEMPLAZADO_MS);
+        Object.assign(estadoConexion, { reemplazado: false, ultimaSenal: Date.now() });
         continue;
       }
       const espera = ESPERAS_MS[Math.min(intentos++, ESPERAS_MS.length - 1)];

@@ -67,7 +67,9 @@ export interface TicketCocina {
   mesero: string; // BD: comandas.mesero_id → usuarios.nombre
   tablet: string; // BD: comandas.tablet_id → tablets.nombre
   enviada_en: string; // ISO 8601. BD: comandas.enviada_en
-  productos: ProductoTicketCocina[]; // los extras (cobros libres) no van a cocina: solo a la cuenta y al ticket de cobro
+  productos: ProductoTicketCocina[];
+  // Cobros libres con su importe: debajo de su MIX (mix_grupo) si se agregaron dentro de uno; si no, al final.
+  extras?: { descripcion: string; importe: number; mix_grupo?: number | null }[];
   total_piezas: number; // piezas a preparar (un paquete cuenta sus piezas) para que cocina confirme que no falta nada
   /** 'bebidas': el ticket de las bebidas, que se imprime en la impresora de caja (ahí se preparan). Sin valor: cocina. */
   area?: 'cocina' | 'bebidas';

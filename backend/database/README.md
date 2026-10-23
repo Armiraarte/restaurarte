@@ -317,12 +317,15 @@ La API asigna números MIX consecutivos por orden dentro de la transacción que
 bloquea esa orden. Cada envío recibe grupos nuevos, aunque dos dispositivos
 usen los mismos números en sus borradores. La respuesta incluye `guardados`
 en el orden de los items enviados: el ticket usa sus IDs y grupos definitivos.
-En cocina cada grupo se imprime como «MIX n · UN SOLO PLATO», con las opciones
+En cocina cada grupo se imprime bajo «MIX» (sin número), con las opciones
 de cada producto. El cobro conserva los importes individuales.
 
 Tacos, Sopes, Quesadillas, Hamburguesas y Lonches ofrecen Queso dentro de
-Complementos, sin botón independiente. Inicia apagado y se agrega al tocarlo;
+Complementos, sin botón independiente. En Tacos el queso no va de base: inicia
+apagado, se agrega al tocarlo y en cocina solo sale «CON QUESO» si lo pidieron
+(nunca «SIN QUESO»). En las demás inicia incluido y se quita al tocarlo;
 la elección mantiene `sin_queso` / `con_queso` para el historial y los tickets.
+En los tickets, Papas a la Francesa sale como «Orden de papas» o «Media orden de papas».
 El producto Queso de Sopes es independiente y no necesita ese complemento.
 Los complementos se muestran en orden alfabético en español. Seleccionarlos
 no añade cargos al precio; las elecciones anteriores se conservan en el detalle.
@@ -379,6 +382,26 @@ tostadas, sin quitar Repollo, Lechuga, Salsa, Crema ni Queso. Repetirlo no lo du
 .\artisan.ps1 db:seed --class=TostadasJitomateSeeder --force
 ```
 
+**Café**: `CafeSeeder` agrega Café ($25) en Bebidas, dentro de Aguas (sale en el ticket de
+bebidas, en caja). Repetirlo no lo duplica ni cambia un precio ajustado después.
+
+```powershell
+.\artisan.ps1 db:seed --class=CafeSeeder --force
+```
+
+**Lonche Mixto**: `LoncheMixtoSeeder` agrega «Mixto» en Lonches a $70, con los mismos complementos
+que los demás lonches. Repetirlo no lo duplica ni cambia un precio ajustado después.
+
+```powershell
+.\artisan.ps1 db:seed --class=LoncheMixtoSeeder --force
+```
+
+**Complementos EXTRA**: en las opciones de cualquier platillo, un toque incluye o quita un complemento y
+**doble toque** lo marca EXTRA (otro doble toque lo quita); cada uno cuesta $5 por pieza
+(`PRECIO_COMPLEMENTO_EXTRA` en `backend/src/detallePedido.ts` y en el frontend). Se manda como
+`complementosExtra` (IDs de los complementos del producto, nunca también en `sin`) y se guarda en
+`opciones.complementosExtra` sin columna nueva; cocina y cobro muestran «EXTRA CREMA Y QUESO».
+
 ### Orden completa de papas y distribución de opciones
 
 Hamburguesas y Lonches ofrecen «CON PAPAS». El precio adicional se consulta
@@ -418,11 +441,10 @@ transacción que bloquea y guarda los productos, registra los extras y recalcula
 `orden.total` como suma de ambos conceptos. La respuesta incluye `extras` y
 `extrasGuardados`; `GET /api/ordenes/:idOrden` devuelve los cargos guardados.
 
-La cuenta y el historial muestran Extras después de los productos; el ticket
-de cobro incluye descripción e importe al final del detalle. El ticket de cocina
-no los imprime (no hay nada que preparar); un envío con solo extras no imprime
-nada en cocina. El total de cobro ya los incluye y la reimpresión recupera los
-registros de la base.
+La cuenta y el historial muestran Extras después de los productos; las comandas
+de cocina y el ticket de cobro incluyen descripción e importe al final del detalle
+(un envío con solo extras también sale en cocina). El total de cobro ya los incluye
+y la reimpresión recupera los registros de la base.
 Para actualizar una instalación existente después del respaldo:
 
 ```powershell

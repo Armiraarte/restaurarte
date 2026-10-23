@@ -6,6 +6,7 @@
 //   GET   /api/ordenes/:idOrden             la orden con su detalle y total
 //   POST  /api/ordenes/:idOrden/pedido      { items: [{ idProducto, cantidad, sin?, mezcla?, reparto?, sinQueso?, conQueso?, carneExtra?, mixGrupo? }] }
 //                                           reparto = MEZCLAR (Alitas): [{ nombre, cantidad }] por sabor, en un solo renglón
+//                                           complementosExtra = IDs de complementos EXTRA (doble toque); +$5 c/u por pieza
 //                                           Cada producto conserva precio, opciones y grupo MIX en orden_has_detalle.
 //                                           sinQueso = Quesadillas y Hamburguesas: SIN QUESO
 //                                           carneExtra = solo Hamburguesas: 1 doble, 2 triple; +$20 c/u por pieza
@@ -184,17 +185,21 @@ async function imprimirTicketCobro(idOrden: number, recibido: number | null, cob
   // Para el cliente se junta el mismo producto aunque se haya pedido en varios envíos
   // (las quesadillas sin queso van en su propio renglón).
   const porProducto = new Map<string, { cantidad: number; nombre: string; importe: number }>();
-  type Renglon = { idProducto: number; categoria: string; nombre: string; tamano: string | null; cantidad: number; sin_queso: boolean; con_queso: boolean; carne_extra: number; subtotal: number; opciones: { mezcla?: string[]; reparto?: RepartoPedido[]; papas?: PapasPedido } | null };
+  type Renglon = { idProducto: number; categoria: string; nombre: string; tamano: string | null; cantidad: number; sin_queso: boolean; con_queso: boolean; carne_extra: number; subtotal: number; opciones: { mezcla?: string[]; reparto?: RepartoPedido[]; papas?: PapasPedido; complementosExtra?: { nombre: string }[] } | null };
   for (const d of datos.detalle as unknown as Renglon[]) {
     // MEZCLAR: "4 BBQ + 6 Buffalo"; mezcla sin cantidades: "Papa con Frijol".
     const nombre = d.opciones?.reparto?.length
       ? d.opciones.reparto.map((r) => `${r.cantidad} ${r.nombre}`).join(' + ')
       : d.opciones?.mezcla && d.opciones.mezcla.length > 1 ? d.opciones.mezcla.join(' con ') : d.nombre;
-    const clave = `${d.idProducto}-${d.sin_queso ? 1 : 0}-${d.con_queso ? 1 : 0}-${d.carne_extra}-${nombre}-${d.opciones?.papas ? 1 : 0}`;
-    const opciones = [d.sin_queso ? 'SIN QUESO' : '', d.con_queso ? 'CON QUESO' : '', textoCarneExtra(d.carne_extra), d.opciones?.papas ? 'CON PAPAS' : ''].filter(Boolean).join(' ');
+    const extra = d.opciones?.complementosExtra?.length ? `EXTRA ${d.opciones.complementosExtra.map((c) => c.nombre).join(' Y ').toUpperCase()}` : '';
+    const clave = `${d.idProducto}-${d.sin_queso ? 1 : 0}-${d.con_queso ? 1 : 0}-${d.carne_extra}-${nombre}-${d.opciones?.papas ? 1 : 0}-${extra}`;
+    const opciones = [d.sin_queso ? 'SIN QUESO' : '', d.con_queso ? 'CON QUESO' : '', textoCarneExtra(d.carne_extra), d.opciones?.papas ? 'CON PAPAS' : '', extra].filter(Boolean).join(' ');
     const p = porProducto.get(clave) ?? {
       cantidad: 0,
-      nombre: `${d.categoria} ${nombre}${d.tamano ? ` (${d.tamano})` : ''}${opciones ? ` ${opciones}` : ''}`,
+      // Papas: «Orden de papas» / «Media orden de papas», sin repetir «Papas a la Francesa».
+      nombre: d.categoria === 'Papas a la Francesa'
+        ? (d.tamano === 'Media orden' ? 'Media orden de papas' : 'Orden de papas')
+        : `${d.categoria} ${nombre}${d.tamano ? ` (${d.tamano})` : ''}${opciones ? ` ${opciones}` : ''}`,
       importe: 0,
     };
     p.cantidad += d.cantidad;
@@ -371,7 +376,7 @@ pedidosRouter.post('/ordenes/:idOrden/pedido', async (req, res) => {
       [[...new Set(productos.map((p) => p.categoria_id)), 0]],
     );
     if (items.some((i) =>
-      i.sin?.some((id) => !complementos.get(i.idProducto)?.some((c) => c.id === id)) ||
+      [...(i.sin ?? []), ...(i.complementosExtra ?? [])].some((id) => !complementos.get(i.idProducto)?.some((c) => c.id === id)) ||
       [...(i.mezcla ?? []), ...(i.reparto ?? []).map((r) => r.nombre)].some((nombre) =>
         !rellenos.some((p) => p.categoria_id === porId.get(i.idProducto)!.categoria_id && p.nombre === nombre))
     )) {

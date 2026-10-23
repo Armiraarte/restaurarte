@@ -41,6 +41,14 @@ export function obtenerEstadoImpresion(): Promise<EstadoImpresion> {
   return pedir('/estado');
 }
 
+/**
+ * Sincronizar: la computadora de las impresoras vuelve a buscarlas en Windows y reinicia limpio su impresión.
+ * Si está desconectada, `error` dice cuál es, desde qué hora y qué hacer.
+ */
+export function sincronizarImpresoras(): Promise<EstadoImpresion> {
+  return pedir('/sincronizar', { method: 'POST', body: '{}' });
+}
+
 export function asignarImpresora(destino: DestinoImpresion, impresora: string): Promise<EstadoImpresion> {
   return pedir('/asignacion', { method: 'PUT', body: JSON.stringify({ destino, impresora }) });
 }

@@ -65,9 +65,11 @@ export function useTurnoActual(): TurnoActual | null | undefined {
 interface EstadoMesas {
   mesas: MesaRegistrada[] | null;
   error: string | null;
+  /** Mesa de prueba del croquis (solo PC de desarrollo); null en producción. */
+  mesaPrueba: string | null;
 }
 
-let estadoMesas: EstadoMesas = { mesas: null, error: null };
+let estadoMesas: EstadoMesas = { mesas: null, error: null, mesaPrueba: null };
 let textoMesas = '';
 const oyentesMesas = new Set<() => void>();
 let consultaMesas: Promise<void> | null = null;
@@ -81,11 +83,11 @@ function publicarMesas(nuevo: EstadoMesas) {
 
 async function consultarMesas() {
   try {
-    const { mesas } = await listarMesasTurno();
-    const texto = JSON.stringify(mesas);
+    const { mesas, mesaPrueba = null } = await listarMesasTurno();
+    const texto = JSON.stringify([mesas, mesaPrueba]);
     if (texto === textoMesas && estadoMesas.error === null) return; // sin cambios: no se dibuja nada
     textoMesas = texto;
-    publicarMesas({ mesas, error: null });
+    publicarMesas({ mesas, error: null, mesaPrueba });
   } catch (err) {
     const error = err instanceof Error ? err.message : 'No se pudieron cargar las mesas.';
     if (error !== estadoMesas.error) publicarMesas({ ...estadoMesas, error });
@@ -134,6 +136,6 @@ function suscribirMesas(fn: () => void) {
 
 /** Mesas registradas en el turno abierto. `recargar` las vuelve a pedir al momento (p. ej. tras agregar una). */
 export function useMesasTurno() {
-  const { mesas, error } = useSyncExternalStore(suscribirMesas, () => estadoMesas);
-  return { mesas, error, recargar: recargarMesas };
+  const { mesas, error, mesaPrueba } = useSyncExternalStore(suscribirMesas, () => estadoMesas);
+  return { mesas, error, mesaPrueba, recargar: recargarMesas };
 }

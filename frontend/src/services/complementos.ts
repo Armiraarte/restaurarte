@@ -33,3 +33,23 @@ export function complementosTicket<T extends { id: number; nombre: string }>(
     ...(sinDescritos.length ? [`Sin ${enLista(sinDescritos.map((c) => c.nombre.toLowerCase()), 'ni')}`] : []),
   ];
 }
+
+/**
+ * Igual que complementosTicket, para categorías donde el queso no va de base (Tacos): no se dice SIN QUESO;
+ * solo se menciona si lo pidieron. «CON TODO» = los demás complementos.
+ *   todo y queso → CON TODO Y QUESO · solo queso → SOLO CON QUESO · quedan pocos → SOLO CON SALSA Y QUESO
+ *   si no → CON QUESO + lo que no quiere (Sin cilantro)
+ */
+export function complementosTicketQuesoOpcional<T extends { id: number; nombre: string }>(ofrecidos: T[], quitados: T[], conQueso: boolean): string[] {
+  const otros = ofrecidos.filter((c) => !esQueso(c));
+  const quitadosOtros = quitados.filter((c) => !esQueso(c));
+  const lineas = complementosTicket(otros, quitadosOtros);
+  if (!conQueso) return lineas;
+  const fuera = new Set(quitadosOtros.map((c) => c.id));
+  const quedan = otros.filter((c) => !fuera.has(c.id));
+  if (otros.length === 0) return ['CON QUESO'];
+  if (quitadosOtros.length === 0) return ['CON TODO Y QUESO'];
+  if (quedan.length === 0) return ['SOLO CON QUESO'];
+  if (quedan.length < quitadosOtros.length) return [`SOLO CON ${enLista([...quedan.map((c) => c.nombre.toUpperCase()), 'QUESO'], 'Y')}`];
+  return ['CON QUESO', ...lineas];
+}

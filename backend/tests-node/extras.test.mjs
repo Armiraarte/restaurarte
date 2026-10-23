@@ -36,10 +36,36 @@ test('extras aparecen en el cobro después de productos y antes del total; tambi
   assert.ok(lineasTicketCobro({...datos,productos:[],total:12.5}).some(l => l.texto === 'Cargo adicional'));
 });
 
-test('el ticket de cocina no imprime extras, aunque una tablet con la versión anterior los mande', () => {
-  const ticket = {orden_cocina:'#7-1',mesa:'Mesa 7',enviada_en:new Date().toISOString(),productos:[{nombre:'Tacos · Frijol',cantidad:2,descripcion:['TODO']}],extras:[{ descripcion: 'Cargo adicional', importe: 12.5 }]};
+test('la comanda de cocina imprime los cobros extra al final, con o sin productos', () => {
+  const extras = [{ descripcion: 'Cargo adicional', importe: 12.5 }];
+  const ticket = {orden_cocina:'#7-1',mesa:'Mesa 7',enviada_en:new Date().toISOString(),productos:[{nombre:'Tacos · Frijol',cantidad:2,descripcion:['CON TODO']}],extras};
   assert.equal(validarTicketCocina(ticket), null);
   const lineas = lineasTicketCocina(ticket);
-  assert.ok(lineas.some(l => l.texto === '2x Tacos · Frijol'));
-  assert.ok(!lineas.some(l => l.texto === 'EXTRAS' || l.texto === 'Cargo adicional'));
+  const producto = lineas.findIndex(l => l.texto === '2 Tacos · Frijol');
+  const titulo = lineas.findIndex(l => l.texto === 'EXTRAS');
+  assert.ok(producto >= 0 && titulo > producto, 'EXTRAS va después de los productos');
+  assert.ok(lineas.some(l => l.texto === 'Cargo adicional' && l.derecha === '$12.50'));
+  // Un envío con solo extras también sale en cocina.
+  const soloExtras = { ...ticket, productos: [] };
+  assert.equal(validarTicketCocina(soloExtras), null);
+  assert.ok(lineasTicketCocina(soloExtras).some(l => l.texto === 'Cargo adicional'));
+  assert.ok(validarTicketCocina({ ...soloExtras, extras: [] }), 'Sin productos ni extras no hay comanda');
+  assert.ok(validarTicketCocina({ ...ticket, extras: [{ descripcion: 'Extra', importe: -1 }] }));
+});
+
+test('un extra agregado dentro de un MIX sale justo debajo de ese MIX; los demás, al final', () => {
+  const producto = (nombre, mix) => ({ nombre, mix_grupo: mix, cantidad: 1, descripcion: [] });
+  const ticket = {
+    orden_cocina: '#7-1', mesa: 'Mesa 7', enviada_en: new Date().toISOString(),
+    productos: [producto('Tostadas · Pierna', 3), producto('Tacos · Pollo', null)],
+    extras: [{ descripcion: 'Queso extra', importe: 10, mix_grupo: 3 }, { descripcion: 'Desechables', importe: 5 }, { descripcion: 'De un MIX sin productos', importe: 2, mix_grupo: 9 }],
+  };
+  assert.equal(validarTicketCocina(ticket), null);
+  const textos = lineasTicketCocina(ticket).map((l) => l.texto).filter(Boolean);
+  const mix = textos.indexOf('MIX');
+  assert.deepEqual(textos.slice(mix, mix + 3), ['MIX', '1 Tostadas · Pierna', '+ Queso extra']);
+  const final = textos.indexOf('EXTRAS');
+  assert.ok(final > textos.indexOf('1 Tacos · Pollo'));
+  assert.deepEqual(textos.slice(final + 1), ['Desechables', 'De un MIX sin productos']);
+  assert.ok(validarTicketCocina({ ...ticket, extras: [{ descripcion: 'X', importe: 1, mix_grupo: 0 }] }));
 });

@@ -15,6 +15,8 @@ interface MesaCroquis {
   ancho: number;
   alto: number;
   larga: boolean;
+  /** Mesa de prueba (solo PC de desarrollo): abajo en el pasillo, con borde punteado. */
+  prueba?: boolean;
 }
 
 // Compacto en vertical (el croquis se ajusta al alto de la pantalla): así las mesas se ven más grandes.
@@ -27,10 +29,13 @@ const MESAS: MesaCroquis[] = [
 ];
 
 /** Órdenes activas que están en una mesa del croquis (número 1 a 9), por número. */
-export function ordenesPorMesa(ordenes: MesaRegistrada[]) {
+/** ¿Esta orden va en una mesa del croquis? (1 a 9, y la de prueba si existe). */
+export const esMesaDelCroquis = (nombre: string, mesaPrueba: string | null = null) => /^[1-9]$/.test(nombre) || nombre === mesaPrueba;
+
+export function ordenesPorMesa(ordenes: MesaRegistrada[], mesaPrueba: string | null = null) {
   const porNumero = new Map<number, MesaRegistrada>();
   for (const o of ordenes) {
-    if (/^[1-9]$/.test(o.nombre) && !porNumero.has(Number(o.nombre))) porNumero.set(Number(o.nombre), o);
+    if (esMesaDelCroquis(o.nombre, mesaPrueba) && !porNumero.has(Number(o.nombre))) porNumero.set(Number(o.nombre), o);
   }
   return porNumero;
 }
@@ -39,7 +44,12 @@ type Lado = 'arriba' | 'abajo' | 'izquierda' | 'derecha';
 /** Sillas alrededor de la mesa (con su respaldo hacia afuera); quedan un poco debajo de la cubierta. */
 function sillas(m: MesaCroquis) {
   const lista: { x: number; y: number; w: number; h: number; lado: Lado }[] = [];
-  if (m.larga) {
+  if (m.prueba) {
+    for (const dx of [45, 125]) {
+      lista.push({ x: m.x + dx - 32, y: m.y - 40, w: 64, h: 46, lado: 'arriba' });
+      lista.push({ x: m.x + dx - 32, y: m.y + m.alto - 6, w: 64, h: 46, lado: 'abajo' });
+    }
+  } else if (m.larga) {
     for (const dx of [80, 200, 320]) {
       lista.push({ x: m.x + dx - 32, y: m.y - 40, w: 64, h: 46, lado: 'arriba' });
       lista.push({ x: m.x + dx - 32, y: m.y + m.alto - 6, w: 64, h: 46, lado: 'abajo' });
@@ -87,14 +97,19 @@ export function CroquisMesas({
   ordenes,
   abriendo,
   onTocar,
+  mesaPrueba = null,
 }: {
   /** Órdenes activas del turno; las de número 1 a 9 se dibujan en su mesa. */
   ordenes: MesaRegistrada[];
+  /** Número de la mesa de prueba (solo PC de desarrollo); null: no se dibuja. */
+  mesaPrueba?: string | null;
   /** Mesa que se está registrando en el servidor (se ignoran otros toques mientras tanto). */
   abriendo: number | null;
   onTocar: (numero: number, orden: MesaRegistrada | undefined) => void;
 }) {
-  const porNumero = ordenesPorMesa(ordenes);
+  const porNumero = ordenesPorMesa(ordenes, mesaPrueba);
+  // La de prueba va abajo, al centro del pasillo.
+  const mesas: MesaCroquis[] = mesaPrueba ? [...MESAS, { numero: Number(mesaPrueba), x: 732, y: 806, ancho: 170, alto: 124, larga: true, prueba: true }] : MESAS;
 
   return (
     <svg viewBox="100 12 1130 958" className="w-full h-full select-none" role="group" aria-label="Croquis de mesas del restaurante">
@@ -106,7 +121,7 @@ export function CroquisMesas({
           </linearGradient>
         ))}
       </defs>
-      {MESAS.map((m) => {
+      {mesas.map((m) => {
         const orden = porNumero.get(m.numero);
         const pidio = orden?.estatus === 1; // PAGANDO: pidió la cuenta
         const estado: Estado = !orden ? 'libre' : pidio ? 'cuenta' : 'abierta';
@@ -118,7 +133,7 @@ export function CroquisMesas({
         // Texto de la pastilla: en las largas cabe la frase; en las angostas, lo esencial.
         const etiqueta = cargando
           ? 'ABRIENDO…'
-          : !orden ? 'LIBRE'
+          : !orden ? (m.prueba ? 'PRUEBA' : 'LIBRE')
           : m.larga
             ? pidio ? `CUENTA · ${monto(total)}` : total > 0 ? `CON PEDIDO · ${monto(total)}` : 'ABIERTA'
             : pidio ? 'CUENTA' : total > 0 ? monto(total) : 'ABIERTA';
@@ -133,7 +148,7 @@ export function CroquisMesas({
             key={m.numero}
             role="button"
             tabIndex={0}
-            aria-label={`Mesa ${m.numero}: ${!orden ? 'libre' : pidio ? `pidió la cuenta, ${monto(total)}` : `abierta, ${monto(total)}`}`}
+            aria-label={`Mesa ${m.numero}${m.prueba ? ' (prueba, solo local)' : ''}: ${!orden ? 'libre' : pidio ? `pidió la cuenta, ${monto(total)}` : `abierta, ${monto(total)}`}`}
             onClick={tocar}
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
@@ -154,7 +169,7 @@ export function CroquisMesas({
             })}
             {/* Sombra suave (sin desenfoque) y cubierta */}
             <rect x={m.x + 5} y={m.y + 9} width={m.ancho} height={m.alto} rx={16} fill="#000" opacity={0.07} />
-            <rect x={m.x} y={m.y} width={m.ancho} height={m.alto} rx={16} fill={`url(#cubierta-${estado})`} stroke={c.borde} strokeWidth={orden ? 4 : 2.5} />
+            <rect x={m.x} y={m.y} width={m.ancho} height={m.alto} rx={16} fill={`url(#cubierta-${estado})`} stroke={c.borde} strokeWidth={orden ? 4 : 2.5} strokeDasharray={m.prueba ? '10 7' : undefined} />
             <rect x={m.x + 7} y={m.y + 7} width={m.ancho - 14} height={m.alto - 14} rx={11} fill="none" stroke="#fff" strokeOpacity={0.7} strokeWidth={2} />
 
             <text x={cx} y={m.larga ? m.y + 62 : m.y + 72} textAnchor="middle" fontSize={m.larga ? 54 : 52} fontWeight={900} fill={c.numero}>

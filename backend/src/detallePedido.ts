@@ -1,6 +1,8 @@
 import type { PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 
 const PRECIO_CARNE_EXTRA = 20;
+/** Complemento EXTRA (doble toque en la pantalla de opciones): cada uno cuesta esto por pieza. */
+export const PRECIO_COMPLEMENTO_EXTRA = 5;
 
 export function terminoPermitido(categoria: string, nombre: string | undefined): boolean {
   return nombre !== undefined && (categoria === 'Tacos' || (categoria === 'Tacos Dorados' && nombre !== 'Dorado'));
@@ -20,6 +22,8 @@ export interface ItemPedido {
   mixGrupo?: number | null;
   /** MEZCLAR (Alitas): cuántas piezas de cada sabor en un solo renglón; suman `cantidad`. */
   reparto?: RepartoPedido[];
+  /** Complementos EXTRA (IDs, de los del producto), cada uno con costo por pieza; no pueden estar también en `sin`. */
+  complementosExtra?: number[];
 }
 
 export interface RepartoPedido {
@@ -54,7 +58,10 @@ export function itemsValidos(items: ItemPedido[]): boolean {
     (i.terminoId == null || (Number.isSafeInteger(i.terminoId) && i.terminoId > 0)) &&
     (i.carneExtra === undefined || (Number.isSafeInteger(i.carneExtra) && i.carneExtra >= 0 && i.carneExtra <= 2)) &&
     (i.mixGrupo == null || (Number.isSafeInteger(i.mixGrupo) && i.mixGrupo > 0 && i.mixGrupo <= 2147483647)) &&
-    (i.reparto === undefined || repartoValido(i.reparto, i.cantidad))
+    (i.reparto === undefined || repartoValido(i.reparto, i.cantidad)) &&
+    (i.complementosExtra === undefined || (Array.isArray(i.complementosExtra) && i.complementosExtra.length <= 20 &&
+      new Set(i.complementosExtra).size === i.complementosExtra.length &&
+      i.complementosExtra.every((id) => Number.isSafeInteger(id) && id > 0 && !i.sin?.includes(id))))
   );
 }
 
@@ -90,11 +97,14 @@ export async function guardarDetallePedido(
     const mix = item.mixGrupo == null ? null : grupos.get(item.mixGrupo)!;
     const p = productos.get(item.idProducto)!;
     const carneExtra = item.carneExtra ?? 0;
-    const subtotal = ((Math.round(Number(p.precio) * 100) + carneExtra * PRECIO_CARNE_EXTRA * 100 + (item.conPapas ? Math.round(papas!.precio * 100) : 0)) * item.cantidad) / 100;
+    const extra = (complementos.get(item.idProducto) ?? []).filter((c) => item.complementosExtra?.includes(c.id));
+    const subtotal = ((Math.round(Number(p.precio) * 100) + carneExtra * PRECIO_CARNE_EXTRA * 100 +
+      extra.length * PRECIO_COMPLEMENTO_EXTRA * 100 + (item.conPapas ? Math.round(papas!.precio * 100) : 0)) * item.cantidad) / 100;
     const opciones = {
       sin: (complementos.get(item.idProducto) ?? []).filter((c) => item.sin?.includes(c.id)),
       mezcla: item.mezcla ?? [],
       ...(item.reparto && { reparto: item.reparto.map((r) => ({ nombre: r.nombre, cantidad: r.cantidad })) }),
+      ...(extra.length && { complementosExtra: extra, precioComplementoExtra: PRECIO_COMPLEMENTO_EXTRA }),
       ...(item.conPapas && { papas }),
     };
     const [resultado] = await conexion.execute<ResultSetHeader>(

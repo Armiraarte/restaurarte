@@ -3,7 +3,8 @@
 #   1. Drivers e impresoras de Windows (Star TSP143 de cocina, Axiohm APOS2101 de caja).
 #   2. El agente de impresión con su propio Node.js en C:\SoftRestaurante, conectado al servidor por internet
 #      (sin túnel ni llaves): SERVIDOR_URL y PRINT_AGENT_TOKEN de config.env.
-#   3. Cocina y caja asignadas, arranque automático al iniciar sesión y revisión de impresoras cada 5 minutos.
+#   3. Cocina y caja asignadas, arranque automático al iniciar sesión (y revisión cada minuto de que siga
+#      corriendo), revisión de impresoras cada 5 minutos e ícono «Reconectar impresoras» en el escritorio.
 #   4. Comprueba que el servidor ya ve las impresoras.
 # Se puede volver a correr cuando sea: reemplaza la instalación anterior y conserva las asignaciones válidas.
 param(
@@ -110,12 +111,27 @@ try {
         if (-not $usuario) { $usuario = "$env:USERDOMAIN\$env:USERNAME" }
         $ajustes = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable `
             -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
+        # Al entrar a Windows y, además, cada minuto: si el programa se cerró por lo que sea, vuelve a abrirse solo
+        # (agente-siempre.ps1 deja correr una sola copia; las demás se cierran al instante).
         Register-ScheduledTask -TaskName $tareaAgente -Force `
             -Action (New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $argumentos) `
-            -Trigger (New-ScheduledTaskTrigger -AtLogOn -User $usuario) `
+            -Trigger @((New-ScheduledTaskTrigger -AtLogOn -User $usuario),
+                (New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1))) `
             -Principal (New-ScheduledTaskPrincipal -UserId $usuario -LogonType Interactive -RunLevel Limited) `
             -Settings $ajustes -Description "SOFT RESTAURANTE: imprime los tickets de $servidor" | Out-Null
-        Bien "El programa de impresión arranca solo al entrar a Windows ($usuario)."
+        Bien "El programa de impresión arranca solo al entrar a Windows ($usuario) y se revisa cada minuto."
+
+        try {
+            # Botón para el personal: reconecta la impresión sin apagar la computadora.
+            $escritorio = [Environment]::GetFolderPath('CommonDesktopDirectory')
+            $acceso = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $escritorio 'Reconectar impresoras.lnk'))
+            $acceso.TargetPath = 'powershell.exe'
+            $acceso.Arguments = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$(Join-Path $Destino 'agente\reconectar.ps1')`""
+            $acceso.IconLocation = "$env:SystemRoot\System32\shell32.dll,16"
+            $acceso.Description = 'SOFT RESTAURANTE: vuelve a conectar las impresoras sin apagar la computadora'
+            $acceso.Save()
+            Bien 'En el escritorio quedó el ícono «Reconectar impresoras».'
+        } catch { Aviso "No se pudo crear el ícono «Reconectar impresoras»: $($_.Exception.Message)" }
 
         try {
             $revisar = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$(Join-Path $Destino 'impresoras\impresoras-windows.ps1')`" -Silencioso"
@@ -134,7 +150,10 @@ try {
             # Conectada a la corriente, la computadora no se suspende (suspendida no imprime).
             & powercfg.exe /change standby-timeout-ac 0 | Out-Null
             & powercfg.exe /change hibernate-timeout-ac 0 | Out-Null
-            Bien 'Conectada a la corriente, la computadora ya no se suspende.'
+            # Ni al cerrar la tapa (0 = no hacer nada), siempre que esté conectada a la corriente.
+            & powercfg.exe /setacvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 0 | Out-Null
+            & powercfg.exe /setactive SCHEME_CURRENT | Out-Null
+            Bien 'Conectada a la corriente, la computadora ya no se suspende (ni con la tapa cerrada).'
         } catch { Aviso 'No se pudo cambiar la suspensión de la computadora.' }
     }
 

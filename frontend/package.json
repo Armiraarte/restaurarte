@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "test:pedidos": "node --test tests/pedidoMix.test.mjs"
+    "test:pedidos": "node --test tests/pedidoMix.test.mjs",
+    "test:monitor": "node --test tests/monitorImpresion.test.mjs"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",

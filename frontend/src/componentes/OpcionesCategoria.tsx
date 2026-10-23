@@ -8,12 +8,15 @@
 //   4. Carne      → solo Hamburguesas: DOBLE CARNE / TRIPLE CARNE, +$20 por carne extra
 //                   (BD: orden_has_detalle.carne_extra)
 //   Cantidad y "Agregar a la orden".
-//   MEZCLAR (Alitas, botón junto a VOLVER): piezas por sabor ("4 BBQ + 6 Buffalo") en un solo renglón.
-import React, { useEffect, useState } from 'react';
+//   MIXTAS (Alitas, botón junto a VOLVER): piezas por sabor ("4 BBQ + 6 Buffalo") en un solo renglón.
+import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Check, Minus, Plus } from 'lucide-react';
 import {
   CATEGORIA_CARNE_EXTRA,
+  PRECIO_COMPLEMENTO_EXTRA,
+  textoComplementosExtra,
   CATEGORIAS_CON_QUESO,
+  CATEGORIAS_QUESO_OPCIONAL,
   CATEGORIAS_REPARTO,
   CategoriaMenu,
   ComplementoMenu,
@@ -54,7 +57,10 @@ const BOTON_UNA = {
 const BOTON_COMPLEMENTO = {
   on: 'bg-emerald-100 border-emerald-500 text-emerald-900',
   off: 'bg-white border-emerald-200 text-neutral-500 line-through decoration-2 hover:bg-emerald-50',
+  extra: 'bg-amber-200 border-amber-600 text-amber-950 shadow-sm',
 };
+/** Dos toques al mismo complemento dentro de este tiempo = EXTRA. */
+const DOBLE_TOQUE_MS = 350;
 
 interface Props {
   categoria: CategoriaMenu;
@@ -66,9 +72,9 @@ interface Props {
    * extras.sinQueso: Quesadillas. extras.conQueso: Tacos. extras.carneExtra: Hamburguesas, 1 doble y 2 triple.
    */
   onAgregar: (producto: ProductoMenu, cantidad: number, sin: ComplementoMenu[], mezcla: string[], extras: ExtrasLinea) => void;
-  /** MEZCLAR activo (solo CATEGORIAS_REPARTO): cada sabor suma piezas y todo va en un renglón. */
+  /** MIXTAS activo (solo CATEGORIAS_REPARTO): cada sabor suma piezas y todo va en un renglón. */
   mezclar?: boolean;
-  /** Se agregó la mezcla: quien muestra el botón MEZCLAR lo apaga. */
+  /** Se agregó la mezcla: quien muestra el botón MIXTAS lo apaga. */
   onMezclaAgregada?: () => void;
 }
 
@@ -80,8 +86,10 @@ export interface ExtrasLinea {
   papas?: PapasMenu | null;
   /** Complementos que tenía el platillo (de todos los de la mezcla), para resumirlos en el ticket de cocina. */
   ofrecidos?: ComplementoMenu[];
-  /** MEZCLAR: piezas de cada sabor; suman la cantidad del renglón. */
+  /** MIXTAS: piezas de cada sabor; suman la cantidad del renglón. */
   reparto?: RepartoPedido[];
+  /** Complementos EXTRA (doble toque), con costo por pieza. */
+  complementosExtra?: ComplementoMenu[];
 }
 
 export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta, onVolver, onAgregar, mezclar = false, onMezclaAgregada }) => {
@@ -89,7 +97,7 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
   const esHamburguesa = categoria.nombre === 'Hamburguesas';
   const nombresCatalogo = [...new Set(categoria.productos.map((p) => p.nombre))];
   const nombres = esEnsalada ? [...nombresCatalogo.filter((n) => n !== 'Sin carne'), ...nombresCatalogo.filter((n) => n === 'Sin carne')] : nombresCatalogo;
-  // Con MEZCLAR (Alitas) las piezas de cada sabor se cuentan ahí; fuera de MEZCLAR se elige un solo sabor.
+  // Con MIXTAS (Alitas) las piezas de cada sabor se cuentan ahí; fuera de MIXTAS se elige un solo sabor.
   const conReparto = CATEGORIAS_REPARTO.includes(categoria.nombre);
   const mezclando = conReparto && mezclar && nombres.length > 1;
   // Mezclar solo tiene sentido si ningún producto se vende por tamaño (Ensaladas, Papas…).
@@ -98,15 +106,18 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
   const [elegidos, setElegidos] = useState<string[]>(nombres.length === 1 ? [nombres[0]] : []);
   const nombre = elegidos[0] ?? null;
   const [tamano, setTamano] = useState<string | null>(esEnsalada ? 'Chica' : null);
-  // Todos los complementos empiezan marcados (queso incluido); solo se desmarca lo que no quieren.
+  // Todos los complementos empiezan marcados (en tacos, menos el queso); solo se desmarca lo que no quieren.
   const [quitados, setQuitados] = useState<number[]>([]);
   const [conPapas, setConPapas] = useState(false);
   const [termino, setTermino] = useState<TerminoMenu | null>(null);
   // Hamburguesas: cada toque suma una carne (DOBLE, luego TRIPLE) y el siguiente la quita.
   const [carneExtra, setCarneExtra] = useState(0);
+  // Complementos marcados EXTRA con doble toque (cuestan PRECIO_COMPLEMENTO_EXTRA por pieza).
+  const [extras, setExtras] = useState<number[]>([]);
+  const ultimoToque = useRef<{ id: number; hora: number; eraExtra: boolean } | null>(null);
   const [cantidad, setCantidad] = useState(1);
   const [agregado, setAgregado] = useState<string | null>(null);
-  // MEZCLAR: piezas por sabor.
+  // MIXTAS: piezas por sabor.
   const [piezas, setPiezas] = useState<Record<string, number>>({});
   const reparto: RepartoPedido[] = nombres.filter((n) => (piezas[n] ?? 0) > 0).map((n) => ({ nombre: n, cantidad: piezas[n] }));
   const totalPiezas = reparto.reduce((acc, r) => acc + r.cantidad, 0);
@@ -117,7 +128,7 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
   const sumarPieza = (n: string, delta: number) =>
     setPiezas((actual) => ({ ...actual, [n]: Math.max(0, (actual[n] ?? 0) + delta) }));
 
-  // Al entrar o salir de MEZCLAR se empieza de cero.
+  // Al entrar o salir de MIXTAS se empieza de cero.
   useEffect(() => {
     setPiezas({});
     setElegidos(nombres.length === 1 ? [nombres[0]] : []);
@@ -140,6 +151,9 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
     ).values(),
   ].filter((c) => !elegidos.includes('Queso') || !esQueso(c)));
   const textoElegidos = elegidos.join(' con ');
+  // Tacos: el queso no va de base; inicia apagado y se agrega al tocarlo (en cocina sale CON QUESO).
+  const quesoOpcional = CATEGORIAS_QUESO_OPCIONAL.includes(categoria.nombre);
+  const quitadosBase = (lista: ComplementoMenu[]) => (quesoOpcional ? lista.filter(esQueso).map((c) => c.id) : []);
   // La de queso ya es queso: ahí no aplica.
   const puedeConQueso = CATEGORIAS_CON_QUESO.includes(categoria.nombre) && !!nombre && !elegidos.includes('Queso');
   const puedeCarneExtra = categoria.nombre === CATEGORIA_CARNE_EXTRA && !!nombre;
@@ -147,20 +161,24 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
   const puedePapas = ['Hamburguesas', 'Lonches'].includes(categoria.nombre) && !!nombre;
   const papas = puedePapas && conPapas ? categoria.papas ?? null : null;
   // Precio de una pieza con sus carnes extra.
-  const precioPieza = (producto?.precio ?? 0) + carnesExtra * PRECIO_CARNE_EXTRA + (papas?.precio ?? 0);
+  // EXTRA solo cuenta si el complemento sigue en la lista y está incluido.
+  const extrasElegidos = complementos.filter((c) => extras.includes(c.id) && !quitados.includes(c.id));
+  const precioPieza =
+    (producto?.precio ?? 0) + carnesExtra * PRECIO_CARNE_EXTRA + (papas?.precio ?? 0) + extrasElegidos.length * PRECIO_COMPLEMENTO_EXTRA;
 
   const tocarNombre = (n: string) => {
     if (!permiteMezcla) return setElegidos([n]);
     setElegidos((lista) => (lista.includes(n) ? lista.filter((x) => x !== n) : [...lista, n]));
   };
 
-  // Al cambiar de producto se reinician tamaño y complementos (todos incluidos).
+  // Al cambiar de producto se reinician tamaño y complementos (todos incluidos; en tacos, sin queso).
   useEffect(() => {
     setTamano(esEnsalada ? 'Chica' : null);
-    setQuitados([]);
+    setQuitados(quitadosBase(complementos));
     setConPapas(false);
     setTermino(null);
     setCarneExtra(0);
+    setExtras([]);
   }, [elegidos.join('|')]);
 
   useEffect(() => {
@@ -178,7 +196,23 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
 
   const alternarComplemento = (id: number) =>
     setQuitados((q) => (q.includes(id) ? q.filter((x) => x !== id) : [...q, id]));
-  const todosIncluidos = quitados.length === 0;
+  // Un toque: incluir o quitar (si estaba EXTRA, vuelve a normal). Doble toque: EXTRA (otro doble toque lo quita).
+  const tocarComplemento = (id: number) => {
+    const ahora = Date.now();
+    const previo = ultimoToque.current;
+    if (previo && previo.id === id && ahora - previo.hora < DOBLE_TOQUE_MS) {
+      ultimoToque.current = null;
+      setQuitados((q) => q.filter((x) => x !== id));
+      setExtras((lista) => (previo.eraExtra ? lista.filter((x) => x !== id) : lista.includes(id) ? lista : [...lista, id]));
+      return;
+    }
+    const eraExtra = extras.includes(id) && !quitados.includes(id);
+    ultimoToque.current = { id, hora: ahora, eraExtra };
+    if (eraExtra) setExtras((lista) => lista.filter((x) => x !== id));
+    else alternarComplemento(id);
+  };
+  // «Con todo» es lo de la casa: en tacos, todo menos el queso.
+  const todosIncluidos = complementos.every((c) => !quitados.includes(c.id) || (quesoOpcional && esQueso(c)));
 
   const agregar = () => {
     if (mezclando) {
@@ -191,7 +225,7 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
         carneExtra: 0,
         ...(varios && { reparto }),
       });
-      setAgregado(`${totalPiezas} × ${varios ? textoReparto(reparto) : productoMezcla.nombre}`);
+      setAgregado(`${totalPiezas} ${varios ? textoReparto(reparto) : productoMezcla.nombre}`);
       setPiezas({});
       onMezclaAgregada?.();
       return;
@@ -199,19 +233,31 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
     if (!producto) return;
     const sin = complementos.filter((c) => quitados.includes(c.id));
     const quesoIncluido = complementos.some((c) => esQueso(c) && !quitados.includes(c.id));
-    const quesoFuera = puedeConQueso && !quesoIncluido;
-    onAgregar(producto, cantidad, sin, elegidos.length > 1 ? elegidos : [], { sinQueso: quesoFuera, conQueso: puedeConQueso && quesoIncluido, carneExtra: carnesExtra, termino, papas, ofrecidos: complementos });
+    // En tacos no se dice SIN QUESO: no lleva de base.
+    const quesoFuera = puedeConQueso && !quesoIncluido && !quesoOpcional;
+    onAgregar(producto, cantidad, sin, elegidos.length > 1 ? elegidos : [], {
+      sinQueso: quesoFuera,
+      conQueso: puedeConQueso && quesoIncluido,
+      carneExtra: carnesExtra,
+      termino,
+      papas,
+      ofrecidos: complementos,
+      ...(extrasElegidos.length && { complementosExtra: extrasElegidos }),
+    });
     setAgregado(
-      `${cantidad} × ${elegidos.length > 1 ? textoElegidos : producto.nombre}${producto.tamano ? ` (${producto.tamano})` : ''}${
-        quesoFuera ? ' · SIN QUESO' : ''
-      }${carnesExtra ? ` · ${textoCarneExtra(carnesExtra)}` : ''}${papas ? ' · CON PAPAS' : ''}${termino ? ` · ${termino.nombre}` : ''}`
+      `${cantidad} ${elegidos.length > 1 ? textoElegidos : producto.nombre}${producto.tamano ? ` (${producto.tamano})` : ''}${
+        quesoFuera ? ' · SIN QUESO' : quesoOpcional && quesoIncluido ? ' · CON QUESO' : ''
+      }${carnesExtra ? ` · ${textoCarneExtra(carnesExtra)}` : ''}${papas ? ' · CON PAPAS' : ''}${termino ? ` · ${termino.nombre}` : ''}${
+        extrasElegidos.length ? ` · ${textoComplementosExtra(extrasElegidos.map((c) => c.nombre))}` : ''
+      }`
     );
     setElegidos(nombres.length === 1 ? [nombres[0]] : []);
     setTamano(esEnsalada ? 'Chica' : null);
-    setQuitados([]);
+    setQuitados(quitadosBase(complementos));
     setConPapas(false);
     setTermino(null);
     setCarneExtra(0);
+    setExtras([]);
     setCantidad(1);
   };
 
@@ -250,7 +296,7 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
       </div>
 
       <div data-opciones-scroll={categoria.nombre} className={pantallaCompleta ? `flex-1 min-h-0 flex flex-col ${esHamburguesa ? 'gap-1' : 'gap-2'} overflow-y-auto overscroll-contain` : 'space-y-5'}>
-        {/* MEZCLAR: cada toque suma una pieza de ese sabor; «−» quita una */}
+        {/* MIXTAS: cada toque suma una pieza de ese sabor; «−» quita una */}
         {mezclando && (
           <div {...grupo(nombres.length)}>
             <div className="shrink-0 text-sm font-semibold text-neutral-700">
@@ -295,7 +341,7 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
             <div className="shrink-0 text-sm font-semibold text-neutral-700">
               {++paso}. {etiquetaEleccion}{' '}
               <span className="font-normal text-neutral-500">
-                {permiteMezcla ? '· elige una o toca varias para mezclar' : conReparto ? '· elige una o toca MEZCLAR para varios' : '· elige una'}
+                {permiteMezcla ? '· elige una o toca varias para mezclar' : conReparto ? '· elige una o toca MIXTAS para varios' : '· elige una'}
               </span>
               {elegidos.length > 1 && <span className="ml-2 font-semibold text-orange-800">→ {textoElegidos}</span>}
             </div>
@@ -373,10 +419,16 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
           <div {...grupo(complementos.length)}>
             <div className="shrink-0 flex items-center justify-between gap-2">
               <div className="text-sm font-semibold text-neutral-700">
-                {++paso}. Complementos <span className="font-normal text-neutral-500">· toca para incluir o quitar</span>
+                {++paso}. Complementos{' '}
+                <span className="font-normal text-neutral-500">
+                  · toca para incluir o quitar · <b className="font-semibold text-amber-700">doble toque: EXTRA +{dinero(PRECIO_COMPLEMENTO_EXTRA)}</b>
+                </span>
               </div>
               <button
-                onClick={() => setQuitados(todosIncluidos ? complementos.map((c) => c.id) : [])}
+                onClick={() => {
+                  setQuitados(todosIncluidos ? complementos.map((c) => c.id) : quitadosBase(complementos));
+                  setExtras([]);
+                }}
                 className="h-8 px-3 text-xs shrink-0 whitespace-nowrap rounded-full border-2 border-emerald-200 bg-white font-semibold text-emerald-800 hover:bg-emerald-50 cursor-pointer"
               >
                 {todosIncluidos ? 'Quitar todo' : 'Con todo'}
@@ -385,17 +437,22 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
             <div data-complementos className={rejillaComplementos}>
               {complementos.map((c) => {
                 const incluido = !quitados.includes(c.id);
+                const extra = incluido && extras.includes(c.id);
                 return (
                   <button
                     key={c.id}
-                    onClick={() => alternarComplemento(c.id)}
+                    onClick={() => tocarComplemento(c.id)}
                     aria-pressed={incluido}
-                    className={`${boton} px-2 border-2 font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
-                      incluido ? BOTON_COMPLEMENTO.on : BOTON_COMPLEMENTO.off
+                    aria-label={`${c.nombre}: ${extra ? 'extra' : incluido ? 'incluido' : 'sin'}`}
+                    className={`${boton} px-2 border-2 font-semibold flex flex-col items-center justify-center transition-colors cursor-pointer touch-manipulation select-none ${
+                      extra ? BOTON_COMPLEMENTO.extra : incluido ? BOTON_COMPLEMENTO.on : BOTON_COMPLEMENTO.off
                     }`}
                   >
-                    {incluido && <Check className="w-4 h-4" />}
-                    {c.nombre}
+                    <span className="flex items-center gap-1.5">
+                      {incluido && <Check className="w-4 h-4" />}
+                      {c.nombre}
+                    </span>
+                    {extra && <span className="text-[11px] font-black tracking-wide leading-none">EXTRA +{dinero(PRECIO_COMPLEMENTO_EXTRA)}</span>}
                   </button>
                 );
               })}
@@ -440,9 +497,10 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
             </div>
           </div>
         )}
+
       </div>
 
-      {/* Cantidad (en MEZCLAR, el total de piezas de todos los sabores) */}
+      {/* Cantidad (en MIXTAS, el total de piezas de todos los sabores) */}
       {mezclando ? (
         <div className="shrink-0 flex items-center justify-between gap-4 rounded-2xl border border-neutral-200 px-3 py-2 min-h-[4.5rem]">
           <div className="text-base font-semibold text-neutral-700">Total de piezas</div>
@@ -479,7 +537,7 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
         <Plus className="w-5 h-5" />
         {faltante ??
           (mezclando
-            ? `Agregar mezcla · ${totalPiezas} pzas · ${dinero((productoMezcla?.precio ?? 0) * totalPiezas)}`
+            ? `Agregar mixtas · ${totalPiezas} pzas · ${dinero((productoMezcla?.precio ?? 0) * totalPiezas)}`
             : `Agregar a la orden · ${dinero(precioPieza * cantidad)}`)}
       </button>
 

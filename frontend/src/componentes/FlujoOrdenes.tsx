@@ -9,7 +9,7 @@ import { useMesasTurno } from '../services/sincronizacion';
 import { SelectorTipoOrden } from './AppTabletCuenta';
 import { PedidoOrden } from './PedidoOrden';
 import { LimiteDeErrores } from './AlertasErrores';
-import { CroquisMesas, ordenesPorMesa } from './CroquisMesas';
+import { CroquisMesas, esMesaDelCroquis, ordenesPorMesa } from './CroquisMesas';
 
 export function FlujoOrdenes({ origen, cabecera, acciones }: {
   /** Identifica quién toma el pedido en los tickets; no cambia su flujo. */
@@ -28,7 +28,7 @@ export function FlujoOrdenes({ origen, cabecera, acciones }: {
   const [errorAlta, setErrorAlta] = useState<string | null>(null);
 
   // La caja y la tablet comparten la lista y su actualización en vivo.
-  const { mesas: mesasTurno, error: errorMesas, recargar: cargarMesas } = useMesasTurno();
+  const { mesas: mesasTurno, error: errorMesas, mesaPrueba, recargar: cargarMesas } = useMesasTurno();
   const mesas = mesasTurno === null ? null : mesasTurno.filter(esOrdenActiva);
 
   // Croquis: mesa ocupada → su orden; libre → se registra con ese número (en el turno abierto) y se abre.
@@ -131,6 +131,7 @@ export function FlujoOrdenes({ origen, cabecera, acciones }: {
               piezasLlamada={piezasSinEnviar(BORRADOR_LLAMADA)}
               onAbrirLlamada={abrirLlamada}
               onNombre={() => setPidiendoNombre(true)}
+              mesaPrueba={mesaPrueba}
             />
           )}
         </LimiteDeErrores>
@@ -161,6 +162,7 @@ function VistaMesas({
   piezasLlamada,
   onAbrirLlamada,
   onNombre,
+  mesaPrueba,
 }: {
   mesas: MesaRegistrada[] | null;
   error: string | null;
@@ -171,8 +173,11 @@ function VistaMesas({
   piezasLlamada: number;
   onAbrirLlamada: () => void;
   onNombre: () => void;
+  /** Mesa de prueba del croquis (solo PC de desarrollo); null en producción. */
+  mesaPrueba: string | null;
 }) {
-  const otras = (mesas ?? []).filter((m) => !/^[1-9]$/.test(m.nombre));
+  const otras = (mesas ?? []).filter((m) => !esMesaDelCroquis(m.nombre, mesaPrueba));
+  // El conteo del salón es de las 9 mesas reales (la de prueba no cuenta).
   const enMesas = [...ordenesPorMesa(mesas ?? []).values()];
   const ocupadas = enMesas.length;
   const enCuenta = enMesas.filter((m) => m.estatus === 1).length;
@@ -207,7 +212,7 @@ function VistaMesas({
             {mesas === null ? (
               !error && <Loader2 className="w-6 h-6 animate-spin text-neutral-400" />
             ) : (
-              <CroquisMesas ordenes={mesas} abriendo={abriendoMesa} onTocar={onTocarMesa} />
+              <CroquisMesas ordenes={mesas} abriendo={abriendoMesa} onTocar={onTocarMesa} mesaPrueba={mesaPrueba} />
             )}
           </div>
         </div>

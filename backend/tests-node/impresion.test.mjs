@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { once } from 'node:events';
 import test from 'node:test';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 test('envía cobros a caja y pedidos a cocina sin cambiar el contenido del ticket', async (t) => {
   const recibidos = [];
@@ -19,6 +22,7 @@ test('envía cobros a caja y pedidos a cocina sin cambiar el contenido del ticke
   t.after(() => new Promise((resolve) => agente.close(resolve)));
   process.env.PRINT_AGENT_URL = `http://127.0.0.1:${agente.address().port}`;
   process.env.JWT_SECRET = 'prueba-local-impresoras-clave-de-32-caracteres';
+  process.env.DATA_DIR = await mkdtemp(path.join(tmpdir(), 'monitor-')); // el monitor no escribe en data/ real
   const { imprimirLineas } = await import('../src/impresion.ts');
   const lineas = [{ texto: 'Quesadilla con piña y café', derecha: '$80.00' }];
   await imprimirLineas(lineas);

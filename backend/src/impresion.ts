@@ -5,7 +5,8 @@ import { config } from './config.js';
 import { requireAuth } from './auth.js';
 import { lineasTicketCocina, validarTicketCocina, type TicketCocina } from './ticketCocina.js';
 import { encabezadoRestaurante } from './ticketMarca.js';
-import { agenteRemoto, pedirAlAgenteRemoto } from './agenteRemoto.js';
+import { agenteDesconectado, agenteRemoto, pedirAlAgenteRemoto } from './agenteRemoto.js';
+import { anotarEvento } from './monitorImpresion.js';
 
 // La impresora está conectada por USB a la PC de Windows; el backend (en Docker) no la ve,
 // así que reenvía todo al agente de impresión que corre en esa PC (carpeta print-agent/).
@@ -42,22 +43,44 @@ async function llamarAgente(ruta: string, init?: RequestInit) {
       signal: AbortSignal.timeout(35_000),
     });
   } catch {
-    throw Object.assign(
-      new Error('No se pudo conectar con el agente de impresión. ¿Está corriendo en la PC de la impresora?'),
-      { status: 503 },
-    );
+    throw Object.assign(new Error(mensajeSinAgente()), { status: 503 });
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw Object.assign(new Error(data.error || 'Error del agente de impresión.'), { status: res.status });
   return data;
 }
 
+/**
+ * Sin computadora de impresoras: dice cuál se desconectó y desde qué hora, y qué hacer (ícono «Reconectar impresoras»
+ * que deja el instalador en su escritorio). Si nunca se conectó ninguna, el aviso de antes (túnel desde la PC).
+ */
+function mensajeSinAgente(): string {
+  const ultima = agenteDesconectado();
+  if (!ultima) return 'No se pudo conectar con el agente de impresión. ¿Está corriendo en la PC de la impresora?';
+  const fecha = new Date(ultima.hora);
+  const zona = { timeZone: 'America/Mexico_City' } as const;
+  const hoy = fecha.toLocaleDateString('es-MX', zona) === new Date().toLocaleDateString('es-MX', zona);
+  const hora = fecha.toLocaleTimeString('es-MX', { ...zona, hour: 'numeric', minute: '2-digit' });
+  const cuando = hoy ? `las ${hora}` : `el ${fecha.toLocaleDateString('es-MX', { ...zona, day: 'numeric', month: 'long' })} a las ${hora}`;
+  return `La computadora de las impresoras («${ultima.equipo}») está desconectada desde ${cuando}. ` +
+    'Revisa que esté encendida y sin suspender, y toca «Reconectar impresoras» en su escritorio.';
+}
+
 /** Manda líneas ya armadas a la impresora (por el agente de impresión). */
 export type DestinoImpresion = 'cocina' | 'caja';
 const esDestino = (destino: unknown): destino is DestinoImpresion => destino === 'cocina' || destino === 'caja';
 
-export function imprimirLineas(lineas: LineaTicket[], destino: DestinoImpresion = 'caja') {
-  return llamarAgente('/imprimir', { method: 'POST', body: JSON.stringify({ lineas, destino }) });
+export async function imprimirLineas(lineas: LineaTicket[], destino: DestinoImpresion = 'caja') {
+  const inicio = Date.now();
+  // Monitor de impresión: cada ticket queda anotado con su resultado y lo que tardó.
+  try {
+    const data = await llamarAgente('/imprimir', { method: 'POST', body: JSON.stringify({ lineas, destino }) });
+    anotarEvento({ tipo: 'impresion', destino, ms: Date.now() - inicio, equipo: agenteRemoto()?.equipo ?? null, detalle: data?.impresora });
+    return data;
+  } catch (err) {
+    anotarEvento({ tipo: 'falla', destino, ms: Date.now() - inicio, equipo: agenteRemoto()?.equipo ?? null, detalle: (err as Error).message });
+    throw err;
+  }
 }
 
 function ticketDePrueba(usuario: string, destino: DestinoImpresion): LineaTicket[] {
@@ -110,6 +133,26 @@ impresionRouter.get('/estado', async (_req, res) => {
   }
 });
 
+/**
+ * «Sincronizar» (Configuración > Impresoras): la computadora de las impresoras vuelve a buscarlas en Windows y
+ * reinicia limpio su impresión de cocina y caja. Si está desconectada, el mensaje dice cuál es y qué hacer.
+ * Un agente instalado antes de este botón no conoce /sincronizar: a ese solo se le pide la lista de nuevo.
+ */
+impresionRouter.post('/sincronizar', async (_req, res) => {
+  try {
+    let datos;
+    try {
+      datos = await llamarAgente('/sincronizar', { method: 'POST', body: '{}' });
+    } catch (err: any) {
+      if (err.status !== 404) throw err;
+      datos = await llamarAgente('/impresoras');
+    }
+    res.json({ agente: true, equipo: agenteRemoto()?.equipo ?? null, ...datos });
+  } catch (err: any) {
+    res.status(err.status === 503 ? 200 : err.status || 500).json({ agente: false, error: err.message });
+  }
+});
+
 impresionRouter.put('/asignacion', async (req, res) => {
   if (!['admin', 'cajero'].includes(req.usuario!.rol)) {
     res.status(403).json({ error: 'Solo administración o caja pueden asignar impresoras.' });
@@ -134,11 +177,6 @@ impresionRouter.post('/cocina', async (req, res) => {
   const error = validarTicketCocina(ticket);
   if (error) {
     res.status(400).json({ error });
-    return;
-  }
-  // Un envío que solo trae extras (cobros libres) no tiene nada que preparar: no se gasta papel en cocina.
-  if ((ticket as TicketCocina).productos.length === 0) {
-    res.json({ omitido: true });
     return;
   }
   try {

@@ -12,6 +12,7 @@
 import crypto from 'node:crypto';
 import { Router, type Request, type Response } from 'express';
 import { config } from './config.js';
+import { anotarEvento } from './monitorImpresion.js';
 
 interface Pendiente {
   resolve: (r: { status: number; data: unknown }) => void;
@@ -21,6 +22,11 @@ interface Pendiente {
 
 let agente: { res: Response; equipo: string; desde: number; pendientes: Set<string> } | null = null;
 const pendientes = new Map<string, Pendiente>();
+/** La última computadora que se desconectó y cuándo: para decir en el panel cuál revisar y desde qué hora. */
+let ultimaDesconexion: { equipo: string; hora: number } | null = null;
+
+/** Computadora de las impresoras que está desconectada (y desde cuándo), o null si hay una conectada o nunca hubo. */
+export const agenteDesconectado = () => (agente ? null : ultimaDesconexion);
 
 function tokenValido(req: Request): boolean {
   const esperado = config.printAgent.token;
@@ -74,11 +80,14 @@ agenteRemotoRouter.get('/conexion', (req, res) => {
   // Latido para que nginx y la red no cierren la conexión por inactividad.
   const latido = setInterval(() => res.write(': latido\n\n'), 20_000);
   console.log(`[agente-remoto] Conectado: ${equipo}`);
+  anotarEvento({ tipo: 'conectado', equipo, hora: conexion.desde });
   req.on('close', () => {
     clearInterval(latido);
     if (agente === conexion) {
       agente = null;
+      ultimaDesconexion = { equipo, hora: Date.now() };
       console.log(`[agente-remoto] Desconectado: ${equipo}`);
+      anotarEvento({ tipo: 'desconectado', equipo });
     }
     // Lo que esperaba respuesta de este agente ya no la va a tener.
     for (const id of conexion.pendientes) {

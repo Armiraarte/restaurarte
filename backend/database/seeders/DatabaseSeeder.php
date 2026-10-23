@@ -29,6 +29,8 @@ class DatabaseSeeder extends Seeder
                 QuesoComplementoSeeder::class,
                 EnchiladaQuesoSeeder::class,
                 TostadasJitomateSeeder::class,
+                CafeSeeder::class,
+                LoncheMixtoSeeder::class,
             ]);
         });
     }

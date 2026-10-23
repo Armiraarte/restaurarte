@@ -78,7 +78,7 @@ export interface DetalleOrdenBD {
   mix_grupo: number | null;
   termino_id: number | null;
   termino: string | null;
-  opciones: { sin: ComplementoMenu[]; mezcla: string[]; reparto?: RepartoPedido[]; papas?: PapasMenu } | null;
+  opciones: { sin: ComplementoMenu[]; mezcla: string[]; reparto?: RepartoPedido[]; papas?: PapasMenu; complementosExtra?: ComplementoMenu[] } | null;
   subtotal: number;
   creado_en: string;
 }
@@ -103,6 +103,12 @@ async function pedir<T>(ruta: string, init: RequestInit = {}): Promise<T> {
  */
 export const CATEGORIAS_SIN_QUESO = ['Tacos', 'Sopes', 'Quesadillas', 'Hamburguesas', 'Lonches'];
 export const CATEGORIAS_CON_QUESO = ['Tacos', 'Sopes', 'Quesadillas', 'Hamburguesas', 'Lonches'];
+/** Categorías donde el queso no va de base: inicia apagado y en cocina solo se dice si lo piden (CON QUESO). */
+export const CATEGORIAS_QUESO_OPCIONAL = ['Tacos'];
+
+/** Papas a la Francesa: en los tickets solo «Orden de papas» o «Media orden de papas». */
+export const CATEGORIA_PAPAS = 'Papas a la Francesa';
+export const nombrePapas = (tamano: string | null) => (tamano === 'Media orden' ? 'Media orden de papas' : 'Orden de papas');
 
 /**
  * Hamburguesas: DOBLE CARNE (1 extra) o TRIPLE CARNE (2 extra); cada carne extra cuesta PRECIO_CARNE_EXTRA
@@ -110,6 +116,10 @@ export const CATEGORIAS_CON_QUESO = ['Tacos', 'Sopes', 'Quesadillas', 'Hamburgue
  */
 export const CATEGORIA_CARNE_EXTRA = 'Hamburguesas';
 export const PRECIO_CARNE_EXTRA = 20;
+/** Complemento EXTRA (doble toque en las opciones): cuesta esto por pieza; el servidor lo cobra igual. */
+export const PRECIO_COMPLEMENTO_EXTRA = 5;
+/** «EXTRA CREMA Y QUESO». */
+export const textoComplementosExtra = (nombres: string[]) => `EXTRA ${nombres.join(' Y ').toUpperCase()}`;
 export const MAX_CARNE_EXTRA = 2;
 export const textoCarneExtra = (n: number | undefined) => (n === 1 ? 'DOBLE CARNE' : n === 2 ? 'TRIPLE CARNE' : '');
 
@@ -126,7 +136,7 @@ export const obtenerOrden = (idOrden: number) => pedir<{ orden: OrdenBD; detalle
 /** Manda productos a cocina: guarda el detalle (orden_has_detalle) y recalcula el total. */
 export const enviarPedido = (
   idOrden: number,
-  items: { idProducto: number; cantidad: number; sin?: number[]; mezcla?: string[]; reparto?: RepartoPedido[]; sinQueso?: boolean; conQueso?: boolean; carneExtra?: number; mixGrupo?: number | null; terminoId?: number | null; conPapas?: boolean }[],
+  items: { idProducto: number; cantidad: number; sin?: number[]; mezcla?: string[]; reparto?: RepartoPedido[]; complementosExtra?: number[]; sinQueso?: boolean; conQueso?: boolean; carneExtra?: number; mixGrupo?: number | null; terminoId?: number | null; conPapas?: boolean }[],
   extras: ExtraPedido[] = [],
 ) =>
   pedir<{ orden: OrdenBD; detalle: DetalleOrdenBD[]; extras: ExtraOrdenBD[]; extrasGuardados: ExtraOrdenBD[]; guardados: { idDetalle_Orden: number; mix_grupo: number | null }[] }>(`/ordenes/${idOrden}/pedido`, { method: 'POST', body: JSON.stringify({ items, extras }) });

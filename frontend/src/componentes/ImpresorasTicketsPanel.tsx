@@ -7,6 +7,7 @@ import {
   EstadoImpresion,
   imprimirPrueba,
   obtenerEstadoImpresion,
+  sincronizarImpresoras,
 } from '../services/impresionService';
 
 const INTERVALO_REVISION_MS = 30_000;
@@ -28,13 +29,19 @@ export const ImpresorasTicketsPanel: React.FC = () => {
   const [ultimaRevision, setUltimaRevision] = useState<string | null>(null);
   const [verInstalador, setVerInstalador] = useState(false);
 
-  const revisar = useCallback(async () => {
+  // Cada 30 s solo se consulta el estado; el botón azul además sincroniza (la computadora de las impresoras las
+  // vuelve a buscar y reinicia limpia su impresión).
+  const revisar = useCallback(async (sincronizar = false) => {
     if (guardandoRef.current) return;
     const actual = ++revision.current;
     setRevisando(true);
+    if (sincronizar) setAviso(null);
     try {
-      const nuevo = await obtenerEstadoImpresion();
-      if (actual === revision.current) setEstado(nuevo);
+      const nuevo = await (sincronizar ? sincronizarImpresoras() : obtenerEstadoImpresion());
+      if (actual === revision.current) {
+        setEstado(nuevo);
+        if (sincronizar && nuevo.agente) setAviso({ tipo: 'ok', texto: 'Impresoras sincronizadas: se volvieron a buscar y la impresión se reinició.' });
+      }
     } catch (err) {
       if (actual === revision.current) setEstado({ agente: false, error: (err as Error).message });
     } finally {
@@ -47,7 +54,7 @@ export const ImpresorasTicketsPanel: React.FC = () => {
 
   useEffect(() => {
     revisar();
-    const id = setInterval(revisar, INTERVALO_REVISION_MS);
+    const id = setInterval(() => revisar(), INTERVALO_REVISION_MS);
     return () => clearInterval(id);
   }, [revisar]);
 
@@ -137,10 +144,10 @@ export const ImpresorasTicketsPanel: React.FC = () => {
             </button>
           )}
           <button
-            onClick={revisar}
+            onClick={() => revisar(true)}
             disabled={revisando || !!guardando}
-            aria-label="Volver a revisar"
-            title="Volver a revisar"
+            aria-label="Sincronizar impresoras"
+            title="Sincronizar impresoras: volver a buscarlas y reiniciar la impresión"
             className="w-8 h-8 text-sky-800 bg-sky-50 border border-sky-200 rounded-lg hover:bg-sky-100 disabled:opacity-50 transition-colors cursor-pointer flex items-center justify-center"
           >
             <RefreshCw className={`w-4 h-4 ${revisando ? 'animate-spin' : ''}`} />
@@ -340,7 +347,7 @@ function InstalarImpresoras({ destacado }: { destacado: boolean }) {
         <li>Conecta y enciende las impresoras.</li>
         <li>Descarga el instalador. Si el navegador pregunta, elige «Conservar».</li>
         <li>Ábrelo y acepta el permiso de administrador. Si sale «Windows protegió su PC»: «Más información» → «Ejecutar de todas formas».</li>
-        <li>Espera a que diga <b>LISTO</b> (uno o dos minutos) y toca el botón azul de arriba para volver a revisar.</li>
+        <li>Espera a que diga <b>LISTO</b> (uno o dos minutos) y toca el botón azul de arriba para sincronizar.</li>
       </ol>
       <div className="flex flex-wrap items-center gap-3">
         {boton}
