@@ -6,7 +6,7 @@
 import { useEffect, useRef } from 'react';
 import { getToken } from './authService';
 
-export type TipoEvento = 'ordenes' | 'turno';
+export type TipoEvento = 'ordenes' | 'turno' | 'menu';
 type Oyente = (tipo: TipoEvento) => void;
 
 const oyentes = new Set<{ tipos: TipoEvento[]; fn: Oyente }>();

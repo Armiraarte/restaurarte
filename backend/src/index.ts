@@ -12,6 +12,7 @@ import { tabletsRouter } from './tablets.js';
 import { mesasRouter } from './mesas.js';
 import { turnosRouter } from './turnos.js';
 import { pedidosRouter } from './pedidos.js';
+import { agotadosRouter } from './agotados.js';
 import { avisarCambios, eventosRouter } from './eventos.js';
 
 const app = express();
@@ -34,6 +35,8 @@ app.use('/api/monitor', monitorRouter);
 // Cada escritura que sale bien avisa a todas las pantallas para que se actualicen solas.
 app.use('/api/mesas', avisarCambios('ordenes'), mesasRouter);
 app.use('/api/turnos', avisarCambios('turno', 'ordenes'), turnosRouter);
+// Productos que se terminaron: cada cambio avisa a las tablets para que lo vean en gris al momento.
+app.use('/api/agotados', avisarCambios('menu'), agotadosRouter);
 app.use('/api', avisarCambios('ordenes'), pedidosRouter);
 
 await inicializarUsuarios();

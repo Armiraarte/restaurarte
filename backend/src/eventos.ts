@@ -6,12 +6,13 @@
 // Tipos:
 //   ordenes → se creó una orden, se envió un pedido, se pidió la cuenta, cambió una comanda…
 //   turno   → se inició/cerró el turno o una sesión de tablet
+//   menu    → se marcó o quitó un producto agotado (apartado Agotados)
 // EventSource no permite mandar el header Authorization, por eso el token va en la URL.
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { usuarioDelToken } from './auth.js';
 import { avisarDisponibilidadTablets } from './disponibilidadTablets.js';
 
-export type TipoEvento = 'ordenes' | 'turno';
+export type TipoEvento = 'ordenes' | 'turno' | 'menu';
 
 const clientes = new Set<Response>();
 

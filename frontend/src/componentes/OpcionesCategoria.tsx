@@ -63,6 +63,10 @@ const BOTON_COMPLEMENTO = {
 };
 /** Dos toques al mismo complemento dentro de este tiempo = EXTRA. */
 const DOBLE_TOQUE_MS = 350;
+/** Se terminó (apartado Agotados): en gris y sin poder elegirse. */
+const BOTON_AGOTADO = 'bg-neutral-100 border-neutral-200 text-neutral-400 cursor-not-allowed';
+const SIN_AGOTADOS = new Set<number>();
+const EtiquetaAgotado = () => <span className="text-[11px] font-black tracking-wide text-rose-600 leading-none">AGOTADO</span>;
 
 interface Props {
   categoria: CategoriaMenu;
@@ -78,6 +82,8 @@ interface Props {
   mezclar?: boolean;
   /** Se agregó la mezcla: quien muestra el botón MIXTAS lo apaga. */
   onMezclaAgregada?: () => void;
+  /** IDs de los productos que se terminaron (apartado Agotados): salen en gris y no se pueden elegir. */
+  agotados?: Set<number>;
 }
 
 export interface ExtrasLinea {
@@ -94,7 +100,15 @@ export interface ExtrasLinea {
   complementosExtra?: ComplementoMenu[];
 }
 
-export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta, onVolver, onAgregar, mezclar = false, onMezclaAgregada }) => {
+export const OpcionesCategoria: React.FC<Props> = ({
+  categoria,
+  pantallaCompleta,
+  onVolver,
+  onAgregar,
+  mezclar = false,
+  onMezclaAgregada,
+  agotados = SIN_AGOTADOS,
+}) => {
   const esEnsalada = categoria.nombre === 'Ensaladas';
   const esHamburguesa = categoria.nombre === 'Hamburguesas';
   const nombresCatalogo = [...new Set(categoria.productos.map((p) => p.nombre))];
@@ -129,6 +143,10 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
     .map((n) => ({ nombre: n, cantidad: piezas[n], precio: productoDe(n)?.precio }));
   const totalPiezas = reparto.reduce((acc, r) => acc + r.cantidad, 0);
   const productosReparto = reparto.map((r) => productoDe(r.nombre)).filter((p): p is ProductoMenu => !!p);
+  // Agotados: un nombre se terminó si ya no queda ninguno de sus tamaños; en MIXTAS cuenta el del tamaño elegido.
+  const agotado = (p: ProductoMenu | undefined) => !!p && agotados.has(p.id);
+  const nombreAgotado = (n: string) => categoria.productos.filter((p) => p.nombre === n).every((p) => agotados.has(p.id));
+  const piezaAgotada = (n: string) => (productoDe(n) ? agotado(productoDe(n)) : nombreAgotado(n));
   const repartoCompleto = productosReparto.length === reparto.length;
   const sumarPieza = (n: string, delta: number) =>
     setPiezas((actual) => ({ ...actual, [n]: Math.max(0, (actual[n] ?? 0) + delta) }));
@@ -165,6 +183,7 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
   const carnesExtra = puedeCarneExtra ? carneExtra : 0;
   const puedePapas = ['Hamburguesas', 'Lonches'].includes(categoria.nombre) && !!nombre;
   const papas = puedePapas && conPapas ? categoria.papas ?? null : null;
+  const papasAgotadas = !!categoria.papas && agotados.has(categoria.papas.idProducto);
   // EXTRA solo cuenta si el complemento sigue en la lista y está incluido.
   const extrasElegidos = complementos.filter((c) => extras.includes(c.id) && !quitados.includes(c.id));
   // Lo que se suma a cada pieza (en MIXTAS, a todas): carnes extra, papas y complementos EXTRA.
@@ -218,7 +237,19 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
 
   const etiquetaEleccion = NOMBRE_ELECCION[categoria.nombre] ?? 'Producto';
   const sinTamano = reparto.find((r) => !productoDe(r.nombre));
-  const faltante = mezclando
+  // Lo elegido que se terminó mientras se armaba (lo marcaron agotado en ese momento): ya no se puede agregar.
+  const conTamano = (n: string, t: string | null | undefined) => (t ? `${n} (${t})` : n);
+  const piezaTerminada = reparto.find((r) => piezaAgotada(r.nombre));
+  const terminado = mezclando
+    ? piezaTerminada && conTamano(piezaTerminada.nombre, productoDe(piezaTerminada.nombre)?.tamano)
+    : elegidos.length > 1
+      ? elegidos.find(nombreAgotado)
+      : agotado(producto) ? conTamano(producto!.nombre, producto!.tamano) : undefined;
+  const faltante = conPapas && papasAgotadas
+    ? 'Se terminaron las papas: quita CON PAPAS'
+    : terminado
+    ? `Se terminó: ${terminado}`
+    : mezclando
     ? totalPiezas === 0
       ? `Toca cada ${etiquetaEleccion.toLowerCase()} para sumar piezas`
       : tamanosMezcla.length && !tamano
@@ -231,8 +262,11 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
   const precioHasta = Math.max(...categoria.productos.map((p) => p.precio));
   // Botones de tamaño: los del producto elegido; en MIXTAS, los de la categoría (uno para todas las piezas).
   const opcionesTamano = mezclando
-    ? tamanosMezcla.map((t) => ({ clave: t, tamano: t, precio: Math.min(...categoria.productos.filter((p) => p.tamano === t).map((p) => p.precio)) }))
-    : tamanos.map((p) => ({ clave: String(p.id), tamano: p.tamano!, precio: p.precio }));
+    ? tamanosMezcla.map((t) => {
+        const deEse = categoria.productos.filter((p) => p.tamano === t);
+        return { clave: t, tamano: t, precio: Math.min(...deEse.map((p) => p.precio)), agotado: deEse.every((p) => agotados.has(p.id)) };
+      })
+    : tamanos.map((p) => ({ clave: String(p.id), tamano: p.tamano!, precio: p.precio, agotado: agotados.has(p.id) }));
 
   const alternarComplemento = (id: number) =>
     setQuitados((q) => (q.includes(id) ? q.filter((x) => x !== id) : [...q, id]));
@@ -337,18 +371,24 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
               {nombres.map((n) => {
                 const cuantas = piezas[n] ?? 0;
                 const precio = productoDe(n)?.precio ?? Math.min(...categoria.productos.filter((p) => p.nombre === n).map((p) => p.precio));
+                const sinExistencia = piezaAgotada(n);
                 return (
                   <div key={n} className="relative min-h-0">
                     <button
                       onClick={() => sumarPieza(n, 1)}
-                      aria-label={`Sumar una pieza de ${n} (van ${cuantas})`}
+                      disabled={sinExistencia}
+                      aria-label={sinExistencia ? `${n}: agotado` : `Sumar una pieza de ${n} (van ${cuantas})`}
                       className={`w-full ${boton} px-2 border-2 font-semibold flex flex-col items-center justify-center transition-colors cursor-pointer ${
-                        cuantas > 0 ? BOTON_UNA.on : BOTON_UNA.off
+                        sinExistencia ? BOTON_AGOTADO : cuantas > 0 ? BOTON_UNA.on : BOTON_UNA.off
                       }`}
                     >
                       {n}
                       <span className={`font-mono text-2xl font-black leading-none ${cuantas > 0 ? '' : 'text-neutral-300'}`}>{cuantas}</span>
-                      {precioDesde !== precioHasta && <span className="text-xs font-mono font-normal">{dinero(precio)} c/u</span>}
+                      {sinExistencia ? (
+                        <EtiquetaAgotado />
+                      ) : (
+                        precioDesde !== precioHasta && <span className="text-xs font-mono font-normal">{dinero(precio)} c/u</span>
+                      )}
                     </button>
                     {cuantas > 0 && (
                       <button
@@ -380,20 +420,28 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
               {nombres.map((n) => {
                 const precios = categoria.productos.filter((p) => p.nombre === n).map((p) => p.precio);
                 const activo = elegidos.includes(n);
+                // Si se terminó estando elegido, se deja tocar para quitarlo.
+                const sinExistencia = nombreAgotado(n);
                 return (
                   <button
                     key={n}
                     onClick={() => tocarNombre(n)}
+                    disabled={sinExistencia && !activo}
                     aria-pressed={activo}
+                    aria-label={sinExistencia ? `${n}: agotado` : undefined}
                     className={`relative ${boton} px-2 border-2 font-semibold flex flex-col items-center justify-center transition-colors cursor-pointer ${
-                      activo ? BOTON_UNA.on : BOTON_UNA.off
+                      sinExistencia ? BOTON_AGOTADO : activo ? BOTON_UNA.on : BOTON_UNA.off
                     }`}
                   >
                     {activo && elegidos.length > 1 && (
                       <span className="absolute top-1 left-1.5 text-xs font-mono font-bold text-orange-700">{elegidos.indexOf(n) + 1}</span>
                     )}
                     {n}
-                    {precioDesde !== precioHasta && <span className="text-sm font-mono font-normal">{dinero(Math.min(...precios))}</span>}
+                    {sinExistencia ? (
+                      <EtiquetaAgotado />
+                    ) : (
+                      precioDesde !== precioHasta && <span className="text-sm font-mono font-normal">{dinero(Math.min(...precios))}</span>
+                    )}
                   </button>
                 );
               })}
@@ -412,13 +460,14 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
                 <button
                   key={p.clave}
                   onClick={() => setTamano(p.tamano)}
+                  disabled={p.agotado && tamano !== p.tamano}
                   aria-pressed={tamano === p.tamano}
                   className={`${boton} px-2 border-2 font-semibold flex flex-col items-center justify-center transition-colors cursor-pointer ${
-                    tamano === p.tamano ? BOTON_UNA.on : BOTON_UNA.off
+                    p.agotado ? BOTON_AGOTADO : tamano === p.tamano ? BOTON_UNA.on : BOTON_UNA.off
                   }`}
                 >
                   {p.tamano}
-                  <span className="text-sm font-mono font-normal">{dinero(p.precio)}</span>
+                  {p.agotado ? <EtiquetaAgotado /> : <span className="text-sm font-mono font-normal">{dinero(p.precio)}</span>}
                 </button>
               ))}
             </div>
@@ -516,14 +565,14 @@ export const OpcionesCategoria: React.FC<Props> = ({ categoria, pantallaCompleta
               </button>}
               {puedePapas && <button
                 onClick={() => setConPapas((v) => !v)}
-                disabled={!categoria.papas}
+                disabled={!categoria.papas || (papasAgotadas && !conPapas)}
                 aria-pressed={conPapas}
                 className={`${boton} px-2 border-2 font-black flex flex-col items-center justify-center cursor-pointer disabled:opacity-40 ${
-                  conPapas ? 'bg-amber-500 border-amber-600 text-neutral-950' : 'bg-white border-amber-300 text-amber-800 hover:bg-amber-50'
+                  papasAgotadas ? BOTON_AGOTADO : conPapas ? 'bg-amber-500 border-amber-600 text-neutral-950' : 'bg-white border-amber-300 text-amber-800 hover:bg-amber-50'
                 }`}
               >
                 <span className="flex items-center gap-1">{conPapas && <Check className="w-4 h-4" />} CON PAPAS</span>
-                <span className="text-sm font-semibold">{categoria.papas ? `+${dinero(categoria.papas.precio)}` : 'No disponibles'}</span>
+                {papasAgotadas ? <EtiquetaAgotado /> : <span className="text-sm font-semibold">{categoria.papas ? `+${dinero(categoria.papas.precio)}` : 'No disponibles'}</span>}
               </button>}
             </div>
           </div>

@@ -60,6 +60,7 @@ import { ExtrasLinea, OpcionesCategoria } from './OpcionesCategoria';
 import { PedidoEnviado } from './PedidoEnviado';
 import { useEnVivo } from '../services/enVivo';
 import { useCadaTantoVisible } from '../services/sincronizacion';
+import { useAgotados } from '../services/agotadosService';
 import { BORRADOR_LLAMADA, guardarBorrador, leerBorrador, leerMixActivo, leerExtrasBorrador } from '../services/borradorPedido';
 import { agruparMix } from '../services/pedidoMix';
 import { registrarMesa } from '../services/mesasService';
@@ -327,6 +328,25 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
   useEnVivo(['ordenes'], refrescar);
   useCadaTantoVisible(refrescar, 5_000);
 
+  // Productos que se terminaron (apartado Agotados de la caja): en gris, sin poder comandarse; llegan en vivo.
+  const { ids: agotados, recargar: recargarAgotados } = useAgotados();
+  /** El renglón trae algo que se terminó después de agregarlo (el producto, o un sabor de su mezcla o MIXTAS). */
+  const lineaAgotada = (l: LineaNueva) => {
+    if (agotados.has(l.producto.id)) return true;
+    if (l.papas && agotados.has(l.papas.idProducto)) return true;
+    const nombres = [...l.mezcla, ...(l.reparto ?? []).map((r) => r.nombre)];
+    if (!nombres.length) return false;
+    const productos = menu?.find((c) => c.nombre === l.categoria)?.productos ?? [];
+    return productos.some((p) => nombres.includes(p.nombre) && p.tamano === l.producto.tamano && agotados.has(p.id));
+  };
+  /** Antes de mandar a cocina: si algo se terminó, se avisa cuál quitar (el servidor tampoco lo acepta). */
+  const sinAgotados = () => {
+    const terminados = nuevo.filter(lineaAgotada);
+    if (!terminados.length) return true;
+    setError(`Se terminó: ${terminados.map((l) => `${l.categoria} · ${nombreLinea(l)}`).join(', ')}. Quítalo del pedido para poder enviarlo.`);
+    return false;
+  };
+
   useEffect(() => {
     if (!alerta) return;
     const t = setTimeout(() => setAlerta(null), 4000);
@@ -393,7 +413,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
   /** Manda lo nuevo a cocina. `destino`: la orden recién registrada al terminar una LLAMADA. */
   const enviar = async (destino?: number): Promise<boolean> => {
     const id = destino ?? idOrden;
-    if (id === null || (destino === undefined && !orden) || !puedeEditar || !hayNuevo) return false;
+    if (id === null || (destino === undefined && !orden) || !puedeEditar || !hayNuevo || !sinAgotados()) return false;
     setEnviando(true);
     setError(null);
     const enviado = nuevo;
@@ -466,6 +486,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo enviar el pedido.');
+      recargarAgotados(); // si lo rechazó por algo agotado, que se vea marcado aquí
       if (destino === undefined) await refrescar();
       return false;
     } finally {
@@ -736,6 +757,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
               onAgregar={(producto, cantidad, sin, mezcla, extras) => agregar(producto, opcionesDe.nombre, cantidad, sin, mezcla, extras)}
               mezclar={mezclar}
               onMezclaAgregada={() => setMezclar(false)}
+              agotados={agotados}
             />
           ) : categoriaAbierta ? (
             <div className="flex-1 min-h-0 flex flex-col gap-2">
@@ -780,19 +802,25 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
                 {categoriaAbierta.productos.filter((p) => gruposAbiertos.length < 2 || grupoDe(p) === grupoVisible).map((p) => {
                   const enPedido = nuevo.filter((l) => l.producto.id === p.id).reduce((acc, l) => acc + l.cantidad, 0) || undefined;
                   const logo = categoriaAbierta.nombre === 'Bebidas' ? logoBebida(p.nombre) : null;
+                  const sinExistencia = agotados.has(p.id);
                   return (
                     <button
                       key={p.id}
                       onClick={() => agregarRapido(p, categoriaAbierta.nombre)}
-                      disabled={!puedeEditar}
-                      className={`relative rounded-2xl border-2 p-3 flex flex-col items-center justify-center gap-1 text-center cursor-pointer ${
+                      disabled={!puedeEditar || sinExistencia}
+                      aria-label={sinExistencia ? `${nombreProducto(p)}: agotado` : undefined}
+                      className={`relative rounded-2xl border-2 p-3 flex flex-col items-center justify-center gap-1 text-center cursor-pointer disabled:cursor-not-allowed ${
                         pantallaCompleta ? 'neon neon-cian' : 'border-orange-200 bg-orange-50/40 hover:bg-orange-50'
-                      }`}
+                      } ${sinExistencia ? 'opacity-40 grayscale' : ''}`}
                     >
                       {logo && <img src={logo} alt="" width={40} height={40} decoding="async" draggable={false} className="w-10 h-10 shrink-0 object-contain" />}
                       <span className="text-xl font-bold leading-tight">{p.nombre}</span>
                       {p.tamano && <span className="text-sm font-semibold text-orange-800">{p.tamano}</span>}
-                      <span className="font-mono text-sm text-neutral-600">{dinero(p.precio)}</span>
+                      {sinExistencia ? (
+                        <span className="text-xs font-black tracking-wide text-rose-600">AGOTADO</span>
+                      ) : (
+                        <span className="font-mono text-sm text-neutral-600">{dinero(p.precio)}</span>
+                      )}
                       {p.complementos.length > 0 && (
                         <span className="text-[11px] text-neutral-500 leading-tight">{p.complementos.map((c) => c.nombre).join(' · ')}</span>
                       )}
@@ -814,14 +842,17 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
                   const Icono = iconoCategoria(c.nombre);
                   const foto = fotoCategoria(c.nombre);
                   const enPedido = nuevo.filter((l) => l.categoria === c.nombre).reduce((acc, l) => acc + l.cantidad, 0);
+                  // Se terminó todo lo de la categoría: en gris y sin abrirse.
+                  const todoAgotado = c.productos.every((p) => agotados.has(p.id));
                   return (
                     <button
                       key={c.id}
                       onClick={() => tocarCategoria(c)}
-                      disabled={!puedeEditar}
-                      className={`relative rounded-2xl border-2 p-2 flex flex-col items-center justify-center gap-2 text-center cursor-pointer ${
+                      disabled={!puedeEditar || todoAgotado}
+                      aria-label={todoAgotado ? `${c.nombre}: agotado` : undefined}
+                      className={`relative rounded-2xl border-2 p-2 flex flex-col items-center justify-center gap-2 text-center cursor-pointer disabled:cursor-not-allowed ${
                         pantallaCompleta ? NEON_CATEGORIA[i % NEON_CATEGORIA.length] : COLORES_CATEGORIA[i % COLORES_CATEGORIA.length].normal
-                      }`}
+                      } ${todoAgotado ? 'opacity-40 grayscale' : ''}`}
                     >
                       {foto ? (
                         <img src={foto} alt="" width={96} height={64} decoding="async" draggable={false} className="w-24 h-16 shrink-0 object-contain" />
@@ -829,6 +860,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
                         <Icono className="w-12 h-12 shrink-0" />
                       )}
                       <span className="text-lg font-bold leading-tight">{c.nombre}</span>
+                      {todoAgotado && <span className="text-xs font-black tracking-wide text-rose-600">AGOTADO</span>}
                       {enPedido > 0 && (
                         <span className="absolute top-2 right-2 min-w-6 h-6 px-1.5 rounded-full bg-orange-500 text-white text-xs font-bold flex items-center justify-center">
                           {enPedido}
@@ -881,6 +913,9 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
                       <span className="font-medium leading-tight">
                         {nombreLinea(l)}
                         <span className="block text-xs font-normal text-neutral-500">{l.categoria}</span>
+                        {lineaAgotada(l) && (
+                          <span className="block text-xs font-black tracking-wide text-rose-600">SE TERMINÓ · quítalo del pedido</span>
+                        )}
                         {l.termino && <span className="block text-xs font-semibold text-orange-800">Término: {l.termino.nombre}</span>}
                         {l.sinQueso && <span className="block text-xs font-black tracking-wide text-violet-700">SIN QUESO</span>}
                         {l.conQueso && <span className="block text-xs font-black tracking-wide text-amber-700">CON QUESO</span>}
@@ -952,7 +987,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
             {esLlamada ? (
               // LLAMADA: al colgar se pide el nombre del cliente; ahí se registra la orden y se manda a cocina.
               <button
-                onClick={() => setNombrando(true)}
+                onClick={() => sinAgotados() && setNombrando(true)}
                 disabled={!puedeEditar || !hayNuevo}
                 className="neon-solido neon-azul w-full h-14 shrink-0 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed text-lg font-bold flex items-center justify-center gap-2 cursor-pointer"
               >

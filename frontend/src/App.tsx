@@ -21,6 +21,7 @@ import { InicioSesion } from './componentes/InicioSesion';
 import { MesasView } from './componentes/MesasView';
 import { ConfiguracionView } from './componentes/ConfiguracionView';
 import { InicioView } from './componentes/InicioView';
+import { AgotadosView } from './componentes/AgotadosView';
 import { getToken, logout, obtenerSesion, Usuario } from './services/authService';
 import { useMesasTurno, useTurnoActual } from './services/sincronizacion';
 import { useTabletsEnLinea } from './services/tabletsService';
@@ -160,7 +161,7 @@ function PosDashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () =>
   const tabletsTotal = tabletsEnLinea?.length ?? 0;
   const sinTurno = turnoCaja === null;
   const enOrdenes = !verConfiguracion && currentTab === 'mesas' && !sinTurno;
-  const contenidoAjustado = enOrdenes || (!verConfiguracion && (currentTab === 'turnos' || currentTab === 'ventas' || currentTab === 'inicio'));
+  const contenidoAjustado = enOrdenes || (!verConfiguracion && (currentTab === 'turnos' || currentTab === 'ventas' || currentTab === 'inicio' || currentTab === 'agotados'));
   const [avisoTurnoVisto, setAvisoTurnoVisto] = useState(false);
 
   // Sync with shared central data service
@@ -286,6 +287,8 @@ function PosDashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () =>
 
               {/* Turno actual, corte de turno e historial de cortes */}
               {!verConfiguracion && currentTab === 'turnos' && <TurnosView onIrA={irASeccion} />}
+
+              {!verConfiguracion && currentTab === 'agotados' && <AgotadosView />}
 
               {!verConfiguracion && currentTab === 'mesas' && (
                 sinTurno ? <SeccionSinTurno seccion="Órdenes" /> : <MesasView nombreUsuario={usuario.nombre} />

@@ -2,9 +2,9 @@
 //   Pantallas grandes (lg): barra lateral a la izquierda; se puede contraer a solo íconos (se recuerda en esta PC).
 //   Pantallas angostas: barra horizontal bajo el encabezado.
 import React, { useState } from 'react';
-import { Clock, Home, LayoutGrid, PanelLeftClose, PanelLeftOpen, Receipt, Tablet, TrendingUp, LucideIcon } from 'lucide-react';
+import { Clock, Home, LayoutGrid, PackageX, PanelLeftClose, PanelLeftOpen, Receipt, Tablet, TrendingUp, LucideIcon } from 'lucide-react';
 
-export type MainNavTab = 'inicio' | 'tablets' | 'cajas' | 'ventas' | 'mesas' | 'turnos';
+export type MainNavTab = 'inicio' | 'tablets' | 'cajas' | 'ventas' | 'mesas' | 'turnos' | 'agotados';
 
 interface SeccionesNavProps {
   currentTab: MainNavTab;
@@ -33,6 +33,7 @@ const COLORES: Record<MainNavTab, { icono: string; hover: string; activo: string
   mesas: { icono: 'text-violet-600', hover: 'hover:bg-violet-50', activo: 'bg-violet-600 text-white shadow-violet-600/30' },
   tablets: { icono: 'text-sky-600', hover: 'hover:bg-sky-50', activo: 'bg-sky-700 text-white shadow-sky-700/30' },
   turnos: { icono: 'text-red-600', hover: 'hover:bg-red-50', activo: 'bg-red-600 text-white shadow-red-600/30' },
+  agotados: { icono: 'text-rose-600', hover: 'hover:bg-rose-50', activo: 'bg-rose-700 text-white shadow-rose-700/30' },
 };
 
 const CLAVE_CONTRAIDO = 'caja_menu_contraido';
@@ -71,6 +72,7 @@ export const SeccionesNav: React.FC<SeccionesNavProps> = ({
     { id: 'cajas', label: 'Cajas', icon: Receipt, badge: String(openAccountsCount), alerta: solicitadasCount > 0 },
     { id: 'ventas', label: 'Ventas', icon: TrendingUp, badge: ventasCount > 0 ? String(ventasCount) : undefined },
     { id: 'mesas', label: 'Órdenes', icon: LayoutGrid, badge: `${mesasOcupadas}/${mesasTotal}` },
+    { id: 'agotados', label: 'Agotados', icon: PackageX },
     { id: 'tablets', label: 'Tablet', icon: Tablet, alerta: hasDisconnectedTablet },
     { id: 'turnos', label: 'Turnos', icon: Clock },
   ];

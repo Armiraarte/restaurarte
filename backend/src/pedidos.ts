@@ -3,6 +3,7 @@
 // lo que va a cocina sale en el ticket de cocina impreso.
 //
 //   GET   /api/menu                         categorías activas con sus productos (grupo, precio) y complementos
+//                                           (lo agotado se lee aparte: /api/agotados; un pedido que lo traiga se rechaza)
 //   GET   /api/ordenes/:idOrden             la orden con su detalle y total
 //   POST  /api/ordenes/:idOrden/pedido      { items: [{ idProducto, cantidad, sin?, mezcla?, reparto?, sinQueso?, conQueso?, carneExtra?, mixGrupo? }] }
 //                                           reparto = MIXTAS (cualquier categoría): [{ nombre, cantidad }] por sabor, en un solo renglón; cada pieza a su precio
@@ -25,6 +26,7 @@ import { imprimirLineas } from './impresion.js';
 import { lineasTicketCobro } from './ticketCobro.js';
 import { guardarDetallePedido, itemsValidos, terminoPermitido, type ItemPedido, type PapasPedido, type ProductosReparto, type RepartoPedido } from './detallePedido.js';
 import { extrasValidos, guardarExtrasPedido, recalcularTotalOrden } from './extrasPedido.js';
+import { agotadosActuales, estaAgotado } from './agotados.js';
 
 // Opciones por renglón; las mismas constantes que OrdenDetalle en Laravel.
 /** Categorías que ofrecen SIN QUESO. */
@@ -380,6 +382,24 @@ pedidosRouter.post('/ordenes/:idOrden/pedido', async (req, res) => {
       if (sabores.some((s) => !s)) saborFaltante = true;
       else productosReparto.set(i, sabores.map((s) => ({ id: s!.id as number, precio: Number(s!.precio) })));
     }
+    // Lo que se terminó (apartado Agotados) no se puede comandar: ni solo, ni en una mezcla, ni en MIXTAS.
+    const terminados = new Set<string>();
+    for (const i of items) {
+      const base = porId.get(i.idProducto)!;
+      const delMismoTamano = (nombre: string) =>
+        rellenos.filter((p) => p.categoria_id === base.categoria_id && p.nombre === nombre && (p.tamano ?? null) === (base.tamano ?? null));
+      for (const p of [base, ...[...(i.mezcla ?? []), ...(i.reparto ?? []).map((r) => r.nombre)].flatMap(delMismoTamano)]) {
+        if (estaAgotado(p.id)) terminados.add(`${base.categoria} ${p.nombre}${p.tamano ? ` (${p.tamano})` : ''}`);
+      }
+    }
+    if (terminados.size) {
+      await conexion.rollback();
+      res.status(409).json({
+        error: `Se terminó: ${[...terminados].join(', ')}. Quítalo del pedido para poder enviarlo.`,
+        agotados: agotadosActuales(),
+      });
+      return;
+    }
     const idsConSabores = [...new Set([...ids, ...[...productosReparto.values()].flat().map((s) => s.id)])];
     const [relaciones] = await conexion.query<RowDataPacket[]>(
       `SELECT phc.producto_id, c.id, c.nombre FROM producto_has_complemento phc
@@ -414,6 +434,11 @@ pedidosRouter.post('/ordenes/:idOrden/pedido', async (req, res) => {
         return;
       }
       const p = filas[0];
+      if (estaAgotado(p.id)) {
+        await conexion.rollback();
+        res.status(409).json({ error: 'Se terminaron las papas. Quita CON PAPAS para poder enviar el pedido.', agotados: agotadosActuales() });
+        return;
+      }
       papas = { idProducto: p.id, nombre: p.nombre, tamano: p.tamano, precio: Number(p.precio) };
     }
     const ahora = new Date();

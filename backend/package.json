@@ -11,6 +11,7 @@
     "test:impresion": "node --import tsx --test tests-node/impresion.test.mjs tests-node/agente-desconectado.test.mjs",
     "test:mesas": "node --import tsx --test tests-node/numeracion-mesas.test.mjs tests-node/mesa-prueba.test.mjs tests-node/cambiar-mesa.test.mjs",
     "test:pedidos": "node --import tsx --test tests-node/pedido-mix.test.mjs tests-node/extras.test.mjs",
+    "test:agotados": "node --import tsx --test tests-node/agotados.test.mjs",
     "test:turnos": "node --import tsx --test tests-node/horario.test.mjs tests-node/sesiones-tablet.test.mjs tests-node/disponibilidad-tablets.test.mjs"
   },
   "dependencies": {
