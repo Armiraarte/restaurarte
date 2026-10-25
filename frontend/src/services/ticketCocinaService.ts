@@ -1,7 +1,7 @@
 // Arma el JSON del ticket de cocina a partir de una comanda y lo manda a imprimir (/api/impresion/cocina).
 import { Comanda, OrderItem, ProductCatalogItem, SeleccionProducto } from '../types/pos';
 import { OpcionTicket, ProductoTicketCocina, TicketCocina } from '../types/ticketCocina';
-import { getToken } from './authService';
+import { fetchConSesion } from './authService';
 import { posDataService } from './dataService';
 
 /**
@@ -70,9 +70,9 @@ export function construirTicketCocina(comanda: Comanda): TicketCocina {
 export async function imprimirTicketCocina(ticket: TicketCocina): Promise<string> {
   let res: Response;
   try {
-    res = await fetch('/api/impresion/cocina', {
+    res = await fetchConSesion('/api/impresion/cocina', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken() ?? ''}` },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ticket }),
     });
   } catch {

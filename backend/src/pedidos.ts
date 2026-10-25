@@ -16,6 +16,10 @@
 //   POST  /api/ordenes/:idOrden/cobrar      { recibido } orden.estatus 1 (PAGANDO) → 2 (PAGADO) e imprime el ticket de cobro
 //   POST  /api/ordenes/:idOrden/ticket-cobro  { recibido? } reimprime el ticket de cobro de una orden pagada
 //                                           (sin recibido, p. ej. desde Ventas, no imprime efectivo ni cambio)
+//   POST  /api/ordenes/:idOrden/dividir     { modo: 'iguales' | 'productos', personas, total, asignadas? }
+//                                           guarda Cuenta 1…N (reemplaza la división anterior) e imprime un ticket
+//                                           por persona en caja; la orden y el cobro no cambian (cuentasDivididas.ts)
+//   POST  /api/ordenes/:idOrden/cuentas-divididas/imprimir   reimprime los tickets de las cuentas guardadas
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import type { RowDataPacket } from 'mysql2/promise';
 import { requireAuth } from './auth.js';
@@ -23,7 +27,12 @@ import { pool } from './db.js';
 import { mysqlDisponible } from './usuarios.js';
 import { turnoAbierto } from './turnos.js';
 import { imprimirLineas } from './impresion.js';
-import { lineasTicketCobro } from './ticketCobro.js';
+import { extraRenglonCobro, lineasTicketCobro, nombreRenglonCobro, productoTicketCobro } from './ticketCobro.js';
+import { lineasTicketCuentaDividida } from './ticketCuentaDividida.js';
+import {
+  calcularCuentasDivididas, divisionVigente, guardarCuentasDivididas, hayTablaCuentasDivididas, leerCuentasDivididas,
+  validarSolicitudDivision, type CuentaDividida, type RenglonDivision, type SolicitudDivision,
+} from './cuentasDivididas.js';
 import { guardarDetallePedido, itemsValidos, terminoPermitido, type ItemPedido, type PapasPedido, type ProductosReparto, type RepartoPedido } from './detallePedido.js';
 import { extrasValidos, guardarExtrasPedido, recalcularTotalOrden } from './extrasPedido.js';
 import { agotadosActuales, estaAgotado } from './agotados.js';
@@ -35,9 +44,6 @@ const CATEGORIAS_SIN_QUESO = ['Tacos', 'Sopes', 'Quesadillas', 'Hamburguesas', '
 const CATEGORIAS_CON_QUESO = ['Tacos', 'Sopes', 'Quesadillas', 'Hamburguesas', 'Lonches'];
 /** La única categoría con DOBLE / TRIPLE CARNE. */
 const CATEGORIA_CARNE_EXTRA = 'Hamburguesas';
-
-/** Texto de la carne extra para tickets: 1 → DOBLE CARNE, 2 → TRIPLE CARNE. */
-const textoCarneExtra = (n: number) => (n === 1 ? 'DOBLE CARNE' : n === 2 ? 'TRIPLE CARNE' : '');
 
 function soloRoles(...roles: string[]) {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -135,6 +141,8 @@ async function ordenConDetalle(idOrden: number) {
     'SELECT id, descripcion, importe, mix_grupo, creado_en FROM orden_extra WHERE idOrden = ? ORDER BY id', [idOrden],
   );
   return {
+    // Cuenta 1…N si se dividió con el botón Dividir (vacío si no).
+    cuentas_divididas: await leerCuentasDivididas(idOrden),
     extras: extras.map((e) => ({ ...e, importe: Number(e.importe), mix_grupo: e.mix_grupo == null ? null : Number(e.mix_grupo) })),
     // Sin sesión de tablet = la abrió la caja.
     orden: { ...o, origen, total: Number(o.total), etiqueta: etiquetaOrden(o.nombre), abierta_por: o.abierta_por ?? 'Caja' },
@@ -219,20 +227,10 @@ async function imprimirTicketCobro(idOrden: number, recibido: number | null, cob
   type Renglon = { idProducto: number; categoria: string; nombre: string; tamano: string | null; cantidad: number; sin_queso: boolean; con_queso: boolean; carne_extra: number; subtotal: number; opciones: { mezcla?: string[]; reparto?: RepartoPedido[]; papas?: PapasPedido; complementosExtra?: { nombre: string }[] } | null };
   for (const d of datos.detalle as unknown as Renglon[]) {
     // MIXTAS: "4 BBQ + 6 Buffalo"; mezcla sin cantidades: "Papa con Frijol".
-    const nombre = d.opciones?.reparto?.length
-      ? d.opciones.reparto.map((r) => `${r.cantidad} ${r.nombre}`).join(' + ')
-      : d.opciones?.mezcla && d.opciones.mezcla.length > 1 ? d.opciones.mezcla.join(' con ') : d.nombre;
-    const extra = d.opciones?.complementosExtra?.length ? `EXTRA ${d.opciones.complementosExtra.map((c) => c.nombre).join(' Y ').toUpperCase()}` : '';
-    const clave = `${d.idProducto}-${d.sin_queso ? 1 : 0}-${d.con_queso ? 1 : 0}-${d.carne_extra}-${nombre}-${d.opciones?.papas ? 1 : 0}-${extra}`;
-    const opciones = [d.sin_queso ? 'SIN QUESO' : '', d.con_queso ? 'CON QUESO' : '', textoCarneExtra(d.carne_extra), d.opciones?.papas ? 'CON PAPAS' : '', extra].filter(Boolean).join(' ');
-    const p = porProducto.get(clave) ?? {
-      cantidad: 0,
-      // Papas: «Orden de papas» / «Media orden de papas», sin repetir «Papas a la Francesa».
-      nombre: d.categoria === 'Papas a la Francesa'
-        ? (d.tamano === 'Media orden' ? 'Media orden de papas' : 'Orden de papas')
-        : `${d.categoria} ${nombre}${d.tamano ? ` (${d.tamano})` : ''}${opciones ? ` ${opciones}` : ''}`,
-      importe: 0,
-    };
+    const nombre = nombreRenglonCobro(d);
+    const clave = `${d.idProducto}-${d.sin_queso ? 1 : 0}-${d.con_queso ? 1 : 0}-${d.carne_extra}-${nombre}-${d.opciones?.papas ? 1 : 0}-${extraRenglonCobro(d)}`;
+    // Papas: «Orden de papas» / «Media orden de papas», sin repetir «Papas a la Francesa».
+    const p = porProducto.get(clave) ?? { cantidad: 0, nombre: productoTicketCobro(d, nombre), importe: 0 };
     p.cantidad += d.cantidad;
     p.importe = redondear(p.importe + d.subtotal);
     porProducto.set(clave, p);
@@ -252,6 +250,8 @@ async function imprimirTicketCobro(idOrden: number, recibido: number | null, cob
         recibido,
         cambio: recibido === null ? null : redondear(recibido - o.total),
         reimpresion,
+        // Solo si la división sigue cuadrando con el total (no se agregó nada después de dividir).
+        ...(divisionVigente(datos.cuentas_divididas, o.total) && { cuentasDivididas: datos.cuentas_divididas }),
       }),
     );
     return { ok: true };
@@ -259,6 +259,101 @@ async function imprimirTicketCobro(idOrden: number, recibido: number | null, cob
     return { ok: false, error: err instanceof Error ? err.message : 'No se pudo imprimir.' };
   }
 }
+
+/** Un ticket por cuenta, en orden (Cuenta 1, 2…). Si la impresora falla, las cuentas ya quedaron guardadas. */
+async function imprimirCuentasDivididas(idOrden: number, cuentas: CuentaDividida[], reimpresion = false) {
+  const datos = await ordenConDetalle(idOrden);
+  if (!datos) return { ok: false, impresas: 0, error: 'La orden no existe.' };
+  const o = datos.orden as unknown as { idOrden: number; etiqueta: string; tipo_orden: number; abierta_por: string };
+  let impresas = 0;
+  try {
+    for (const cuenta of cuentas) {
+      await imprimirLineas(lineasTicketCuentaDividida({
+        idOrden: o.idOrden, etiqueta: o.etiqueta, paraLlevar: o.tipo_orden === 2, abiertaPor: o.abierta_por, fecha: new Date(), cuenta, reimpresion,
+      }));
+      impresas += 1;
+    }
+    return { ok: true, impresas };
+  } catch (err) {
+    return { ok: false, impresas, error: err instanceof Error ? err.message : 'No se pudo imprimir.' };
+  }
+}
+
+/**
+ * Dividir la cuenta: guarda Cuenta 1…N de la orden (reemplaza la división anterior) e imprime un ticket por persona.
+ * `total` es el que vio la pantalla: si la orden cambió mientras tanto, no se guarda para no imprimir otros importes.
+ */
+pedidosRouter.post('/ordenes/:idOrden/dividir', soloRoles('tablet', 'admin', 'cajero'), async (req, res) => {
+  const idOrden = Number(req.params.idOrden);
+  const error = validarSolicitudDivision(req.body);
+  if (!Number.isSafeInteger(idOrden) || idOrden < 1 || error) {
+    res.status(400).json({ error: error ?? 'Orden no válida.' });
+    return;
+  }
+  if (!(await hayTablaCuentasDivididas())) {
+    res.status(503).json({ error: 'Falta preparar la base de datos para guardar cuentas divididas. Avisa al administrador.' });
+    return;
+  }
+  const solicitud: SolicitudDivision = { modo: req.body.modo, personas: req.body.personas, asignadas: req.body.asignadas };
+  const conexion = await pool!.getConnection();
+  let cuentas: CuentaDividida[];
+  try {
+    await conexion.beginTransaction();
+    // Bloquea la orden: mientras se divide, ninguna tablet puede agregarle productos (enviar pedido también la bloquea).
+    const [ordenes] = await conexion.query<RowDataPacket[]>('SELECT idOrden FROM orden WHERE idOrden = ? FOR UPDATE', [idOrden]);
+    const datos = ordenes[0] ? await ordenConDetalle(idOrden) : null;
+    if (!datos) {
+      await conexion.rollback();
+      res.status(404).json({ error: 'La orden no existe.' });
+      return;
+    }
+    const total = (datos.orden as unknown as { total: number }).total;
+    if (datos.detalle.length === 0 && datos.extras.length === 0) {
+      await conexion.rollback();
+      res.status(409).json({ error: 'La orden no tiene productos enviados; no hay cuenta que dividir.' });
+      return;
+    }
+    if (req.body.total != null && Math.round(Number(req.body.total) * 100) !== Math.round(total * 100)) {
+      await conexion.rollback();
+      res.status(409).json({ error: `La cuenta cambió mientras la dividías (ahora es $${total.toFixed(2)}). Revisa y vuelve a guardar.` });
+      return;
+    }
+    const calculo = calcularCuentasDivididas(
+      { total, detalle: datos.detalle as unknown as RenglonDivision[], extras: datos.extras as unknown as { id: number; descripcion: string; importe: number }[] },
+      solicitud,
+    );
+    if ('error' in calculo) {
+      await conexion.rollback();
+      res.status(409).json({ error: calculo.error });
+      return;
+    }
+    const creadoPor = req.usuario!.rol === 'tablet' ? req.usuario!.nombre : `Caja · ${req.usuario!.nombre}`;
+    const ahora = new Date();
+    await guardarCuentasDivididas(conexion, idOrden, calculo.cuentas, creadoPor, ahora);
+    await conexion.commit();
+    cuentas = calculo.cuentas.map((c) => ({ ...c, creado_por: creadoPor, creado_en: ahora.toISOString() }));
+  } catch (err) {
+    await conexion.rollback();
+    console.error('[pedidos] No se pudo guardar la cuenta dividida:', err);
+    res.status(500).json({ error: 'No se pudo guardar la cuenta dividida.' });
+    return;
+  } finally {
+    conexion.release();
+  }
+  res.status(201).json({ cuentas, impresion: await imprimirCuentasDivididas(idOrden, cuentas) });
+});
+
+/** Reimprime los tickets de las cuentas divididas guardadas. */
+pedidosRouter.post('/ordenes/:idOrden/cuentas-divididas/imprimir', soloRoles('tablet', 'admin', 'cajero'), async (req, res) => {
+  const idOrden = Number(req.params.idOrden);
+  const cuentas = Number.isSafeInteger(idOrden) && idOrden > 0 ? await leerCuentasDivididas(idOrden) : [];
+  if (!cuentas.length) {
+    res.status(404).json({ error: 'Esta orden no tiene cuentas divididas guardadas.' });
+    return;
+  }
+  res.locals.sinCambios = true; // reimprimir no cambia nada: no se avisa a las pantallas
+  res.json({ impresion: await imprimirCuentasDivididas(idOrden, cuentas, true) });
+});
 
 /** Cobrar: la orden que pidió la cuenta (PAGANDO) pasa a PAGADO e imprime el ticket de cobro. */
 pedidosRouter.post('/ordenes/:idOrden/cobrar', soloRoles('admin', 'cajero'), async (req, res) => {

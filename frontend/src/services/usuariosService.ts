@@ -1,5 +1,5 @@
 // Administración de usuarios (solo admin): /api/usuarios
-import { getToken, Rol, Usuario } from './authService';
+import { fetchConSesion, Rol, Usuario } from './authService';
 
 export type TipoAcceso = 'password' | 'pin';
 
@@ -23,10 +23,9 @@ export type RolCreable = Extract<Rol, 'admin' | 'tablet'>;
 async function pedir<T>(metodo: 'GET' | 'POST', cuerpo?: unknown): Promise<T> {
   let res: Response;
   try {
-    res = await fetch('/api/usuarios', {
+    res = await fetchConSesion('/api/usuarios', {
       method: metodo,
       headers: {
-        Authorization: `Bearer ${getToken() ?? ''}`,
         ...(cuerpo ? { 'Content-Type': 'application/json' } : {}),
       },
       body: cuerpo ? JSON.stringify(cuerpo) : undefined,

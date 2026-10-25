@@ -13,6 +13,35 @@ export interface Usuario {
 export const ROLES_APP_MESEROS: Rol[] = ['tablet', 'admin'];
 
 const TOKEN_KEY = 'pos_token';
+const oyentesSesion = new Set<(aviso: string) => void>();
+let tokenInvalidado: string | null | undefined;
+
+/** Una respuesta 401 cierra la sesión actual en todas las pantallas de esta pestaña. */
+export function escucharSesionCerrada(oyente: (aviso: string) => void): () => void {
+  oyentesSesion.add(oyente);
+  return () => { oyentesSesion.delete(oyente); };
+}
+
+/** No confunde falta de internet ni permisos (403) con una sesión vencida. */
+export async function fetchConSesion(ruta: string, init: RequestInit = {}): Promise<Response> {
+  const token = getToken();
+  const headers = new Headers(init.headers);
+  headers.set('Authorization', `Bearer ${token ?? ''}`);
+  const res = await fetch(ruta, { ...init, headers });
+  if (res.status === 401 && getToken() === token && tokenInvalidado !== token) {
+    const data = await res.clone().json().catch(() => ({}));
+    // Una respuesta antigua nunca debe cerrar una sesión que se acaba de iniciar.
+    if (getToken() === token && tokenInvalidado !== token) {
+      tokenInvalidado = token;
+      const aviso: string = data.sesionReemplazada && typeof data.error === 'string'
+        ? data.error : 'Tu sesión venció o se cerró. Vuelve a iniciar sesión.';
+      avisoSesion = aviso;
+      logout();
+      for (const oyente of oyentesSesion) oyente(aviso);
+    }
+  }
+  return res;
+}
 
 export function getToken(): string | null {
   try {
@@ -46,7 +75,7 @@ export async function login(usuario: string, password: string): Promise<Usuario>
   if (!res.ok) throw new Error(await leerError(res, 'No se pudo iniciar sesión.'));
 
   const data: { token: string; usuario: Usuario } = await res.json();
-  localStorage.setItem(TOKEN_KEY, data.token);
+  guardarToken(data.token);
   return data.usuario;
 }
 
@@ -78,14 +107,8 @@ export async function obtenerSesion(): Promise<Usuario | null> {
   const token = getToken();
   if (!token) return null;
 
-  const res = await fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } });
-  if (res.status === 401) {
-    await revisarSesionReemplazada(res).catch((err: Error) => {
-      avisoSesion = err.message;
-    });
-    logout();
-    return null;
-  }
+  const res = await fetchConSesion('/api/auth/me', { signal: AbortSignal.timeout(8_000) });
+  if (res.status === 401) return null;
   if (!res.ok) throw new Error('No se pudo verificar la sesión.');
 
   const data: { usuario: Usuario } = await res.json();
@@ -95,6 +118,8 @@ export async function obtenerSesion(): Promise<Usuario | null> {
 /** Guarda el token de una sesión iniciada sin el formulario (p. ej. al elegir la tablet). */
 export function guardarToken(token: string) {
   localStorage.setItem(TOKEN_KEY, token);
+  avisoSesion = null;
+  tokenInvalidado = undefined;
 }
 
 export function logout() {

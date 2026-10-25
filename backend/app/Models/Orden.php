@@ -118,4 +118,10 @@ class Orden extends Model
     {
         return $this->hasMany(OrdenExtra::class, 'idOrden');
     }
+
+    /** Cuenta 1…N si se dividió con el botón Dividir (tabla orden_cuenta_dividida). */
+    public function cuentasDivididas(): HasMany
+    {
+        return $this->hasMany(OrdenCuentaDividida::class, 'idOrden')->orderBy('numero');
+    }
 }

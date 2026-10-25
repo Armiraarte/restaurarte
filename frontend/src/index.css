@@ -99,6 +99,19 @@
 }
 
 @layer base {
+  /* Sin zoom en pantallas táctiles: solo se permite deslizar (scroll), no pellizcar ni tocar dos veces.
+     Va en todos los elementos porque las listas con scroll propio no heredan el bloqueo de la página.
+     text-size-adjust evita que el navegador agrande los textos al girar la tablet. */
+  html,
+  body,
+  body * {
+    touch-action: pan-x pan-y;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
   /* App de meseros (/tablet): la página nunca hace scroll (100vw × 100vh). */
   html.app-tablet {
     height: 100%;

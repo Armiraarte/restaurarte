@@ -154,15 +154,19 @@ impresionRouter.get('/estado', async (_req, res) => {
 impresionRouter.post('/sincronizar', async (_req, res) => {
   try {
     let datos;
+    let sincronizado = true;
     try {
       datos = await llamarAgente('/sincronizar', { method: 'POST', body: '{}' });
     } catch (err: any) {
       if (err.status !== 404) throw err;
+      sincronizado = false;
       datos = await llamarAgente('/impresoras');
     }
     const equipo = agenteRemoto()?.equipo ?? null;
     await estadoImpresorasGuardado.registrar(equipo, datos);
-    res.json({ agente: true, equipo, ...datos });
+    res.json({ agente: true, equipo, ...datos, sincronizado,
+      ...(!sincronizado && { aviso: 'Se revisaron las impresoras, pero esta versión del agente no admite reiniciar la impresión desde el sistema.' }),
+    });
   } catch (err: any) {
     res.status(err.status === 503 ? 200 : err.status || 500).json(estadoImpresorasGuardado.sinConexion(err.message, agenteDesconectado()?.equipo));
   }

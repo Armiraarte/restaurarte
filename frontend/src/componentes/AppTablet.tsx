@@ -7,6 +7,8 @@ import { FlujoOrdenes } from './FlujoOrdenes';
 import { SeleccionTablet } from './SeleccionTablet';
 import { olvidarTablet } from '../services/accesoTablet';
 import {
+  escucharSesionCerrada,
+  getToken,
   logout as cerrarSesionCuenta,
   obtenerSesion,
   ROLES_APP_MESEROS,
@@ -62,10 +64,11 @@ export default function AppTablet() {
   useEffect(() => {
     let cancelado = false;
     let reintento: ReturnType<typeof setTimeout>;
-    const verificar = () =>
-      obtenerSesion()
+    const verificar = () => {
+      const token = getToken();
+      return obtenerSesion()
         .then((u) => {
-          if (cancelado) return;
+          if (cancelado || (u && getToken() !== token)) return;
           setCuenta(u && ROLES_APP_MESEROS.includes(u.rol) ? u : null);
           if (!u) setAvisoInicio(tomarAvisoSesion());
           setVerificandoCuenta(false);
@@ -73,6 +76,7 @@ export default function AppTablet() {
         .catch(() => {
           if (!cancelado) reintento = setTimeout(verificar, 3_000);
         });
+    };
     verificar();
     return () => {
       cancelado = true;
@@ -106,6 +110,10 @@ export default function AppTablet() {
   const [errorTurno, setErrorTurno] = useState<string | null>(null);
   const salirRef = useRef(salirSinCerrar);
   salirRef.current = salirSinCerrar;
+  useEffect(() => escucharSesionCerrada((aviso) => {
+    salirRef.current(aviso);
+    setVerificandoCuenta(false);
+  }), []);
   const abrirSesionTurno = useCallback(async () => {
     try {
       await iniciarSesionTablet();

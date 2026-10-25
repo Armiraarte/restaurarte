@@ -131,6 +131,19 @@ export function pantallaCompletaAlTocar() {
   });
 }
 
+/**
+ * Sin zoom con los dedos. Chrome (Android) ya lo bloquea con la etiqueta viewport e index.css;
+ * Safari (iPad) ignora esa etiqueta y necesita cancelar sus eventos de pellizco.
+ * Solo en pantallas táctiles: en la PC se puede seguir usando Ctrl + / Ctrl -.
+ */
+export function bloquearZoom() {
+  if (!window.matchMedia('(pointer: coarse)').matches) return;
+  const cancelar = (e: Event) => e.preventDefault();
+  for (const evento of ['gesturestart', 'gesturechange', 'gestureend']) {
+    document.addEventListener(evento, cancelar, { passive: false });
+  }
+}
+
 /** Se llama una sola vez al arrancar, antes de montar React, para no perder el evento de instalación. */
 export function iniciarPwa() {
   window.addEventListener('beforeinstallprompt', (e) => {

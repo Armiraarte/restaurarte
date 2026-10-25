@@ -2,11 +2,12 @@ import {lazy, Suspense, useEffect, useState, type ComponentType} from 'react';
 import {createRoot} from 'react-dom/client';
 import { AvisoVersionNueva } from './componentes/InstalarPwa.tsx';
 import { AlertasErrores, LimiteDeErrores } from './componentes/AlertasErrores.tsx';
-import { configurarAppPwa, iniciarPwa, pantallaCompletaAlTocar } from './services/pwaService.ts';
+import { bloquearZoom, configurarAppPwa, iniciarPwa, pantallaCompletaAlTocar } from './services/pwaService.ts';
 import { appActual } from './services/appNavigation.ts';
 import { esTabletEnNavegador, esTabletInstalada } from './services/accesoTablet.ts';
 import { DescargarApp } from './componentes/DescargarApp.tsx';
 import { registrarError, vigilarErrores } from './services/errores.ts';
+import { AvisoConexion } from './componentes/AvisoConexion.tsx';
 import './index.css';
 
 // Antes que todo: los errores se muestran en alertas en vez de cerrar la app (ver services/errores.ts).
@@ -20,6 +21,7 @@ if (tabletInstalada && appActual() !== 'meseros') window.history.replaceState(nu
 configurarAppPwa(tabletEnNavegador || appActual() === 'meseros');
 // También se activa en el selector inicial: cambiar de acceso conserva el documento.
 pantallaCompletaAlTocar();
+bloquearZoom();
 
 // Instalación, service worker y aviso de versión nueva.
 iniciarPwa();
@@ -87,6 +89,7 @@ function Aplicacion() {
         <Suspense fallback={<div className="h-dvh bg-neutral-100" />}>{app === 'meseros' ? <AppTablet /> : <App />}</Suspense>
       </LimiteDeErrores>
       <AvisoVersionNueva />
+      <AvisoConexion />
       <AlertasErrores />
     </>
   );

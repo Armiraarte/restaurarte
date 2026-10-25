@@ -3,7 +3,7 @@
 // Se actualiza sola con los avisos en vivo (useMesasTurno → services/enVivo.ts).
 import React, { useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { AlertTriangle, Banknote, Home, ListChecks, Loader2, LucideIcon, Receipt, ShoppingBag } from 'lucide-react';
+import { AlertTriangle, Banknote, Home, ListChecks, Loader2, LucideIcon, Receipt, ShoppingBag, Split } from 'lucide-react';
 import { etiquetaMesaRegistrada, MesaRegistrada } from '../services/mesasService';
 import { useMesasTurno } from '../services/sincronizacion';
 import { CuentaDetalle } from './CuentaDetalle';
@@ -114,9 +114,16 @@ export const CajasView: React.FC = () => {
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <div className="text-2xl font-bold tracking-tight leading-tight break-words">{etiquetaMesaRegistrada(m)}</div>
-                        <div className={`mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${tipo.etiqueta}`}>
-                          <tipo.Icono className="w-3.5 h-3.5" />
-                          {tipo.titulo}
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                          <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${tipo.etiqueta}`}>
+                            <tipo.Icono className="w-3.5 h-3.5" />
+                            {tipo.titulo}
+                          </span>
+                          {(m.cuentas_divididas ?? 0) > 0 && (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full border bg-violet-100 text-violet-800 border-violet-300">
+                              <Split className="w-3.5 h-3.5" /> DIVIDIDA EN {m.cuentas_divididas}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <span className="shrink-0 text-[11px] font-bold tracking-wide px-2 py-0.5 rounded-full border bg-amber-100 text-amber-800 border-amber-300">

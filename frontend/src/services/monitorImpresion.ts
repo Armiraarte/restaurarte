@@ -1,6 +1,6 @@
 // Monitor de la computadora de las impresoras (backend/src/monitorImpresion.ts): conexiones, desconexiones e
 // impresiones. Solo lo ve el usuario autorizado; a los demás el servidor les contesta 403.
-import { getToken } from './authService';
+import { fetchConSesion } from './authService';
 
 import type { MonitorImpresion } from './monitorCalculos';
 export * from './monitorCalculos';
@@ -11,7 +11,7 @@ export class SinPermisoMonitor extends Error {}
 export async function obtenerMonitorImpresion(): Promise<MonitorImpresion> {
   let res: Response;
   try {
-    res = await fetch('/api/monitor/impresion', { headers: { Authorization: `Bearer ${getToken() ?? ''}` } });
+    res = await fetchConSesion('/api/monitor/impresion');
   } catch {
     throw new Error('No se pudo conectar con el servidor.');
   }

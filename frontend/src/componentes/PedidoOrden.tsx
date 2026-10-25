@@ -53,6 +53,7 @@ import {
   nombrePapas,
   RepartoPedido,
   textoReparto,
+  CuentaDividida,
 } from '../services/pedidosService';
 import { imprimirTicketCocina } from '../services/ticketCocinaService';
 import { COLORES_CATEGORIA, fotoCategoria, iconoCategoria, logoBebida, NEON_CATEGORIA } from './iconosCategoria';
@@ -227,6 +228,8 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
   const ultimaOrden = useRef<OrdenBD | null>(null);
   const [detalle, setDetalle] = useState<DetalleOrdenBD[]>([]);
   const [extrasEnviados, setExtrasEnviados] = useState<ExtraOrdenBD[]>([]);
+  // Cuenta 1…N si ya se dividió con «Guardar e imprimir».
+  const [cuentasDivididas, setCuentasDivididas] = useState<CuentaDividida[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [categoriaAbierta, setCategoriaAbierta] = useState<CategoriaMenu | null>(null);
   // Pestaña de la cuadrícula rápida (Bebidas: Refrescos, Aguas, Jugos); si no hay una elegida, la primera.
@@ -289,7 +292,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
   const [descartando, setDescartando] = useState(false);
 
   const textoOrden = useRef('');
-  const actualizarOrden = useCallback((datos: { orden: OrdenBD; detalle: DetalleOrdenBD[]; extras?: ExtraOrdenBD[] }) => {
+  const actualizarOrden = useCallback((datos: { orden: OrdenBD; detalle: DetalleOrdenBD[]; extras?: ExtraOrdenBD[]; cuentas_divididas?: CuentaDividida[] }) => {
     // Una respuesta anterior al cobro no puede volver a abrir la edición.
     const actual = ultimaOrden.current;
     if (actual?.idOrden === datos.orden.idOrden && actual.estatus > datos.orden.estatus) return;
@@ -301,6 +304,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
     setOrden(datos.orden);
     setDetalle(datos.detalle);
     setExtrasEnviados(datos.extras ?? []);
+    setCuentasDivididas(datos.cuentas_divididas ?? []);
   }, []);
 
   useEffect(() => {
@@ -1104,7 +1108,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
         )}
       </AnimatePresence>, document.body)}
 
-      {/* Dividir la cuenta (solo calcula cuánto le toca a cada persona) */}
+      {/* Dividir la cuenta: cuánto le toca a cada persona; con «Guardar e imprimir» queda como Cuenta 1…N */}
       <AnimatePresence>
         {dividiendo && orden && (
           <motion.div
@@ -1123,7 +1127,16 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
               exit={{ scale: 0.95, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
             >
-              <DividirCuenta etiqueta={orden.etiqueta} total={orden.total} detalle={detalle} extras={extrasEnviados} onCerrar={() => setDividiendo(false)} />
+              <DividirCuenta
+                idOrden={orden.idOrden}
+                etiqueta={orden.etiqueta}
+                total={orden.total}
+                detalle={detalle}
+                extras={extrasEnviados}
+                guardadas={cuentasDivididas}
+                onGuardadas={setCuentasDivididas}
+                onCerrar={() => setDividiendo(false)}
+              />
             </motion.div>
           </motion.div>
         )}

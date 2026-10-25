@@ -23,7 +23,7 @@ import { ConfiguracionView } from './componentes/ConfiguracionView';
 import { InicioView } from './componentes/InicioView';
 import { AgotadosView } from './componentes/AgotadosView';
 import { CocinaView } from './componentes/CocinaView';
-import { getToken, logout, obtenerSesion, Usuario } from './services/authService';
+import { escucharSesionCerrada, getToken, logout, obtenerSesion, tomarAvisoSesion, Usuario } from './services/authService';
 import { useMesasTurno, useTurnoActual } from './services/sincronizacion';
 import { useTabletsEnLinea } from './services/tabletsService';
 import { AvisoIniciarTurno, BannerSinTurno, SeccionSinTurno } from './componentes/TurnoRequerido';
@@ -35,6 +35,7 @@ import { LimiteDeErrores } from './componentes/AlertasErrores';
 export default function App() {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [verificandoSesion, setVerificandoSesion] = useState(true);
+  const [avisoInicio, setAvisoInicio] = useState<string | null>(null);
   // Token con el que se verificó la sesión que se está mostrando. La caja y la app de meseros comparten
   // la sesión del navegador: si después se entró con una cuenta de tablet (en otra pestaña, o con «atrás»
   // el navegador devuelve la caja como la tenía en memoria), el token ya no es este y se vuelve a verificar
@@ -51,8 +52,9 @@ export default function App() {
       const token = getToken();
       obtenerSesion()
         .then((u) => {
-          if (cancelado) return;
+          if (cancelado || (u && getToken() !== token)) return;
           setUsuario(u);
+          if (!u) setAvisoInicio(tomarAvisoSesion());
           setTokenVerificado(u ? token : null);
           setVerificandoSesion(false);
         })
@@ -66,6 +68,13 @@ export default function App() {
       clearTimeout(reintento);
     };
   }, [revision]);
+
+  useEffect(() => escucharSesionCerrada((aviso) => {
+    setUsuario(null);
+    setTokenVerificado(null);
+    setVerificandoSesion(false);
+    setAvisoInicio(aviso);
+  }), []);
 
   // Cada vez que se vuelve a la caja (atrás/adelante, otra pestaña, la app vuelve a la vista) o cambia la
   // sesión guardada, se revisa si sigue siendo la misma; si no, se verifica de nuevo.
@@ -93,12 +102,15 @@ export default function App() {
 
   const handleLogout = () => {
     logout();
+    tomarAvisoSesion();
+    setAvisoInicio(null);
     setUsuario(null);
     setTokenVerificado(null);
   };
 
   const entrar = (u: Usuario) => {
     setUsuario(u);
+    setAvisoInicio(null);
     setTokenVerificado(getToken());
   };
 
@@ -116,7 +128,7 @@ export default function App() {
   }
 
   if (!usuario) {
-    return <InicioSesion app="caja" onEntrar={entrar} />;
+    return <InicioSesion app="caja" aviso={avisoInicio} onEntrar={entrar} />;
   }
 
   // Las cuentas de tipo tablet no usan la caja: van a la app de meseros.

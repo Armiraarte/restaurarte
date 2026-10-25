@@ -1,4 +1,4 @@
-import { getToken } from './authService';
+import { fetchConSesion } from './authService';
 
 export interface Impresora {
   nombre: string;
@@ -14,6 +14,8 @@ export interface EstadoImpresion {
   /** Computadora que imprime cuando está conectada por internet (la del instalador). */
   equipo?: string | null;
   configuracionConservada?: boolean;
+  sincronizado?: boolean;
+  aviso?: string;
   impresoras?: Impresora[];
   ticket?: Impresora | null;
   asignaciones?: Record<DestinoImpresion, string | null>;
@@ -26,9 +28,9 @@ export type DestinoImpresion = 'cocina' | 'caja';
 async function pedir(ruta: string, init?: RequestInit) {
   let res: Response;
   try {
-    res = await fetch(`/api/impresion${ruta}`, {
+    res = await fetchConSesion(`/api/impresion${ruta}`, {
       ...init,
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      headers: { 'Content-Type': 'application/json' },
     });
   } catch {
     throw new Error('No se pudo conectar con el servidor.');
@@ -50,7 +52,9 @@ export function obtenerEstadoImpresion(): Promise<EstadoImpresion> {
  * Sincronizar: la computadora de las impresoras vuelve a buscarlas en Windows y reinicia limpio su impresión.
  * Si está desconectada, `error` dice cuál es, desde qué hora y qué hacer.
  */
-export function sincronizarImpresoras(): Promise<EstadoImpresion> {
+export async function sincronizarImpresoras(): Promise<EstadoImpresion> {
+  const sesion = await fetchConSesion('/api/auth/me', { signal: AbortSignal.timeout(8_000) });
+  if (!sesion.ok) throw new Error('Tu sesión ya no es válida. Vuelve a iniciar sesión para sincronizar.');
   return pedir('/sincronizar', { method: 'POST', body: '{}' });
 }
 
@@ -70,7 +74,7 @@ export function imprimirPrueba(destino: DestinoImpresion = 'caja'): Promise<{ ok
 export async function descargarInstaladorImpresoras(alAvanzar?: (avance: number) => void): Promise<void> {
   let res: Response;
   try {
-    res = await fetch('/api/impresion/instalador', { headers: { Authorization: `Bearer ${getToken()}` } });
+    res = await fetchConSesion('/api/impresion/instalador');
   } catch {
     throw new Error('No se pudo conectar con el servidor.');
   }

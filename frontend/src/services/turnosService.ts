@@ -1,6 +1,6 @@
 // Turnos: el de caja lo inicia a propósito el administrador o cajero (botón «Iniciar turno»); sin él no se cobra
 // ni se activan tabletas. Cada tablet abre su sesión dentro de ese turno. BD: tablas turnos y sesiones_tablet.
-import { getToken, revisarSesionReemplazada } from './authService';
+import { fetchConSesion, revisarSesionReemplazada } from './authService';
 
 /** Error que indica que la caja aún no inicia turno (la tablet no puede empezar). */
 export class SinTurnoError extends Error {}
@@ -15,7 +15,7 @@ export class CortePendienteError extends Error {
 async function pedir<T>(ruta: string, metodo: 'GET' | 'POST' = 'POST'): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`/api/turnos${ruta}`, { method: metodo, headers: { Authorization: `Bearer ${getToken() ?? ''}` } });
+    res = await fetchConSesion(`/api/turnos${ruta}`, { method: metodo });
   } catch {
     throw new Error('No se pudo conectar con el servidor.');
   }

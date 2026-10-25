@@ -1,5 +1,5 @@
 // Registro de mesas en la base de datos (tabla `mesas` de Laravel): POST /api/mesas
-import { getToken } from './authService';
+import { fetchConSesion } from './authService';
 
 /** Fila de `mesas`. BD: tipo_venta_id 1 = comer aquí, 2 = para llevar; estatus 0 = ABIERTA, 1 = PAGANDO (pidió la cuenta), 2 = PAGADO. */
 export interface MesaRegistrada {
@@ -12,6 +12,7 @@ export interface MesaRegistrada {
   estatus: number;
   creado_en?: string;
   actualizado_en?: string; // al cobrarla (PAGADO) es la hora del cobro
+  cuentas_divididas?: number; // en cuántas cuentas se dividió con el botón Dividir (0 = no se dividió)
 }
 
 /**
@@ -21,9 +22,9 @@ export interface MesaRegistrada {
 export async function registrarMesa(codigo: string, paraLlevar: boolean, origen?: 'mesa' | 'llamada' | 'nombre'): Promise<{ mesa: MesaRegistrada; creada: boolean }> {
   let res: Response;
   try {
-    res = await fetch('/api/mesas', {
+    res = await fetchConSesion('/api/mesas', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken() ?? ''}` },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ nombre: codigo, tipo_venta_id: paraLlevar ? 2 : 1, ...(origen && { origen }) }),
     });
   } catch {
@@ -38,9 +39,9 @@ export async function registrarMesa(codigo: string, paraLlevar: boolean, origen?
 export async function cambiarMesa(id: number, mesa: string): Promise<{ mesa: MesaRegistrada; anterior: string }> {
   let res: Response;
   try {
-    res = await fetch(`/api/mesas/${id}/cambiar`, {
+    res = await fetchConSesion(`/api/mesas/${id}/cambiar`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken() ?? ''}` },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mesa }),
     });
   } catch {
@@ -58,7 +59,7 @@ export async function cambiarMesa(id: number, mesa: string): Promise<{ mesa: Mes
 export async function listarMesasTurno(): Promise<{ turno: { id: number } | null; mesas: MesaRegistrada[]; mesaPrueba?: string | null }> {
   let res: Response;
   try {
-    res = await fetch('/api/mesas', { headers: { Authorization: `Bearer ${getToken() ?? ''}` } });
+    res = await fetchConSesion('/api/mesas');
   } catch {
     throw new Error('No se pudo conectar con el servidor.');
   }

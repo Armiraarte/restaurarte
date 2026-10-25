@@ -1,6 +1,6 @@
 // Tablets en línea y verificación de conexión: /api/tablets
 import { useCallback, useEffect, useState } from 'react';
-import { getToken, revisarSesionReemplazada } from './authService';
+import { fetchConSesion, revisarSesionReemplazada } from './authService';
 import { cadaTantoVisible } from './sincronizacion';
 
 export interface TabletEnLinea {
@@ -17,10 +17,9 @@ export interface TabletEnLinea {
 async function pedir<T>(metodo: 'GET' | 'POST', ruta: string, cuerpo?: unknown): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`/api/tablets${ruta}`, {
+    res = await fetchConSesion(`/api/tablets${ruta}`, {
       method: metodo,
       headers: {
-        Authorization: `Bearer ${getToken() ?? ''}`,
         ...(cuerpo ? { 'Content-Type': 'application/json' } : {}),
       },
       body: cuerpo ? JSON.stringify(cuerpo) : undefined,

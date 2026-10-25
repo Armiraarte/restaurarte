@@ -17,6 +17,7 @@ import { mysqlDisponible } from './usuarios.js';
 import { sesionTabletAbierta, turnoAbierto } from './turnos.js';
 import { asignarNombreMesa, cambiarMesaOrden, ErrorAltaMesa, validarNumeroMesa } from './numeracionMesas.js';
 import { esOrigenOrden, origenOrden, tieneOrigenOrden } from './origenOrden.js';
+import { personasPorOrden } from './cuentasDivididas.js';
 
 const TIPO_VENTA = { comerAqui: 1, paraLlevar: 2 } as const;
 
@@ -98,7 +99,13 @@ mesasRouter.get('/', async (_req, res) => {
       ORDER BY nombre REGEXP '^[0-9]+$' DESC, CAST(nombre AS UNSIGNED), nombre, idOrden`,
     prueba ? [turno.idTurno, prueba, turno.fecha_inicio] : [turno.idTurno],
   );
-  res.json({ turno: { idTurno: turno.idTurno, fecha_inicio: turno.fecha_inicio }, mesas, mesaPrueba: prueba });
+  // Cajas y Ventas marcan las que se dividieron (botón Dividir): «DIVIDIDA EN 5».
+  const divididas = await personasPorOrden(mesas.map((m) => m.id));
+  res.json({
+    turno: { idTurno: turno.idTurno, fecha_inicio: turno.fecha_inicio },
+    mesas: mesas.map((m) => ({ ...m, cuentas_divididas: divididas.get(m.id) ?? 0 })),
+    mesaPrueba: prueba,
+  });
 });
 
 /**

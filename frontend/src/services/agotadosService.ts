@@ -1,7 +1,7 @@
 // Productos que se terminaron (apartado «Agotados»): mientras lo estén, en el menú salen en gris y no se pueden
 // comandar. GET/PUT/DELETE /api/agotados; cada cambio llega en vivo (aviso 'menu') a las pantallas abiertas.
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { getToken } from './authService';
+import { fetchConSesion } from './authService';
 import { useEnVivo } from './enVivo';
 import { useCadaTantoVisible } from './sincronizacion';
 
@@ -14,9 +14,9 @@ export interface Agotado {
 async function pedir(ruta: string, init: RequestInit = {}): Promise<Agotado[]> {
   let res: Response;
   try {
-    res = await fetch(`/api/agotados${ruta}`, {
+    res = await fetchConSesion(`/api/agotados${ruta}`, {
       ...init,
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken() ?? ''}` },
+      headers: { 'Content-Type': 'application/json' },
     });
   } catch {
     throw new Error('No se pudo conectar con el servidor.');

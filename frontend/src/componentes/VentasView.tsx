@@ -2,7 +2,7 @@
 // de reimprimir el ticket de cobro. Se actualiza sola con los avisos en vivo (useMesasTurno).
 import React, { useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { AlertTriangle, CheckCircle2, Eye, Home, Loader2, Printer, ShoppingBag, TrendingUp } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Eye, Home, Loader2, Printer, ShoppingBag, Split, TrendingUp } from 'lucide-react';
 import { etiquetaMesaRegistrada, MesaRegistrada } from '../services/mesasService';
 import { useMesasTurno, useTurnoActual } from '../services/sincronizacion';
 import { reimprimirTicketCobro } from '../services/pedidosService';
@@ -87,7 +87,14 @@ export const VentasView: React.FC = () => {
                     <CheckCircle2 className="w-4 h-4" />
                   </span>
                   <div className="min-w-0">
-                    <div className="text-sm font-bold truncate" title={etiquetaMesaRegistrada(m)}>{etiquetaMesaRegistrada(m)}</div>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-sm font-bold truncate" title={etiquetaMesaRegistrada(m)}>{etiquetaMesaRegistrada(m)}</span>
+                      {(m.cuentas_divididas ?? 0) > 0 && (
+                        <span title={`Cuenta dividida en ${m.cuentas_divididas}`} className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-violet-100 text-violet-800 text-[10px] font-bold">
+                          <Split className="w-3 h-3" /> DIVIDIDA EN {m.cuentas_divididas}
+                        </span>
+                      )}
+                    </div>
                     {imp && !imp.cargando && imp.texto ? <p role="status" title={imp.texto} className={`truncate text-[11px] ${imp.ok ? 'text-emerald-700' : 'text-amber-700'}`}>{imp.texto}</p> : (
                       <div className="text-[11px] text-neutral-500 flex items-center gap-1">
                         {paraLlevar ? <ShoppingBag className="w-3 h-3 shrink-0" /> : <Home className="w-3 h-3 shrink-0" />}

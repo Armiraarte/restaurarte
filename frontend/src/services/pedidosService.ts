@@ -1,5 +1,5 @@
 // Menú y pedidos desde la base de datos (API: backend/src/pedidos.ts).
-import { getToken } from './authService';
+import { fetchConSesion } from './authService';
 import { terminosCategoria } from './terminosPedido';
 
 export interface ComplementoMenu {
@@ -90,9 +90,9 @@ export interface DetalleOrdenBD {
 async function pedir<T>(ruta: string, init: RequestInit = {}): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`/api${ruta}`, {
+    res = await fetchConSesion(`/api${ruta}`, {
       ...init,
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken() ?? ''}`, ...init.headers },
+      headers: { 'Content-Type': 'application/json', ...init.headers },
     });
   } catch {
     throw new Error('No se pudo conectar con el servidor.');
@@ -132,8 +132,40 @@ export const obtenerMenu = () => pedir<{ categorias: CategoriaMenu[]; terminos?:
     papas: ['Hamburguesas', 'Lonches'].includes(c.nombre) ? d.papas ?? null : null,
   })));
 
-/** Orden con su detalle y total. */
-export const obtenerOrden = (idOrden: number) => pedir<{ orden: OrdenBD; detalle: DetalleOrdenBD[]; extras: ExtraOrdenBD[] }>(`/ordenes/${idOrden}`);
+/** Orden con su detalle y total (y Cuenta 1…N si se dividió). */
+export const obtenerOrden = (idOrden: number) =>
+  pedir<{ orden: OrdenBD; detalle: DetalleOrdenBD[]; extras: ExtraOrdenBD[]; cuentas_divididas?: CuentaDividida[] }>(`/ordenes/${idOrden}`);
+
+/** Una persona de una cuenta dividida, como la guardó el servidor (backend/src/cuentasDivididas.ts). */
+export interface CuentaDividida {
+  numero: number; // 1 = Cuenta 1
+  personas: number;
+  modo: 'iguales' | 'productos';
+  importe: number;
+  total_orden: number;
+  productos: { cantidad: number; nombre: string; importe: number }[];
+  extras: { descripcion: string; importe: number }[];
+  creado_por: string;
+  creado_en: string;
+}
+export type ImpresionCuentas = { ok: boolean; impresas: number; error?: string };
+
+/** La división sigue sirviendo si sus cuentas suman el total actual (no se agregó nada después). */
+export const divisionVigente = (cuentas: { importe: number }[] | undefined, total: number) =>
+  !!cuentas?.length && cuentas.reduce((acc, c) => acc + Math.round(c.importe * 100), 0) === Math.round(total * 100);
+
+/**
+ * Guarda la cuenta dividida como Cuenta 1…N de la orden (reemplaza la anterior) e imprime un ticket por persona.
+ * `total` es el que se ve en pantalla: si la orden cambió mientras tanto, el servidor no la guarda.
+ */
+export const guardarCuentasDivididas = (
+  idOrden: number,
+  datos: { modo: 'iguales' | 'productos'; personas: number; total: number; asignadas?: Record<string, number> },
+) => pedir<{ cuentas: CuentaDividida[]; impresion: ImpresionCuentas }>(`/ordenes/${idOrden}/dividir`, { method: 'POST', body: JSON.stringify(datos) });
+
+/** Vuelve a imprimir los tickets de las cuentas divididas guardadas. */
+export const reimprimirCuentasDivididas = (idOrden: number) =>
+  pedir<{ impresion: ImpresionCuentas }>(`/ordenes/${idOrden}/cuentas-divididas/imprimir`, { method: 'POST' });
 
 /** Manda productos a cocina: guarda el detalle (orden_has_detalle) y recalcula el total. */
 export const enviarPedido = (

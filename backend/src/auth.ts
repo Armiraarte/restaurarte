@@ -1,6 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { randomUUID } from 'node:crypto';
 import { config } from './config.js';
 import { aPublico, buscarPorId, buscarPorUsuario, type Usuario, type UsuarioPublico } from './usuarios.js';
 import { abrirSesionTablet, estadoSesionTablet } from './sesionesTablet.js';
@@ -51,7 +52,7 @@ authRouter.post('/login', async (req, res) => {
 
 /** Token de sesión; las tablets llevan el id de su sesión (sid, ver sesionesTablet.ts). */
 export function emitirToken(usuario: Usuario, sid?: string): string {
-  return jwt.sign({ sub: usuario.id, rol: usuario.rol, ...(sid && { sid }) }, config.jwtSecret, { expiresIn: config.jwtExpiresIn });
+  return jwt.sign({ sub: usuario.id, rol: usuario.rol, ...(sid && { sid }) }, config.jwtSecret, { expiresIn: config.jwtExpiresIn, jwtid: randomUUID() });
 }
 
 /** Usuario dueño del token o, si ya no sirve, la respuesta 401. */
@@ -99,6 +100,13 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-authRouter.get('/me', requireAuth, (req, res) => {
+authRouter.get('/me', (req, res, next) => {
+  // Abrir la API en una pestaña no envía el token del navegador: vuelve a la app para verificarlo.
+  if (req.get('Sec-Fetch-Mode') === 'navigate' && req.accepts('html')) {
+    res.redirect(303, '/?app=caja');
+    return;
+  }
+  next();
+}, requireAuth, (req, res) => {
   res.json({ usuario: req.usuario });
 });

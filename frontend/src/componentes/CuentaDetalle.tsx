@@ -4,8 +4,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
-import { AlertTriangle, Clock, Home, Loader2, ShoppingBag, Tablet, X } from 'lucide-react';
-import { DetalleOrdenBD, ESTATUS_ORDEN, ExtraOrdenBD, nombreDetalle, obtenerOrden, OrdenBD } from '../services/pedidosService';
+import { AlertTriangle, Clock, Home, Loader2, Printer, ShoppingBag, Split, Tablet, X } from 'lucide-react';
+import {
+  CuentaDividida, DetalleOrdenBD, divisionVigente, ESTATUS_ORDEN, ExtraOrdenBD, nombreDetalle, obtenerOrden, OrdenBD, reimprimirCuentasDivididas,
+} from '../services/pedidosService';
 import { useEnVivo } from '../services/enVivo';
 import { COLOR_ESTATUS_ORDEN, EtiquetaCarneExtra, EtiquetaConPapas, EtiquetaComplementosExtra, EtiquetaConQueso, EtiquetaSinQueso } from './PedidoEnviado';
 import { ListaExtras } from './ListaExtras';
@@ -24,6 +26,8 @@ export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones }) 
   const [orden, setOrden] = useState<OrdenBD | null>(null);
   const [detalle, setDetalle] = useState<DetalleOrdenBD[]>([]);
   const [extras, setExtras] = useState<ExtraOrdenBD[]>([]);
+  const [cuentas, setCuentas] = useState<CuentaDividida[]>([]);
+  const [impresionCuentas, setImpresionCuentas] = useState<{ cargando: boolean; ok?: boolean; texto?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const cargar = useCallback(async () => {
@@ -32,6 +36,7 @@ export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones }) 
       setOrden(datos.orden);
       setDetalle(datos.detalle);
       setExtras(datos.extras ?? []);
+      setCuentas(datos.cuentas_divididas ?? []);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cargar la cuenta.');
@@ -81,6 +86,21 @@ export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones }) 
   const piezas = detalle.reduce((acc, d) => acc + d.cantidad, 0);
   const estatus = orden?.estatus ?? 0;
   const paraLlevar = orden?.tipo_orden === 2;
+  const vigente = divisionVigente(cuentas, orden?.total ?? 0);
+
+  const reimprimirCuentas = async () => {
+    setImpresionCuentas({ cargando: true });
+    try {
+      const { impresion } = await reimprimirCuentasDivididas(idOrden);
+      setImpresionCuentas({
+        cargando: false,
+        ok: impresion.ok,
+        texto: impresion.ok ? `Se imprimieron ${impresion.impresas} tickets.` : `Se imprimieron ${impresion.impresas} de ${cuentas.length}: ${impresion.error ?? 'falló la impresora'}`,
+      });
+    } catch (err) {
+      setImpresionCuentas({ cargando: false, ok: false, texto: err instanceof Error ? err.message : 'No se imprimieron los tickets.' });
+    }
+  };
 
   return createPortal(
     <motion.div
@@ -125,6 +145,11 @@ export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones }) 
             <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white/10 text-neutral-200">
               <Clock className="w-4 h-4" /> {orden ? hora(orden.creado_en) : '—'}
             </span>
+            {cuentas.length > 0 && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-violet-500 text-white font-bold">
+                <Split className="w-4 h-4" /> DIVIDIDA EN {cuentas.length}
+              </span>
+            )}
           </div>
         </div>
 
@@ -168,6 +193,52 @@ export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones }) 
             ))
           )}
           <ListaExtras extras={extras} />
+
+          {/* Cuenta dividida (botón Dividir): lo que le tocó a cada persona y su ticket */}
+          {cuentas.length > 0 && (
+            <section aria-label="Cuenta dividida" className="mt-3 mb-1 rounded-xl border border-violet-200 bg-violet-50/70 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-xs font-bold uppercase tracking-widest text-violet-700 flex items-center gap-1.5">
+                    <Split className="w-4 h-4 shrink-0" /> Cuenta dividida en {cuentas.length}
+                  </div>
+                  <div className="text-[11px] text-violet-900/70">
+                    {cuentas[0].modo === 'iguales' ? 'Partes iguales' : 'Por productos'} · {cuentas[0].creado_por} · {hora(cuentas[0].creado_en)}
+                  </div>
+                </div>
+                <button
+                  onClick={reimprimirCuentas}
+                  disabled={impresionCuentas?.cargando}
+                  className="shrink-0 h-9 px-3 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {impresionCuentas?.cargando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />} Reimprimir tickets
+                </button>
+              </div>
+              {!vigente && (
+                <p className="mt-2 text-xs font-semibold text-amber-800 flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4 shrink-0" /> La orden cambió después de dividirla: estas cuentas ya no suman el total.
+                </p>
+              )}
+              {impresionCuentas?.texto && (
+                <p role="status" className={`mt-2 text-xs font-semibold ${impresionCuentas.ok ? 'text-emerald-700' : 'text-amber-800'}`}>{impresionCuentas.texto}</p>
+              )}
+              <ul className="mt-2 divide-y divide-violet-100">
+                {cuentas.map((c) => (
+                  <li key={c.numero} className="py-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-bold text-violet-900">Cuenta {c.numero}</span>
+                      <span className="font-mono font-bold">{dinero(c.importe)}</span>
+                    </div>
+                    {c.modo === 'productos' && (
+                      <div className="text-[11px] text-neutral-600 leading-snug break-words">
+                        {[...c.productos.map((p) => `${p.cantidad} ${p.nombre}`), ...c.extras.map((e) => e.descripcion)].join(' · ')}
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         </div>
 
         {/* Total */}
