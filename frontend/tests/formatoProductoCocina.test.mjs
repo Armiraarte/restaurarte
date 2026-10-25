@@ -1,6 +1,18 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { formatoProductoCocina } from '../src/services/formatoProductoCocina.ts';
+import { formatoProductoCocina, SOLO_QUESO } from '../src/services/formatoProductoCocina.ts';
+
+test('CON lo que sí lleva se imprime; si solo queda el queso sale CON QUESO aunque la marca de queso se oculte', () => {
+  assert.deepEqual(formatoProductoCocina({ categoria: 'Lonches', nombre: 'Lonches · Pierna', cantidad: 1, con_queso: false, descripcion: ['CON LECHUGA'] }),
+    { renglones: [{ cantidad: 1, nombre: 'LONCH PIERNA' }], descripcion: ['CON LECHUGA'] });
+  assert.deepEqual(formatoProductoCocina({ categoria: 'Lonches', nombre: 'Lonches · Pierna', cantidad: 1, con_queso: true, descripcion: [SOLO_QUESO] }),
+    { renglones: [{ cantidad: 1, nombre: 'LONCH PIERNA' }], descripcion: ['CON QUESO'] });
+  assert.deepEqual(formatoProductoCocina({ categoria: 'Sopes', nombre: 'Sopes · Pollo', cantidad: 2, con_queso: true, descripcion: [SOLO_QUESO] }),
+    { renglones: [{ cantidad: 2, nombre: 'SOP POLLO Q' }], descripcion: ['CON QUESO'] });
+  // La marca de queso agregado (tacos) sigue sin imprimirse: la Q ya lo dice.
+  assert.deepEqual(formatoProductoCocina({ categoria: 'Tacos', nombre: 'Tacos · Barbacoa', cantidad: 2, con_queso: true, descripcion: ['CON QUESO', 'CON SALSA'] }),
+    { renglones: [{ cantidad: 2, nombre: 'T B Q' }], descripcion: ['CON SALSA'] });
+});
 
 test('las categorías usan las abreviaturas solicitadas, sin cambiar el catálogo', () => {
   const casos = [

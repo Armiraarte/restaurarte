@@ -1,3 +1,5 @@
+import { SOLO_QUESO } from './formatoProductoCocina.ts';
+
 export const esQueso = (c: { nombre: string }) => c.nombre.trim().toLocaleLowerCase('es') === 'queso';
 export const ordenarComplementos = <T extends { nombre: string }>(lista: T[]): T[] =>
   [...lista].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }));
@@ -5,8 +7,9 @@ export const ordenarComplementos = <T extends { nombre: string }>(lista: T[]): T
 /**
  * Lo más corto para cocina (en la comanda SIN sale como NO). Con todo no agrega renglones.
  *   - Se quitó todo:                 SOLO
- *   - Se quitó más de lo que queda:  SOLO CON LECHUGA   (lo que sí lleva)
+ *   - Se quitó más de lo que queda:  CON LECHUGA, CEBOLLA   (lo que sí lleva; lo demás no va)
  *   - Si no:                         SIN CHILE, CEBOLLA, CREMA   (lo que se quitó)
+ * Si lo único que queda es el queso va SOLO_QUESO, que en papel sale «CON QUESO» (ver formatoProductoCocina).
  */
 export function complementosTicket<T extends { id: number; nombre: string }>(
   ofrecidos: T[],
@@ -29,7 +32,7 @@ export function complementosTicket<T extends { id: number; nombre: string }>(
     ...(todoQuitado
       ? ['SOLO', ...sinQuesoAparte]
       : quedan.length && cuantosQuitados > quedan.length
-        ? [`SOLO CON ${quedan.join(', ')}`, ...sinQuesoAparte]
+        ? [quedan.length === 1 && quedan[0] === 'QUESO' ? SOLO_QUESO : `CON ${quedan.join(', ')}`, ...sinQuesoAparte]
         : nombres.length ? [`SIN ${nombres.join(', ')}`] : []),
   ];
 }

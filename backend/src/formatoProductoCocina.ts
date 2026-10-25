@@ -11,6 +11,12 @@ interface ProductoCocina {
 const normal = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleLowerCase('es');
 export const mayusculasComanda = (texto: string) => texto.toLocaleUpperCase('es-MX');
 export const indicacionComanda = (texto: string) => mayusculasComanda(texto).replace(/(?<![\p{L}\p{M}\p{N}_])SIN(?![\p{L}\p{M}\p{N}_])/gu, 'NO');
+/**
+ * Se quit\u00f3 todo menos el queso (complementos.ts). En papel sale \u00abCON QUESO\u00bb; adentro se escribe distinto porque
+ * \u00abCON QUESO\u00bb a secas es la marca de queso agregado, que no se imprime (ya va como Q en el nombre).
+ */
+export const SOLO_QUESO = 'CON QUESO NADA M\u00c1S';
+const textoIndicacion = (d: string) => (normal(d) === normal(SOLO_QUESO) ? 'CON QUESO' : indicacionComanda(d));
 const ABREVIATURAS: Record<string, string> = {
   tacos: 'T', 'tacos dorados': 'T', quesadillas: 'Q', sopes: 'SOP', enchiladas: 'ENCHI',
   tostadas: 'TOS', burritas: 'Burri', lonches: 'Lonch', hamburguesas: 'Ham', ensaladas: 'Ensa', salchichas: 'Salch',
@@ -49,7 +55,7 @@ function abreviarSabor(nombre: string, categoria: string): string {
 
 export function formatoProductoCocina(p: ProductoCocina): { renglones: { cantidad: number; nombre: string }[]; descripcion: string[] } {
   const categoria = normal(p.categoria ?? '');
-  const conQueso = p.con_queso ?? p.descripcion.some((d) => normal(d) === 'con queso');
+  const conQueso = p.con_queso ?? p.descripcion.some((d) => ['con queso', normal(SOLO_QUESO)].includes(normal(d)));
   if (p.reparto?.length) {
     const tamano = p.nombre.match(/(\s*\([^)]*\))\s*(?:Q)?$/i)?.[1] ?? '';
     const sabores = new Set(p.reparto.map((r) => normal(`${r.cantidad} ${r.opcion}`)));
@@ -62,7 +68,7 @@ export function formatoProductoCocina(p: ProductoCocina): { renglones: { cantida
         con_queso: r.con_queso ?? conQueso,
         descripcion: [],
       }).renglones),
-      descripcion: p.descripcion.filter((d) => !['con todo', 'con queso'].includes(normal(d)) && !sabores.has(normal(d))).map(indicacionComanda),
+      descripcion: p.descripcion.filter((d) => !['con todo', 'con queso'].includes(normal(d)) && !sabores.has(normal(d))).map(textoIndicacion),
     };
   }
   let quesoEnRelleno = false;
@@ -96,6 +102,6 @@ export function formatoProductoCocina(p: ProductoCocina): { renglones: { cantida
     quesoEnRelleno = /(?:^|\s)Q(?=\s|$)/i.test(nombre);
   }
   const renglones = [{ cantidad: p.cantidad, nombre: mayusculasComanda(marcarQueso(nombre).replace(/\s+con\s+/gi, ', ')) }];
-  const descripcion = p.descripcion.filter((d) => !['con todo', 'con queso'].includes(normal(d))).map(indicacionComanda);
+  const descripcion = p.descripcion.filter((d) => !['con todo', 'con queso'].includes(normal(d))).map(textoIndicacion);
   return { renglones, descripcion };
 }
