@@ -1,9 +1,9 @@
 // Dividir la cuenta (botón junto al historial): cuánto le toca a cada persona, en partes iguales o por productos.
 // Solo calcula: la orden y el cobro no cambian (la caja cobra el total como siempre).
 import React, { useMemo, useState } from 'react';
-import { Minus, Plus, Split, Users, X } from 'lucide-react';
+import { Lock, Minus, Plus, Split, Users, X } from 'lucide-react';
 import { DetalleOrdenBD, ExtraOrdenBD, nombreDetalle } from '../services/pedidosService';
-import { partesIguales, totalesPorPersona, unidadesDeCuenta } from '../services/dividirCuenta';
+import { alternarAsignacion, partesIguales, totalesPorPersona, unidadesDeCuenta } from '../services/dividirCuenta';
 
 const pesos = (centavos: number) => `$${(centavos / 100).toFixed(2)}`;
 const MAX_PERSONAS = 12;
@@ -62,15 +62,12 @@ export function DividirCuenta({
     const nuevas = Math.min(MAX_PERSONAS, Math.max(2, personas + delta));
     setPersonas(nuevas);
     if (activa >= nuevas) setActiva(nuevas - 1);
+    if (nuevas < personas) {
+      setAsignadas((actual) => Object.fromEntries(Object.entries(actual).filter(([, persona]) => persona < nuevas)));
+    }
   };
   // Tocar una pieza la da a la persona elegida; tocarla otra vez (misma persona) la deja sin asignar.
-  const tocarPieza = (clave: string) =>
-    setAsignadas((actual) => {
-      const nuevo = { ...actual };
-      if (nuevo[clave] === activa) delete nuevo[clave];
-      else nuevo[clave] = activa;
-      return nuevo;
-    });
+  const tocarPieza = (clave: string) => setAsignadas((actual) => alternarAsignacion(actual, clave, activa));
 
   return (
     <div className="w-full max-w-3xl max-h-full overflow-hidden bg-white rounded-2xl shadow-xl flex flex-col">
@@ -85,7 +82,7 @@ export function DividirCuenta({
       </div>
 
       <div className="shrink-0 px-5 pt-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="grid grid-cols-2 gap-1 p-1 bg-neutral-100 rounded-xl">
+        <div className="flex flex-wrap gap-1 p-1 bg-neutral-100 rounded-xl">
           {(
             [
               ['iguales', 'Partes iguales'],
@@ -117,14 +114,14 @@ export function DividirCuenta({
 
       <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4">
         {modo === 'iguales' ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <ul className="space-y-2">
             {iguales.map((centavos, i) => (
-              <div key={i} className={`rounded-xl border-2 p-3 ${color(i)}`}>
-                <div className="text-xs font-bold">Persona {i + 1}</div>
-                <div className="font-mono text-2xl font-black">{pesos(centavos)}</div>
-              </div>
+              <li key={i} className={`rounded-xl border-2 px-3 py-2 flex items-center justify-between gap-3 ${color(i)}`}>
+                <span className="text-sm font-bold">Persona {i + 1}</span>
+                <span className="font-mono text-2xl font-black">{pesos(centavos)}</span>
+              </li>
             ))}
-          </div>
+          </ul>
         ) : unidades.length === 0 ? (
           <p className="text-sm text-neutral-500">Todavía no hay nada enviado en esta orden.</p>
         ) : (
@@ -132,36 +129,41 @@ export function DividirCuenta({
             {/* Persona a la que se le dan las piezas que se toquen */}
             <div>
               <div className="text-xs font-semibold text-neutral-500 mb-1.5">Elige la persona y toca lo que va a pagar:</div>
-              <div className="flex flex-wrap gap-2">
+              <ul className="space-y-2">
                 {totales.map((centavos, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => setActiva(i)}
-                    aria-pressed={activa === i}
-                    className={`h-12 px-3 rounded-xl border-2 text-left leading-tight cursor-pointer ${color(i)} ${activa === i ? 'ring-4 ring-neutral-900/20' : 'opacity-70'}`}
-                  >
-                    <span className="block text-xs font-bold">Persona {i + 1}</span>
-                    <span className="block font-mono text-sm font-black">{pesos(centavos)}</span>
-                  </button>
+                  <li key={i}>
+                    <button
+                      type="button"
+                      onClick={() => setActiva(i)}
+                      aria-pressed={activa === i}
+                      className={`w-full min-h-12 px-3 py-2 rounded-xl border-2 flex items-center justify-between gap-3 text-left leading-tight cursor-pointer ${color(i)} ${activa === i ? 'ring-4 ring-neutral-900/20' : 'opacity-70'}`}
+                    >
+                      <span className="text-sm font-bold">Persona {i + 1}</span>
+                      <span className="font-mono text-lg font-black">{pesos(centavos)}</span>
+                    </button>
+                  </li>
                 ))}
-                <span className="h-12 px-3 rounded-xl border-2 border-dashed border-neutral-300 text-neutral-500 leading-tight flex flex-col justify-center">
-                  <span className="block text-xs font-bold">Sin asignar</span>
-                  <span className="block font-mono text-sm font-black">{pesos(sinAsignar)}</span>
-                </span>
-              </div>
+                <li className="min-h-12 px-3 py-2 rounded-xl border-2 border-dashed border-neutral-300 text-neutral-500 leading-tight flex items-center justify-between gap-3">
+                  <span className="text-sm font-bold">Sin asignar</span>
+                  <span className="font-mono text-lg font-black">{pesos(sinAsignar)}</span>
+                </li>
+              </ul>
+              <p className="mt-2 text-xs text-neutral-500">Para cambiar un producto de persona, desmárcalo primero con quien lo tiene asignado.</p>
             </div>
 
-            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <ul className="space-y-2">
               {unidades.map((u) => {
                 const persona = asignadas[u.clave];
                 const asignada = persona !== undefined && persona < personas;
+                const bloqueada = asignada && persona !== activa;
                 return (
                   <li key={u.clave}>
                     <button
                       type="button"
                       onClick={() => tocarPieza(u.clave)}
-                      className={`w-full min-h-14 px-3 py-2 rounded-xl border-2 flex items-center justify-between gap-2 text-left cursor-pointer touch-manipulation ${
+                      disabled={bloqueada}
+                      aria-pressed={asignada && persona === activa}
+                      className={`w-full min-h-14 px-3 py-2 rounded-xl border-2 flex items-center justify-between gap-2 text-left cursor-pointer touch-manipulation disabled:cursor-not-allowed disabled:opacity-60 ${
                         asignada ? color(persona) : 'bg-white border-neutral-200 hover:border-neutral-300'
                       }`}
                     >
@@ -171,7 +173,7 @@ export function DividirCuenta({
                       </span>
                       <span className="shrink-0 text-right">
                         <span className="block font-mono text-sm font-bold">{pesos(u.centavos)}</span>
-                        {asignada && <span className="block text-[11px] font-black">P{persona + 1}</span>}
+                        {asignada && <span className="flex items-center justify-end gap-1 text-[11px] font-black">{bloqueada && <Lock aria-hidden="true" className="w-3 h-3" />}Persona {persona + 1}</span>}
                       </span>
                     </button>
                   </li>

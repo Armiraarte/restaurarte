@@ -1,12 +1,28 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { partesIguales, repartir, totalesPorPersona, unidadesDeCuenta } from '../src/services/dividirCuenta.ts';
+import { alternarAsignacion, partesIguales, repartir, totalesPorPersona, unidadesDeCuenta } from '../src/services/dividirCuenta.ts';
 
 test('partes iguales: los centavos que sobran van a las primeras personas y suman exacto', () => {
   assert.deepEqual(partesIguales(10, 3), [334, 333, 333]);
   assert.deepEqual(partesIguales(31, 2), [1550, 1550]);
   assert.equal(partesIguales(245.5, 7).reduce((a, b) => a + b, 0), 24550);
   assert.deepEqual(repartir(100, 0), [100], 'Nunca menos de una persona');
+});
+
+test('una pieza asignada queda bloqueada para otras personas hasta que su dueño la libere', () => {
+  const unidades = unidadesDeCuenta([{ clave: 't', nombre: 'Taco', cantidad: 2, subtotal: 40 }]);
+  const persona1 = alternarAsignacion({}, 't-0', 0);
+  const intentoPersona2 = alternarAsignacion(persona1, 't-0', 1);
+  assert.deepEqual(intentoPersona2, { 't-0': 0 });
+  assert.deepEqual(totalesPorPersona(unidades, intentoPersona2, 2), { totales: [2000, 0], sinAsignar: 2000 });
+  // Otra pieza del mismo producto sigue disponible para la segunda persona.
+  const ambas = alternarAsignacion(intentoPersona2, 't-1', 1);
+  assert.deepEqual(totalesPorPersona(unidades, ambas, 2), { totales: [2000, 2000], sinAsignar: 0 });
+  const liberada = alternarAsignacion(ambas, 't-0', 0);
+  const reasignada = alternarAsignacion(liberada, 't-0', 1);
+  assert.deepEqual(reasignada, { 't-0': 1, 't-1': 1 });
+  assert.deepEqual(totalesPorPersona(unidades, reasignada, 2), { totales: [0, 4000], sinAsignar: 0 });
+  assert.deepEqual(persona1, { 't-0': 0 }, 'Asignar o liberar no modifica el estado anterior');
 });
 
 test('MIXTAS: cada pieza con su sabor y su precio; lo extra del renglón se reparte entre todas', () => {

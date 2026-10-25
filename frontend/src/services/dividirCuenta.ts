@@ -20,6 +20,16 @@ export function repartir(centavos: number, partes: number): number[] {
 /** Partes iguales de un total en pesos; devuelve centavos por persona. */
 export const partesIguales = (total: number, personas: number) => repartir(Math.round(total * 100), personas);
 
+/** Solo la persona que tiene una pieza puede liberarla; las demás no pueden cambiarla de dueño. */
+export function alternarAsignacion(asignadas: Record<string, number>, clave: string, persona: number): Record<string, number> {
+  const propietario = asignadas[clave];
+  if (propietario !== undefined && propietario !== persona) return asignadas;
+  const nuevas = { ...asignadas };
+  if (propietario === persona) delete nuevas[clave];
+  else nuevas[clave] = persona;
+  return nuevas;
+}
+
 /**
  * Cada renglón de la cuenta se separa en piezas (3 tacos → 3 piezas) para poder dárselas a distintas personas;
  * el subtotal del renglón se reparte entre sus piezas sin perder centavos. Los cobros extra son una pieza cada uno.
