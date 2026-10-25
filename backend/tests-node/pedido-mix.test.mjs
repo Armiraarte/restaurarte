@@ -57,7 +57,7 @@ test('el papel usa las mismas abreviaturas de Cocina y conserva piezas y modific
       reparto: [{ opcion: 'Papa', cantidad: 1, con_queso: true }, { opcion: 'Frijol', cantidad: 2, con_queso: false }], descripcion: ['1 Papa', '2 Frijol'] },
   ] };
   const textos = lineasTicketCocina(ticket).map((l) => l.texto).filter(Boolean);
-  for (const texto of ['2 T PAPA', '1 HAM RES', '1 MILANESA', '4 BBQ', '6 BFF', '1 SOP PAPA Q', '2 SOP FRI', '  - SIN CHILE, CEBOLLA', '  - DOBLE CARNE']) assert.ok(textos.includes(texto), texto);
+  for (const texto of ['2 T PAPA', '1 HAM RES', '1 MILA', '4 BBQ', '6 BFF', '1 SOP PAPA Q', '2 SOP FRI', '  - SIN CHILE, CEBOLLA', '  - DOBLE CARNE']) assert.ok(textos.includes(texto), texto);
   assert.ok(!textos.some((t) => t.includes('MIXTAS') || /^3 SOP\b/.test(t)), 'No imprime MIXTAS ni el total de los sopes');
   assert.equal(textos.some((t) => t.includes('Alitas') || t.includes('Hamburguesas') || t.includes('Carnes')), false);
 });

@@ -65,7 +65,7 @@ test('cocina: reimprime envíos de solo extras y reconstruye pedidos anteriores 
   const tickets = construirComandasCocina(orden, [fila(1, a, { con_queso: true,
     categoria: 'Tacos', opciones: { sin: [{ id: 1, nombre: 'Cebolla' }], mezcla: [] },
   })], [{ id: 1, creado_en: b, descripcion: 'Extra manual', importe: 7 }], []);
-  assert.equal(formatoProductoCocina(tickets[0].productos[0]).renglones[0].nombre, 'T FRIJOL Q');
+  assert.equal(formatoProductoCocina(tickets[0].productos[0]).renglones[0].nombre, 'T FRIJ Q');
   assert.deepEqual(formatoProductoCocina(tickets[0].productos[0]).descripcion, ['SIN CEBOLLA']);
   assert.equal(tickets[1].productos.length, 0);
   assert.deepEqual(tickets[1].extras, [{ descripcion: 'Extra manual', importe: 7 }]);
@@ -86,7 +86,7 @@ test('la Q identifica el queso incluido, agregado o extra, excepto en hamburgues
   const extra = construirComandasCocina(orden, [fila(1, a, { categoria: 'Tacos',
     opciones: { sin: [], mezcla: [], complementosExtra: [queso] },
   })], [], [])[0].productos[0];
-  assert.equal(formatoProductoCocina(extra).renglones[0].nombre, 'T FRIJOL Q');
+  assert.equal(formatoProductoCocina(extra).renglones[0].nombre, 'T FRIJ Q');
   assert.deepEqual(formatoProductoCocina(extra).descripcion, ['EXTRA QUESO']);
 });
 

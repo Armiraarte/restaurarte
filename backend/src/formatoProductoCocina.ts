@@ -24,14 +24,25 @@ const PRODUCTOS_ABREVIADOS: Record<string, Record<string, string>> = {
   tostadas: { frijol: 'FRIJO', jamon: 'JAM', pollo: 'POLLO', mixta: 'MIX', cuerito: 'CUERI' },
 };
 
+const PALABRAS_ABREVIADAS: Record<string, string> = {
+  barbacoa: 'B', milanesa: 'MILA', chicharron: 'H', jamon: 'JAM', picadillo: 'PICA',
+  jalapeno: 'JALAP', frijol: 'FRIJ', mixta: 'MIX', mixto: 'MIX', cuerito: 'CUERI',
+  salchicha: 'SAL', queso: 'Q',
+};
+
 /** Conserva las presentaciones y las mezclas; cada categoría tiene sus propias abreviaturas. */
 function abreviarSabor(nombre: string, categoria: string): string {
   const abreviaturas = PRODUCTOS_ABREVIADOS[categoria];
-  if (!abreviaturas) return nombre;
-  return nombre.split(/(\s+con\s+)/i).map((parte, i) => {
+  const buscar = (palabra: string) => {
+    const clave = normal(palabra);
+    if (abreviaturas && Object.hasOwn(abreviaturas, clave)) return abreviaturas[clave];
+    return Object.hasOwn(PALABRAS_ABREVIADAS, clave) ? PALABRAS_ABREVIADAS[clave] : undefined;
+  };
+  return nombre.split(/(\s+con\s+|,\s*)/i).map((parte, i) => {
     if (i % 2) return ' CON ';
     const [, sabor, tamano = ''] = parte.match(/^(.*?)(\s*\([^)]*\))?$/)!;
-    return `${abreviaturas[normal(sabor)] ?? sabor.toLocaleUpperCase('es')}${tamano}`;
+    const abreviado = buscar(sabor) ?? sabor.replace(/[\p{L}\p{M}]+/gu, (palabra) => buscar(palabra) ?? mayusculasComanda(palabra));
+    return `${abreviado}${tamano}`;
   }).join('');
 }
 
@@ -67,21 +78,21 @@ export function formatoProductoCocina(p: ProductoCocina): { renglones: { cantida
     nombre = /\bmedia\b/i.test(nombre) ? 'MEDIA PAPAS' : 'ORDEN PAPAS';
   } else if (ABREVIATURAS[categoria]) {
     const abreviatura = ABREVIATURAS[categoria];
-    if (PRODUCTOS_ABREVIADOS[categoria]) {
-      // Acepta también un nombre que ya venga abreviado, sin duplicar prefijos ni la Q final.
-      nombre = nombre.replace(new RegExp(`^${abreviatura}\\s+`, 'i'), '');
-      if (categoria === 'sopes') nombre = nombre.replace(/^SOPE\s+/i, '');
-      if (categoria === 'enchiladas') nombre = nombre.replace(/^ENCH\s+/i, '');
-      const quesoEnNombre = /(?:^|\s)Q$/i.test(nombre);
-      nombre = nombre.replace(/(?:^|\s)Q$/i, '').trim();
-      if (categoria === 'tacos') nombre = nombre.replace(/^T(?=[BH](?:\s|$))/i, '');
-      nombre = abreviarSabor(nombre, categoria);
-      quesoEnRelleno = /(?:^|\s)Q(?=\s|$)/i.test(nombre);
-      const separacion = categoria === 'tacos' && /^B(\s*\([^)]*\))?$/.test(nombre) ? '' : ' ';
-      nombre = `${abreviatura}${separacion}${nombre}${quesoEnNombre && !quesoEnRelleno ? ' Q' : ''}`.replace(/\s+/g, ' ').trim();
-    } else if (!new RegExp(`^${abreviatura}(?:\\s|$)`, 'i').test(nombre)) nombre = `${abreviatura} ${nombre}`;
+    // Acepta también un nombre que ya venga abreviado, sin duplicar prefijos ni la Q final.
+    nombre = nombre.replace(new RegExp(`^${abreviatura}\\s+`, 'i'), '');
+    if (categoria === 'sopes') nombre = nombre.replace(/^SOPE\s+/i, '');
+    if (categoria === 'enchiladas') nombre = nombre.replace(/^ENCH\s+/i, '');
+    const quesoEnNombre = /(?:^|\s)Q$/i.test(nombre);
+    nombre = nombre.replace(/(?:^|\s)Q$/i, '').trim();
+    if (categoria === 'tacos') nombre = nombre.replace(/^T(?=[BH](?:\s|$))/i, '');
+    nombre = abreviarSabor(nombre, categoria);
+    quesoEnRelleno = /(?:^|\s)Q(?=\s|$)/i.test(nombre);
+    nombre = `${abreviatura} ${nombre}${quesoEnNombre && !quesoEnRelleno ? ' Q' : ''}`.replace(/\s+/g, ' ').trim();
+  } else {
+    nombre = abreviarSabor(nombre, categoria);
+    quesoEnRelleno = /(?:^|\s)Q(?=\s|$)/i.test(nombre);
   }
-  const renglones = [{ cantidad: p.cantidad, nombre: mayusculasComanda(marcarQueso(nombre)) }];
+  const renglones = [{ cantidad: p.cantidad, nombre: mayusculasComanda(marcarQueso(nombre).replace(/\s+con\s+/gi, ', ')) }];
   const descripcion = p.descripcion.filter((d) => !['con todo', 'con queso'].includes(normal(d))).map(mayusculasComanda);
   return { renglones, descripcion };
 }
