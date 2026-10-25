@@ -404,6 +404,22 @@ es aparte de «Pollo a la plancha». Repetirlo no las duplica ni cambia un preci
 .\artisan.ps1 db:seed --class=HamburguesasPolloPiernaSeeder --force
 ```
 
+**Sope de Pierna**: `SopePiernaSeeder` agrega «Pierna» en Sopes con el precio vigente y los complementos
+de un sope de la casa ($15 en el menú base). Repetirlo no duplica el producto ni cambia un precio ajustado.
+También se incluye en `DatabaseSeeder`. Para aplicarlo en la base de destino al publicar:
+
+```powershell
+.\artisan.ps1 db:seed --class=SopePiernaSeeder --force
+```
+
+**Enchilada de Pierna**: `EnchiladaPiernaSeeder` agrega «Pierna» en Enchiladas con el precio vigente y
+los complementos de una enchilada de la casa ($15 en el menú base). Repetirlo no duplica el producto
+ni cambia un precio ajustado. Se incluye en `DatabaseSeeder`. Para aplicarlo al publicar:
+
+```powershell
+.\artisan.ps1 db:seed --class=EnchiladaPiernaSeeder --force
+```
+
 **Complementos EXTRA**: en las opciones de cualquier platillo, un toque incluye o quita un complemento y
 **doble toque** lo marca EXTRA (otro doble toque lo quita), sin cargo adicional. Se manda como
 `complementosExtra` (IDs de los complementos del producto, nunca también en `sin`) y se guarda en

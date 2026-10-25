@@ -9,6 +9,7 @@ interface ProductoCocina {
 }
 
 const normal = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleLowerCase('es');
+export const mayusculasComanda = (texto: string) => texto.toLocaleUpperCase('es-MX');
 const ABREVIATURAS: Record<string, string> = {
   tacos: 'T', 'tacos dorados': 'T', quesadillas: 'Q', sopes: 'SOP', enchiladas: 'ENCHI',
   tostadas: 'TOS', burritas: 'Burri', lonches: 'Lonch', hamburguesas: 'Ham', ensaladas: 'Ensa', salchichas: 'Salch',
@@ -17,9 +18,9 @@ const ABREVIATURAS: Record<string, string> = {
 const PRODUCTOS_ABREVIADOS: Record<string, Record<string, string>> = {
   'tacos dorados': { papa: 'PAPA', frijol: 'FRIJOL', jamon: 'JAM', salchicha: 'SAL' },
   tacos: { barbacoa: 'B', chicharron: 'H', pollo: 'POLLO', salchicha: 'SAL' },
-  quesadillas: { papa: 'PAPA', frijol: 'FRIJ', picadillo: 'PICA', pollo: 'POLLO', jamon: 'JAM', chicharron: 'H', jalapeno: 'JALAP' },
-  sopes: { papa: 'PAPA', frijol: 'FRI', picadillo: 'PICA', pollo: 'POLLO', chicharron: 'H', pierna: 'PIERNA' },
-  enchiladas: { papa: 'PAPA', frijol: 'FRIJOL', picadillo: 'PICA', pollo: 'POLLO', 'queso/cebolla': 'QUESO CEBOLLA' },
+  quesadillas: { papa: 'PAPA', frijol: 'FRIJ', picadillo: 'PICA', pollo: 'POLLO', jamon: 'JAM', chicharron: 'H', jalapeno: 'JALAP', queso: 'Q' },
+  sopes: { papa: 'PAPA', frijol: 'FRI', picadillo: 'PICA', pollo: 'POLLO', chicharron: 'H', pierna: 'PIERNA', queso: 'Q' },
+  enchiladas: { papa: 'PAPA', frijol: 'FRIJOL', picadillo: 'PICA', pollo: 'POLLO', queso: 'Q', 'queso/cebolla': 'CEBOLLA Q' },
   tostadas: { frijol: 'FRIJO', jamon: 'JAM', pollo: 'POLLO', mixta: 'MIX', cuerito: 'CUERI' },
 };
 
@@ -49,34 +50,38 @@ export function formatoProductoCocina(p: ProductoCocina): { renglones: { cantida
         con_queso: r.con_queso ?? conQueso,
         descripcion: [],
       }).renglones),
-      descripcion: p.descripcion.filter((d) => !['con todo', 'con queso'].includes(normal(d)) && !sabores.has(normal(d))),
+      descripcion: p.descripcion.filter((d) => !['con todo', 'con queso'].includes(normal(d)) && !sabores.has(normal(d))).map(mayusculasComanda),
     };
   }
+  let quesoEnRelleno = false;
   const marcarQueso = (nombre: string) => {
     if (categoria === 'hamburguesas') return nombre.replace(/\s+Q$/i, '');
+    if (quesoEnRelleno) return nombre;
     return conQueso && !/\sQ$/i.test(nombre) ? `${nombre} Q` : nombre;
   };
   let nombre = p.nombre.trim();
   const prefijo = p.categoria?.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   if (prefijo) nombre = nombre.replace(new RegExp(`^${prefijo}\\s*[·:–—-]\\s*`, 'i'), '');
-  if (categoria === 'alitas') nombre = nombre.replace(/\bbuffalo\b/gi, 'BFF');
+  if (categoria === 'alitas') nombre = nombre.replace(/\bbuffalo\b/gi, 'BFF').replace(/\bmango(?:\s+habanero)?\b/gi, 'MANGO');
   if (categoria === 'papas a la francesa' || categoria === 'papas') {
     nombre = /\bmedia\b/i.test(nombre) ? 'MEDIA PAPAS' : 'ORDEN PAPAS';
   } else if (ABREVIATURAS[categoria]) {
     const abreviatura = ABREVIATURAS[categoria];
     if (PRODUCTOS_ABREVIADOS[categoria]) {
       // Acepta también un nombre que ya venga abreviado, sin duplicar prefijos ni la Q final.
-      const quesoEnNombre = /\sQ$/i.test(nombre);
-      nombre = nombre.replace(/\sQ$/i, '').replace(new RegExp(`^${abreviatura}\\s+`, 'i'), '');
+      nombre = nombre.replace(new RegExp(`^${abreviatura}\\s+`, 'i'), '');
       if (categoria === 'sopes') nombre = nombre.replace(/^SOPE\s+/i, '');
       if (categoria === 'enchiladas') nombre = nombre.replace(/^ENCH\s+/i, '');
+      const quesoEnNombre = /(?:^|\s)Q$/i.test(nombre);
+      nombre = nombre.replace(/(?:^|\s)Q$/i, '').trim();
       if (categoria === 'tacos') nombre = nombre.replace(/^T(?=[BH](?:\s|$))/i, '');
       nombre = abreviarSabor(nombre, categoria);
+      quesoEnRelleno = /(?:^|\s)Q(?=\s|$)/i.test(nombre);
       const separacion = categoria === 'tacos' && /^B(\s*\([^)]*\))?$/.test(nombre) ? '' : ' ';
-      nombre = `${abreviatura}${separacion}${nombre}${quesoEnNombre ? ' Q' : ''}`;
+      nombre = `${abreviatura}${separacion}${nombre}${quesoEnNombre && !quesoEnRelleno ? ' Q' : ''}`.replace(/\s+/g, ' ').trim();
     } else if (!new RegExp(`^${abreviatura}(?:\\s|$)`, 'i').test(nombre)) nombre = `${abreviatura} ${nombre}`;
   }
-  const renglones = [{ cantidad: p.cantidad, nombre: marcarQueso(nombre) }];
-  const descripcion = p.descripcion.filter((d) => !['con todo', 'con queso'].includes(normal(d)));
+  const renglones = [{ cantidad: p.cantidad, nombre: mayusculasComanda(marcarQueso(nombre)) }];
+  const descripcion = p.descripcion.filter((d) => !['con todo', 'con queso'].includes(normal(d))).map(mayusculasComanda);
   return { renglones, descripcion };
 }

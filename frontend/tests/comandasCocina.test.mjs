@@ -98,9 +98,9 @@ test('sin queso y tacos con todo no agregan Q; el producto de queso sí la lleva
     assert.ok(!formatoProductoCocina(p).renglones[0].nombre.endsWith(' Q'));
   }
   const p = construirComandasCocina(orden, [fila(1, a, { nombre: 'Queso' })], [], [])[0].productos[0];
-  assert.equal(formatoProductoCocina(p).renglones[0].nombre, 'Q QUESO Q');
+  assert.equal(formatoProductoCocina(p).renglones[0].nombre, 'Q Q');
   const mixta = construirComandasCocina(orden, [fila(1, a, {
     opciones: { sin: [], mezcla: ['Queso', 'Frijol'], reparto: [{ nombre: 'Queso', cantidad: 1 }, { nombre: 'Frijol', cantidad: 1 }] },
   })], [], [])[0].productos[0];
-  assert.deepEqual(formatoProductoCocina(mixta).renglones, [{ cantidad: 1, nombre: 'Q QUESO Q' }, { cantidad: 1, nombre: 'Q FRIJ' }]);
+  assert.deepEqual(formatoProductoCocina(mixta).renglones, [{ cantidad: 1, nombre: 'Q Q' }, { cantidad: 1, nombre: 'Q FRIJ' }]);
 });

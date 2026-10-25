@@ -6,7 +6,7 @@
 // El mismo tipo existe en frontend/src/types/ticketCocina.ts; si cambias uno, cambia el otro.
 import type { LineaTicket } from './impresion.js';
 import { extrasValidos, type ExtraPedido } from './extrasPedido.js';
-import { formatoProductoCocina } from './formatoProductoCocina.js';
+import { formatoProductoCocina, mayusculasComanda } from './formatoProductoCocina.js';
 
 /** Una elección dentro de un grupo de opciones. BD: partida_opciones (partida_id, grupo, eleccion). */
 export interface OpcionTicket {
@@ -138,5 +138,9 @@ export function lineasTicketCocina(t: TicketCocina): LineaTicket[] {
   }
   // Una separación pequeña antes del corte, sin alargar el papel con una marca final.
   lineas.push({ texto: '' });
-  return lineas;
+  return lineas.map((linea) => ({
+    ...linea,
+    ...(typeof linea.texto === 'string' && { texto: mayusculasComanda(linea.texto) }),
+    ...(typeof linea.derecha === 'string' && { derecha: mayusculasComanda(linea.derecha) }),
+  }));
 }

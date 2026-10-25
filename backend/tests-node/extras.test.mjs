@@ -41,14 +41,14 @@ test('la comanda de cocina imprime los cobros extra al final, con o sin producto
   const ticket = {orden_cocina:'#7-1',mesa:'Mesa 7',enviada_en:new Date().toISOString(),productos:[{nombre:'Tacos · Frijol',cantidad:2,descripcion:['CON TODO']}],extras};
   assert.equal(validarTicketCocina(ticket), null);
   const lineas = lineasTicketCocina(ticket);
-  const producto = lineas.findIndex(l => l.texto === '2 Tacos · Frijol');
+  const producto = lineas.findIndex(l => l.texto === '2 TACOS · FRIJOL');
   const titulo = lineas.findIndex(l => l.texto === 'EXTRAS');
   assert.ok(producto >= 0 && titulo > producto, 'EXTRAS va después de los productos');
-  assert.ok(lineas.some(l => l.texto === 'Cargo adicional' && l.derecha === '$12.50'));
+  assert.ok(lineas.some(l => l.texto === 'CARGO ADICIONAL' && l.derecha === '$12.50'));
   // Un envío con solo extras también sale en cocina.
   const soloExtras = { ...ticket, productos: [] };
   assert.equal(validarTicketCocina(soloExtras), null);
-  assert.ok(lineasTicketCocina(soloExtras).some(l => l.texto === 'Cargo adicional'));
+  assert.ok(lineasTicketCocina(soloExtras).some(l => l.texto === 'CARGO ADICIONAL'));
   assert.ok(validarTicketCocina({ ...soloExtras, extras: [] }), 'Sin productos ni extras no hay comanda');
   assert.ok(validarTicketCocina({ ...ticket, extras: [{ descripcion: 'Extra', importe: -1 }] }));
 });
@@ -63,9 +63,9 @@ test('un extra agregado dentro de un MIX sale justo debajo de ese MIX; los demá
   assert.equal(validarTicketCocina(ticket), null);
   const textos = lineasTicketCocina(ticket).map((l) => l.texto).filter(Boolean);
   const mix = textos.indexOf('MIX');
-  assert.deepEqual(textos.slice(mix, mix + 3), ['MIX', '1 Tostadas · Pierna', '+ Queso extra']);
+  assert.deepEqual(textos.slice(mix, mix + 3), ['MIX', '1 TOSTADAS · PIERNA', '+ QUESO EXTRA']);
   const final = textos.indexOf('EXTRAS');
-  assert.ok(final > textos.indexOf('1 Tacos · Pollo'));
-  assert.deepEqual(textos.slice(final + 1), ['Desechables', 'De un MIX sin productos']);
+  assert.ok(final > textos.indexOf('1 TACOS · POLLO'));
+  assert.deepEqual(textos.slice(final + 1), ['DESECHABLES', 'DE UN MIX SIN PRODUCTOS']);
   assert.ok(validarTicketCocina({ ...ticket, extras: [{ descripcion: 'X', importe: 1, mix_grupo: 0 }] }));
 });

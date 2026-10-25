@@ -57,7 +57,7 @@ test('el papel usa las mismas abreviaturas de Cocina y conserva piezas y modific
       reparto: [{ opcion: 'Papa', cantidad: 1, con_queso: true }, { opcion: 'Frijol', cantidad: 2, con_queso: false }], descripcion: ['1 Papa', '2 Frijol'] },
   ] };
   const textos = lineasTicketCocina(ticket).map((l) => l.texto).filter(Boolean);
-  for (const texto of ['2 T PAPA', '1 Ham Res', '1 Milanesa', '4 BBQ', '6 BFF', '1 SOP PAPA Q', '2 SOP FRI', '  - SIN CHILE, CEBOLLA', '  - DOBLE CARNE']) assert.ok(textos.includes(texto), texto);
+  for (const texto of ['2 T PAPA', '1 HAM RES', '1 MILANESA', '4 BBQ', '6 BFF', '1 SOP PAPA Q', '2 SOP FRI', '  - SIN CHILE, CEBOLLA', '  - DOBLE CARNE']) assert.ok(textos.includes(texto), texto);
   assert.ok(!textos.some((t) => t.includes('MIXTAS') || /^3 SOP\b/.test(t)), 'No imprime MIXTAS ni el total de los sopes');
   assert.equal(textos.some((t) => t.includes('Alitas') || t.includes('Hamburguesas') || t.includes('Carnes')), false);
 });
@@ -104,8 +104,8 @@ test('ticket agrupa un solo plato sin perder modificadores y separa productos su
   const lineas = lineasTicketCocina(ticket).map((l) => l.texto).filter(Boolean);
   // El MIX solo agrupa: sin número ni leyenda; la cantidad va sin «x».
   const inicio = lineas.indexOf('MIX');
-  assert.deepEqual(lineas.slice(inicio, inicio + 5), ['MIX', '1 Taco Q', '  - Sin cebolla', '1 Sope', '  - Sin crema']);
-  assert.ok(lineas.indexOf('1 Suelto') > lineas.indexOf('1 Sope'));
+  assert.deepEqual(lineas.slice(inicio, inicio + 5), ['MIX', '1 TACO Q', '  - SIN CEBOLLA', '1 SOPE', '  - SIN CREMA']);
+  assert.ok(lineas.indexOf('1 SUELTO') > lineas.indexOf('1 SOPE'));
   assert.equal(lineas.filter((l) => l === 'MIX').length, 2);
   assert.ok(!lineas.some((l) => /UN SOLO PLATO|^d+x /.test(l)));
   assert.ok(!lineas.some((l) => /MIX \d/.test(l)));
@@ -193,15 +193,15 @@ test('comanda: sin logo ni fecha, el número de orden arriba y chico, la mesa y 
   const lineas = lineasTicketCocina(ticket);
   assert.ok(!lineas.some((l) => l.imagen), 'Sin logo');
   assert.ok(!lineas.some((l) => /CON TODO/i.test(l.texto ?? '')), 'Con todo no agrega texto al papel');
-  assert.equal(lineas[0].texto, 'Orden cocina #00012-2 · Tablet 01');
+  assert.equal(lineas[0].texto, 'ORDEN COCINA #00012-2 · TABLET 01');
   assert.ok(!lineas[0].grande && !lineas[0].escala, 'El número de orden va arriba, en letra normal');
-  assert.deepEqual(lineas[1], { texto: 'Mesa 9', grande: true, escala: 1.6 });
+  assert.deepEqual(lineas[1], { texto: 'MESA 9', grande: true, escala: 1.6 });
   assert.deepEqual(lineas[2], { texto: 'PARA LLEVAR', grande: true, escala: 1.3 });
   assert.deepEqual(lineas[3], { separador: true }, 'Sin fecha: después va la raya');
   assert.ok(!lineas.some((l) => /\d{2}\/\d{2}\/\d{4}/.test(l.texto ?? '')), 'Sin fecha en ninguna línea');
   // Comer aquí: no se escribe nada (ni PARA LLEVAR ni COMER AQUÍ); bebidas: el número en negritas.
   const aqui = lineasTicketCocina({ ...ticket, para_llevar: false });
-  assert.deepEqual(aqui.slice(0, 3).map((l) => l.texto ?? '—'), ['Orden cocina #00012-2 · Tablet 01', 'Mesa 9', '—']);
+  assert.deepEqual(aqui.slice(0, 3).map((l) => l.texto ?? '—'), ['ORDEN COCINA #00012-2 · TABLET 01', 'MESA 9', '—']);
   assert.ok(!aqui.some((l) => /PARA LLEVAR|COMER AQU/i.test(l.texto ?? '')));
   assert.equal(lineasTicketCocina({ ...ticket, para_llevar: false, area: 'bebidas' })[0].negrita, true);
 });

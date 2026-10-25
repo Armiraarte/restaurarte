@@ -6,7 +6,7 @@ import { Comanda } from '../types/pos';
 import { TicketCocina } from '../types/ticketCocina';
 import { construirTicketCocina, imprimirTicketCocina } from '../services/ticketCocinaService';
 import { agruparMix } from '../services/pedidoMix';
-import { formatoProductoCocina } from '../services/formatoProductoCocina';
+import { formatoProductoCocina, mayusculasComanda } from '../services/formatoProductoCocina';
 
 /** El ticket en papel: mismo orden y contenido que backend/src/ticketCocina.ts (lineasTicketCocina). */
 export const TicketCocinaPapel: React.FC<{ ticket: TicketCocina }> = ({ ticket: t }) => {
@@ -14,11 +14,11 @@ export const TicketCocinaPapel: React.FC<{ ticket: TicketCocina }> = ({ ticket: 
   const extrasEnMix = (t.extras ?? []).filter((e) => e.mix_grupo != null && grupos.some((g) => g.grupo === e.mix_grupo));
   const extrasFinales = (t.extras ?? []).filter((e) => !extrasEnMix.includes(e));
   const separador = <div className="border-t border-dashed border-neutral-400 my-2" />;
-  const extra = (e: NonNullable<TicketCocina['extras']>[number], i: number) => <div key={i} className="flex justify-between gap-2"><span>{e.descripcion}</span><span>${e.importe.toFixed(2)}</span></div>;
+  const extra = (e: NonNullable<TicketCocina['extras']>[number], i: number) => <div key={i} className="flex justify-between gap-2"><span>{mayusculasComanda(e.descripcion)}</span><span>${e.importe.toFixed(2)}</span></div>;
   return (
   <div className="w-[300px] max-w-full mx-auto bg-white text-neutral-950 font-mono text-[13px] leading-snug px-4 py-5 shadow-md border border-neutral-200">
-    <div>{t.area === 'bebidas' ? 'BEBIDAS' : 'Orden cocina'} {t.orden_cocina}{t.tablet && ` · ${t.tablet}`}</div>
-    <div className="text-[26px] leading-tight break-words">{t.mesa}</div>
+    <div>{t.area === 'bebidas' ? 'BEBIDAS' : 'ORDEN COCINA'} {mayusculasComanda(t.orden_cocina)}{t.tablet && ` · ${mayusculasComanda(t.tablet)}`}</div>
+    <div className="text-[26px] leading-tight break-words">{mayusculasComanda(t.mesa)}</div>
     {t.para_llevar && <div className="text-[21px]">PARA LLEVAR</div>}
     {separador}
     {grupos.map((g, i) => <React.Fragment key={i}>
@@ -26,12 +26,12 @@ export const TicketCocinaPapel: React.FC<{ ticket: TicketCocina }> = ({ ticket: 
       {g.lineas.map((p) => { const formato = formatoProductoCocina(p); return <div key={p.partida_id} className="text-[19px] mb-1 break-words">
         {formato.renglones.map((r, j) => <div key={j} className="font-bold">{r.cantidad} {r.nombre}</div>)}
         {formato.descripcion.map((d, j) => <div key={j} className={`pl-3${/^EXTRA\b/i.test(d.trim()) ? ' font-bold' : ''}`}>- {d}</div>)}
-        {p.notas && <div className="text-[13px] pl-3 font-bold">NOTA: {p.notas}</div>}
+        {p.notas && <div className="text-[13px] pl-3 font-bold">NOTA: {mayusculasComanda(p.notas)}</div>}
       </div>; })}
       {extrasEnMix.filter((e) => e.mix_grupo === g.grupo).map((e, j) => extra({ ...e, descripcion: `+ ${e.descripcion}` }, j))}
       {g.grupo !== null && separador}
     </React.Fragment>)}
-    {t.notas_generales && <>{separador}<div className="font-bold">NOTA: {t.notas_generales}</div></>}
+    {t.notas_generales && <>{separador}<div className="font-bold">NOTA: {mayusculasComanda(t.notas_generales)}</div></>}
     {extrasFinales.length > 0 && <>{separador}<div className="font-bold">EXTRAS</div>{extrasFinales.map(extra)}</>}
   </div>
   );
