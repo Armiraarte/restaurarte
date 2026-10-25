@@ -50,14 +50,14 @@ test('copia el nombre, complementos y origen para reimprimir sin depender de cam
 test('el papel usa las mismas abreviaturas de Cocina y conserva piezas y modificadores', () => {
   const ticket = { orden_cocina: '#1-1', mesa: 'Mesa 2', productos: [
     { categoria: 'Tacos Dorados', nombre: 'Tacos Dorados · Papa', cantidad: 2, descripcion: ['SIN CHILE, CEBOLLA'] },
-    { categoria: 'Hamburguesas', nombre: 'Hamburguesas · Res', cantidad: 1, con_queso: true, descripcion: ['DOBLE CARNE'] },
+    { categoria: 'Hamburguesas', nombre: 'Hamburguesas · Res', cantidad: 1, con_queso: true, descripcion: ['DOBLE CARNE', 'SIN QUESO'], notas: 'Sin crema' },
     { categoria: 'Carnes', nombre: 'Carnes · Milanesa', cantidad: 1, descripcion: [] },
     { categoria: 'Alitas', nombre: 'Alitas · MIXTAS', cantidad: 10, reparto: [{ opcion: 'BBQ', cantidad: 4 }, { opcion: 'Buffalo', cantidad: 6 }], descripcion: ['4 BBQ', '6 Buffalo'] },
     { categoria: 'Sopes', nombre: 'Sopes · MIXTAS', cantidad: 3, con_queso: true,
       reparto: [{ opcion: 'Papa', cantidad: 1, con_queso: true }, { opcion: 'Frijol', cantidad: 2, con_queso: false }], descripcion: ['1 Papa', '2 Frijol'] },
-  ] };
+  ], notas_generales: 'Sin salsa en todos' };
   const textos = lineasTicketCocina(ticket).map((l) => l.texto).filter(Boolean);
-  for (const texto of ['2 T PAPA', '1 HAM RES', '1 MILA', '4 BBQ', '6 BFF', '1 SOP PAPA Q', '2 SOP FRI', '  - SIN CHILE, CEBOLLA', '  - DOBLE CARNE']) assert.ok(textos.includes(texto), texto);
+  for (const texto of ['2 T PAPA', '1 HAM RES', '1 MILA', '4 BBQ', '6 BFF', '1 SOP PAPA Q', '2 SOP FRI', '  - NO CHILE, CEBOLLA', '  - DOBLE CARNE', '  - NO QUESO', '  NOTA: NO CREMA', 'NOTA: NO SALSA EN TODOS']) assert.ok(textos.includes(texto), texto);
   assert.ok(!textos.some((t) => t.includes('MIXTAS') || /^3 SOP\b/.test(t)), 'No imprime MIXTAS ni el total de los sopes');
   assert.equal(textos.some((t) => t.includes('Alitas') || t.includes('Hamburguesas') || t.includes('Carnes')), false);
 });
@@ -104,7 +104,7 @@ test('ticket agrupa un solo plato sin perder modificadores y separa productos su
   const lineas = lineasTicketCocina(ticket).map((l) => l.texto).filter(Boolean);
   // El MIX solo agrupa: sin número ni leyenda; la cantidad va sin «x».
   const inicio = lineas.indexOf('MIX');
-  assert.deepEqual(lineas.slice(inicio, inicio + 5), ['MIX', '1 TACO Q', '  - SIN CEBOLLA', '1 SOPE', '  - SIN CREMA']);
+  assert.deepEqual(lineas.slice(inicio, inicio + 5), ['MIX', '1 TACO Q', '  - NO CEBOLLA', '1 SOPE', '  - NO CREMA']);
   assert.ok(lineas.indexOf('1 SUELTO') > lineas.indexOf('1 SOPE'));
   assert.equal(lineas.filter((l) => l === 'MIX').length, 2);
   assert.ok(!lineas.some((l) => /UN SOLO PLATO|^d+x /.test(l)));

@@ -10,6 +10,7 @@ interface ProductoCocina {
 
 const normal = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleLowerCase('es');
 export const mayusculasComanda = (texto: string) => texto.toLocaleUpperCase('es-MX');
+export const indicacionComanda = (texto: string) => mayusculasComanda(texto).replace(/(?<![\p{L}\p{M}\p{N}_])SIN(?![\p{L}\p{M}\p{N}_])/gu, 'NO');
 const ABREVIATURAS: Record<string, string> = {
   tacos: 'T', 'tacos dorados': 'T', quesadillas: 'Q', sopes: 'SOP', enchiladas: 'ENCHI',
   tostadas: 'TOS', burritas: 'Burri', lonches: 'Lonch', hamburguesas: 'Ham', ensaladas: 'Ensa', salchichas: 'Salch',
@@ -61,7 +62,7 @@ export function formatoProductoCocina(p: ProductoCocina): { renglones: { cantida
         con_queso: r.con_queso ?? conQueso,
         descripcion: [],
       }).renglones),
-      descripcion: p.descripcion.filter((d) => !['con todo', 'con queso'].includes(normal(d)) && !sabores.has(normal(d))).map(mayusculasComanda),
+      descripcion: p.descripcion.filter((d) => !['con todo', 'con queso'].includes(normal(d)) && !sabores.has(normal(d))).map(indicacionComanda),
     };
   }
   let quesoEnRelleno = false;
@@ -93,6 +94,6 @@ export function formatoProductoCocina(p: ProductoCocina): { renglones: { cantida
     quesoEnRelleno = /(?:^|\s)Q(?=\s|$)/i.test(nombre);
   }
   const renglones = [{ cantidad: p.cantidad, nombre: mayusculasComanda(marcarQueso(nombre).replace(/\s+con\s+/gi, ', ')) }];
-  const descripcion = p.descripcion.filter((d) => !['con todo', 'con queso'].includes(normal(d))).map(mayusculasComanda);
+  const descripcion = p.descripcion.filter((d) => !['con todo', 'con queso'].includes(normal(d))).map(indicacionComanda);
   return { renglones, descripcion };
 }

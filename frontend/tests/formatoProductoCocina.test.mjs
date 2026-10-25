@@ -27,12 +27,12 @@ test('alitas mixtas conservan las cantidades por aderezo sin repetir el total ni
     descripcion: ['4 BBQ', '6 Buffalo', 'SIN CHILE', 'CON TODO'],
   });
   assert.deepEqual(formato.renglones, [{ cantidad: 4, nombre: 'BBQ' }, { cantidad: 6, nombre: 'BFF' }]);
-  assert.deepEqual(formato.descripcion, ['SIN CHILE']);
+  assert.deepEqual(formato.descripcion, ['NO CHILE']);
 });
 
 test('la Q va después del producto incluso en papas y alitas mixtas, sin repetir CON QUESO', () => {
   const p = { categoria: 'Papas a la Francesa', nombre: 'Media orden de papas', cantidad: 1, con_queso: true, descripcion: ['CON QUESO', 'SIN CHILE'] };
-  assert.deepEqual(formatoProductoCocina(p), { renglones: [{ cantidad: 1, nombre: 'MEDIA PAPAS Q' }], descripcion: ['SIN CHILE'] });
+  assert.deepEqual(formatoProductoCocina(p), { renglones: [{ cantidad: 1, nombre: 'MEDIA PAPAS Q' }], descripcion: ['NO CHILE'] });
   const alitas = { categoria: 'Alitas', nombre: 'Alitas · MIXTAS', cantidad: 10, con_queso: true,
     reparto: [{ cantidad: 4, opcion: 'BBQ' }, { cantidad: 6, opcion: 'Buffalo' }], descripcion: ['4 BBQ', '6 Buffalo', 'CON QUESO'] };
   assert.deepEqual(formatoProductoCocina(alitas), { renglones: [{ cantidad: 4, nombre: 'BBQ Q' }, { cantidad: 6, nombre: 'BFF Q' }], descripcion: [] });
@@ -60,7 +60,7 @@ test('cada producto usa la abreviatura solicitada y conserva la Q cuando lleva q
     for (const con_queso of [false, true]) {
       const producto = { categoria, nombre: `${categoria} · ${nombre}`, cantidad: 3, con_queso, descripcion: ['SIN CHILE, CEBOLLA'] };
       const formato = formatoProductoCocina(producto);
-      assert.deepEqual(formato, { renglones: [{ cantidad: 3, nombre: `${esperado}${con_queso && categoria !== 'Hamburguesas' && !/\bqueso\b/i.test(nombre) ? ' Q' : ''}` }], descripcion: ['SIN CHILE, CEBOLLA'] });
+      assert.deepEqual(formato, { renglones: [{ cantidad: 3, nombre: `${esperado}${con_queso && categoria !== 'Hamburguesas' && !/\bqueso\b/i.test(nombre) ? ' Q' : ''}` }], descripcion: ['NO CHILE, CEBOLLA'] });
       assert.deepEqual(formatoProductoCocina({ ...producto, nombre: formato.renglones[0].nombre }), formato, 'No duplica prefijos al recibir una comanda ya abreviada');
     }
   }
@@ -68,11 +68,11 @@ test('cada producto usa la abreviatura solicitada y conserva la Q cuando lleva q
 
 test('las mezclas abrevian sabores y mantienen tamaños, cantidades e indicaciones', () => {
   const p = { categoria: 'Quesadillas', nombre: 'Quesadillas · Papa con Frijol (Grande)', cantidad: 2, con_queso: true, descripcion: ['SIN CHILE'] };
-  assert.deepEqual(formatoProductoCocina(p), { renglones: [{ cantidad: 2, nombre: 'Q PAPA, FRIJ (GRANDE) Q' }], descripcion: ['SIN CHILE'] });
+  assert.deepEqual(formatoProductoCocina(p), { renglones: [{ cantidad: 2, nombre: 'Q PAPA, FRIJ (GRANDE) Q' }], descripcion: ['NO CHILE'] });
   const mixtas = { ...p, nombre: 'Quesadillas · MIXTAS (Grande)', reparto: [{ opcion: 'Frijol', cantidad: 1 }, { opcion: 'Jamón', cantidad: 1 }], descripcion: ['1 Frijol', '1 Jamón', 'CON PAPAS', 'SIN CHILE'] };
-  assert.deepEqual(formatoProductoCocina(mixtas), { renglones: [{ cantidad: 1, nombre: 'Q FRIJ (GRANDE) Q' }, { cantidad: 1, nombre: 'Q JAM (GRANDE) Q' }], descripcion: ['CON PAPAS', 'SIN CHILE'] });
+  assert.deepEqual(formatoProductoCocina(mixtas), { renglones: [{ cantidad: 1, nombre: 'Q FRIJ (GRANDE) Q' }, { cantidad: 1, nombre: 'Q JAM (GRANDE) Q' }], descripcion: ['CON PAPAS', 'NO CHILE'] });
   assert.deepEqual(formatoProductoCocina({ categoria: 'Burritas', nombre: 'Burritas · Milanesa con Chicharrón', cantidad: 2, descripcion: ['SIN CEBOLLA'] }), {
-    renglones: [{ cantidad: 2, nombre: 'BURRI MILA, H' }], descripcion: ['SIN CEBOLLA'],
+    renglones: [{ cantidad: 2, nombre: 'BURRI MILA, H' }], descripcion: ['NO CEBOLLA'],
   });
 });
 
@@ -83,6 +83,6 @@ test('sopes mixtos muestran solo las piezas de cada sabor con su queso, sin tota
   };
   assert.deepEqual(formatoProductoCocina(p), {
     renglones: [{ cantidad: 2, nombre: 'SOP PAPA Q' }, { cantidad: 1, nombre: 'SOP FRI' }, { cantidad: 2, nombre: 'SOP PICA Q' }],
-    descripcion: ['EXTRA CREMA', 'SIN CEBOLLA'],
+    descripcion: ['EXTRA CREMA', 'NO CEBOLLA'],
   });
 });

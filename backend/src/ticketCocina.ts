@@ -6,7 +6,7 @@
 // El mismo tipo existe en frontend/src/types/ticketCocina.ts; si cambias uno, cambia el otro.
 import type { LineaTicket } from './impresion.js';
 import { extrasValidos, type ExtraPedido } from './extrasPedido.js';
-import { formatoProductoCocina, mayusculasComanda } from './formatoProductoCocina.js';
+import { formatoProductoCocina, indicacionComanda, mayusculasComanda } from './formatoProductoCocina.js';
 
 /** Una elección dentro de un grupo de opciones. BD: partida_opciones (partida_id, grupo, eleccion). */
 export interface OpcionTicket {
@@ -81,7 +81,7 @@ export function validarTicketCocina(t: any): string | null {
  *   ------------------------------------
  *   MIX
  *   1 Tacos · Barbacoa
- *     - SIN CHILE, CEBOLLA
+ *     - NO CHILE, CEBOLLA
  *   + Queso extra                  $10.00
  *   ------------------------------------
  * Sin precios en los productos: cocina solo necesita qué preparar. Los cobros extra van con su importe:
@@ -122,7 +122,7 @@ export function lineasTicketCocina(t: TicketCocina): LineaTicket[] {
       const formato = formatoProductoCocina(p);
       for (const r of formato.renglones) lineas.push({ texto: `${r.cantidad} ${r.nombre}`, negrita: true, escala: 1.5 });
       for (const d of formato.descripcion) lineas.push({ texto: `  - ${d}`, ...(/^EXTRA\b/i.test(d.trim()) && { negrita: true }), escala: 1.5 });
-      if (p.notas) lineas.push({ texto: `  NOTA: ${p.notas}`, negrita: true });
+      if (p.notas) lineas.push({ texto: `  NOTA: ${indicacionComanda(p.notas)}`, negrita: true });
     }
     for (const extra of extrasEnMix.filter((e) => e.mix_grupo === bloque.grupo)) {
       lineas.push({ texto: `+ ${extra.descripcion}`, negrita: true, derecha: `$${extra.importe.toFixed(2)}` });
@@ -130,7 +130,7 @@ export function lineasTicketCocina(t: TicketCocina): LineaTicket[] {
     if (bloque.grupo !== null) lineas.push({ separador: true });
   }
 
-  if (t.notas_generales) lineas.push({ separador: true }, { texto: `NOTA: ${t.notas_generales}`, negrita: true });
+  if (t.notas_generales) lineas.push({ separador: true }, { texto: `NOTA: ${indicacionComanda(t.notas_generales)}`, negrita: true });
   const extrasAlFinal = (t.extras ?? []).filter((e) => !extrasEnMix.includes(e));
   if (extrasAlFinal.length) {
     lineas.push({ separador: true }, { texto: 'EXTRAS', negrita: true });

@@ -66,7 +66,7 @@ test('cocina: reimprime envíos de solo extras y reconstruye pedidos anteriores 
     categoria: 'Tacos', opciones: { sin: [{ id: 1, nombre: 'Cebolla' }], mezcla: [] },
   })], [{ id: 1, creado_en: b, descripcion: 'Extra manual', importe: 7 }], []);
   assert.equal(formatoProductoCocina(tickets[0].productos[0]).renglones[0].nombre, 'T FRIJ Q');
-  assert.deepEqual(formatoProductoCocina(tickets[0].productos[0]).descripcion, ['SIN CEBOLLA']);
+  assert.deepEqual(formatoProductoCocina(tickets[0].productos[0]).descripcion, ['NO CEBOLLA']);
   assert.equal(tickets[1].productos.length, 0);
   assert.deepEqual(tickets[1].extras, [{ descripcion: 'Extra manual', importe: 7 }]);
   assert.equal(tickets[1].ronda, 2);

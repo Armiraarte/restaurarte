@@ -6,7 +6,7 @@ import { Comanda } from '../types/pos';
 import { TicketCocina } from '../types/ticketCocina';
 import { construirTicketCocina, imprimirTicketCocina } from '../services/ticketCocinaService';
 import { agruparMix } from '../services/pedidoMix';
-import { formatoProductoCocina, mayusculasComanda } from '../services/formatoProductoCocina';
+import { formatoProductoCocina, indicacionComanda, mayusculasComanda } from '../services/formatoProductoCocina';
 
 /** El ticket en papel: mismo orden y contenido que backend/src/ticketCocina.ts (lineasTicketCocina). */
 export const TicketCocinaPapel: React.FC<{ ticket: TicketCocina }> = ({ ticket: t }) => {
@@ -26,12 +26,12 @@ export const TicketCocinaPapel: React.FC<{ ticket: TicketCocina }> = ({ ticket: 
       {g.lineas.map((p) => { const formato = formatoProductoCocina(p); return <div key={p.partida_id} className="text-[19px] mb-1 break-words">
         {formato.renglones.map((r, j) => <div key={j} className="font-bold">{r.cantidad} {r.nombre}</div>)}
         {formato.descripcion.map((d, j) => <div key={j} className={`pl-3${/^EXTRA\b/i.test(d.trim()) ? ' font-bold' : ''}`}>- {d}</div>)}
-        {p.notas && <div className="text-[13px] pl-3 font-bold">NOTA: {mayusculasComanda(p.notas)}</div>}
+        {p.notas && <div className="text-[13px] pl-3 font-bold">NOTA: {indicacionComanda(p.notas)}</div>}
       </div>; })}
       {extrasEnMix.filter((e) => e.mix_grupo === g.grupo).map((e, j) => extra({ ...e, descripcion: `+ ${e.descripcion}` }, j))}
       {g.grupo !== null && separador}
     </React.Fragment>)}
-    {t.notas_generales && <>{separador}<div className="font-bold">NOTA: {mayusculasComanda(t.notas_generales)}</div></>}
+    {t.notas_generales && <>{separador}<div className="font-bold">NOTA: {indicacionComanda(t.notas_generales)}</div></>}
     {extrasFinales.length > 0 && <>{separador}<div className="font-bold">EXTRAS</div>{extrasFinales.map(extra)}</>}
   </div>
   );
