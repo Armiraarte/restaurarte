@@ -23,14 +23,17 @@ class OrdenExtraTest extends TestCase
         $categoria = Categoria::create(['nombre' => 'Tacos']);
         $producto = Producto::create(['categoria_id' => $categoria->id, 'nombre' => 'Pollo', 'precio' => '18.00']);
         $orden = Orden::create(['nombre' => '7']);
-        OrdenDetalle::create(['idOrden' => $orden->idOrden, 'idProducto' => $producto->id, 'cantidad' => 1]);
+        OrdenDetalle::create(['idOrden' => $orden->idOrden, 'idProducto' => $producto->id, 'cantidad' => 1, 'mix_grupo' => 3]);
         $extra = OrdenExtra::create(['idOrden' => $orden->idOrden, 'descripcion' => ' Cargo  adicional ', 'importe' => '10.25'])->fresh();
         OrdenExtra::create(['idOrden' => $orden->idOrden, 'descripcion' => 'Empaque', 'importe' => '0.10']);
+        $gratis = OrdenExtra::create(['idOrden' => $orden->idOrden, 'descripcion' => 'Extra queso', 'importe' => '0', 'mix_grupo' => 3])->fresh();
         DB::statement('UPDATE orden SET total = (SELECT COALESCE(SUM(subtotal),0) FROM orden_has_detalle WHERE idOrden=?) + (SELECT COALESCE(SUM(importe),0) FROM orden_extra WHERE idOrden=?) WHERE idOrden=?', [$orden->idOrden,$orden->idOrden,$orden->idOrden]);
         $this->assertSame('28.35', $orden->fresh()->total);
         $this->assertSame('Cargo adicional', $extra->descripcion);
         $this->assertSame('10.25', $extra->importe);
-        $this->assertCount(2, $orden->fresh()->extras);
+        $this->assertCount(3, $orden->fresh()->extras);
+        $this->assertSame('0.00', $gratis->importe);
+        $this->assertSame(3, $gratis->mix_grupo);
         $this->assertSame(1, Producto::count());
         $orden->delete();
         $this->assertSame(0, OrdenExtra::count());
@@ -39,7 +42,7 @@ class OrdenExtraTest extends TestCase
     public function test_rechaza_cargos_invalidos_y_ordenes_en_cobro(): void
     {
         $orden = Orden::create(['nombre' => '8']);
-        foreach (['0', '-1', '1.001'] as $importe) {
+        foreach (['-1', '1.001'] as $importe) {
             try {
                 OrdenExtra::create(['idOrden' => $orden->idOrden, 'descripcion' => 'Extra', 'importe' => $importe]);
                 $this->fail('Debe rechazar el importe inválido.');
@@ -50,6 +53,17 @@ class OrdenExtraTest extends TestCase
         $orden->update(['estatus' => Orden::PAGANDO]);
         $this->expectException(InvalidArgumentException::class);
         OrdenExtra::create(['idOrden' => $orden->idOrden, 'descripcion' => 'Extra', 'importe' => '10.00']);
+    }
+
+    public function test_no_admite_un_mix_que_no_pertenece_a_la_orden(): void
+    {
+        $categoria = Categoria::create(['nombre' => 'Tacos']);
+        $producto = Producto::create(['categoria_id' => $categoria->id, 'nombre' => 'Pollo', 'precio' => '18.00']);
+        $otra = Orden::create(['nombre' => '1']);
+        OrdenDetalle::create(['idOrden' => $otra->idOrden, 'idProducto' => $producto->id, 'cantidad' => 1, 'mix_grupo' => 3]);
+        $orden = Orden::create(['nombre' => '2']);
+        $this->expectException(InvalidArgumentException::class);
+        OrdenExtra::create(['idOrden' => $orden->idOrden, 'descripcion' => 'Extra', 'importe' => '0', 'mix_grupo' => 3]);
     }
 
     public function test_queso_es_complemento_en_las_cinco_categorias_sin_duplicados(): void

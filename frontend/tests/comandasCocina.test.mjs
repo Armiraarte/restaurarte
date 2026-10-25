@@ -51,11 +51,12 @@ test('cocina: al reimprimir desglosa las mixtas y conserva MIX, notas, término,
     opciones: { sin: [ofrecidos[2]], mezcla: [], reparto: [{ nombre: 'Papa', cantidad: 1 }, { nombre: 'Frijol', cantidad: 1 }],
       papas: { idProducto: 47 }, nota: 'Partida a la mitad', complementosExtra: [ofrecidos[0]],
       comanda: { origen: 'Tablet 02', producto: { nombre: 'Frijol', tamano: null, categoria: 'Quesadillas' }, ofrecidos } },
-  })], [], [])[0];
+  })], [{ id: 1, creado_en: a, descripcion: 'Extra queso', importe: 0, mix_grupo: 7 }], [])[0];
   assert.equal(ticket.tablet, 'Tablet 02');
   assert.equal(ticket.productos[0].nombre, 'Quesadillas · MIXTAS');
   assert.deepEqual(formatoProductoCocina(ticket.productos[0]).renglones, [{ cantidad: 1, nombre: 'Q PAPA' }, { cantidad: 1, nombre: 'Q FRIJ' }]);
   assert.equal(ticket.productos[0].mix_grupo, 7);
+  assert.deepEqual(ticket.extras, [{ descripcion: 'Extra queso', importe: 0, mix_grupo: 7 }], 'La reimpresión conserva el extra gratuito en su MIX');
   assert.deepEqual(ticket.productos[0].descripcion, ['1 Papa', '1 Frijol', 'MEDIO', 'DOBLE CARNE', 'CON PAPAS', 'SIN CEBOLLA', 'EXTRA CREMA']);
   assert.equal(ticket.productos[0].notas, 'Partida a la mitad');
   assert.equal(ticket.total_piezas, 2);

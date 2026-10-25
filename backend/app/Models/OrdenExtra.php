@@ -15,11 +15,11 @@ class OrdenExtra extends Model
 
     protected $table = 'orden_extra';
 
-    protected $fillable = ['idOrden', 'descripcion', 'importe'];
+    protected $fillable = ['idOrden', 'descripcion', 'importe', 'mix_grupo'];
 
     protected function casts(): array
     {
-        return ['id' => 'integer', 'idOrden' => 'integer', 'importe' => 'decimal:2'];
+        return ['id' => 'integer', 'idOrden' => 'integer', 'importe' => 'decimal:2', 'mix_grupo' => 'integer'];
     }
 
     protected static function booted(): void
@@ -30,8 +30,13 @@ class OrdenExtra extends Model
                 throw new InvalidArgumentException('El extra necesita una descripción de hasta 180 caracteres.');
             }
             $importe = (string) ($extra->getAttributes()['importe'] ?? '');
-            if (! preg_match('/^\d+(\.\d{1,2})?$/D', $importe) || (float) $importe <= 0 || (float) $importe > 9999999.99) {
-                throw new InvalidArgumentException('El importe debe ser mayor que cero y tener hasta dos decimales.');
+            if (! preg_match('/^\d+(\.\d{1,2})?$/D', $importe) || (float) $importe < 0 || (float) $importe > 9999999.99) {
+                throw new InvalidArgumentException('El importe debe ser cero o más y tener hasta dos decimales.');
+            }
+            $grupo = $extra->getAttributes()['mix_grupo'] ?? null;
+            if ($grupo !== null && (filter_var($grupo, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 2147483647]]) === false
+                || ! OrdenDetalle::where('idOrden', $extra->idOrden)->where('mix_grupo', $grupo)->exists())) {
+                throw new InvalidArgumentException('El extra necesita un MIX de productos de la misma orden.');
             }
             $orden = Orden::find($extra->idOrden);
             if (! $orden || $orden->estatus !== Orden::ABIERTA) {

@@ -125,7 +125,7 @@ export function lineasTicketCocina(t: TicketCocina): LineaTicket[] {
       if (p.notas) lineas.push({ texto: `  NOTA: ${indicacionComanda(p.notas)}`, negrita: true });
     }
     for (const extra of extrasEnMix.filter((e) => e.mix_grupo === bloque.grupo)) {
-      lineas.push({ texto: `+ ${extra.descripcion}`, negrita: true, derecha: `$${extra.importe.toFixed(2)}` });
+      lineas.push({ texto: `+ ${extra.descripcion}`, negrita: true, escala: 1.5, derecha: `$${extra.importe.toFixed(2)}` });
     }
     if (bloque.grupo !== null) lineas.push({ separador: true });
   }
@@ -134,7 +134,7 @@ export function lineasTicketCocina(t: TicketCocina): LineaTicket[] {
   const extrasAlFinal = (t.extras ?? []).filter((e) => !extrasEnMix.includes(e));
   if (extrasAlFinal.length) {
     lineas.push({ separador: true }, { texto: 'EXTRAS', negrita: true });
-    for (const extra of extrasAlFinal) lineas.push({ texto: extra.descripcion, derecha: `$${extra.importe.toFixed(2)}` });
+    for (const extra of extrasAlFinal) lineas.push({ texto: extra.descripcion, negrita: true, escala: 1.5, derecha: `$${extra.importe.toFixed(2)}` });
   }
   // Una separación pequeña antes del corte, sin alargar el papel con una marca final.
   lineas.push({ texto: '' });

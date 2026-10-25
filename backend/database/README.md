@@ -462,8 +462,8 @@ de catálogo ni guarda cantidades: cada registro representa un cobro libre.
 El botón «+» de Nuevo pedido abre «Agregar extra», donde se captura descripción
 e importe, inicialmente vacío. El borrador conserva estos cargos al salir,
 incluidos los pedidos por teléfono. `POST /api/ordenes/:idOrden/pedido` acepta
-`extras: [{ descripcion, importe }]` junto con `items`, o sin productos. Exige
-importes positivos con hasta dos decimales y una orden abierta. En la misma
+`extras: [{ descripcion, importe, mixGrupo? }]` junto con `items`, o sin productos. Acepta
+importes desde cero con hasta dos decimales y una orden abierta. En la misma
 transacción que bloquea y guarda los productos, registra los extras y recalcula
 `orden.total` como suma de ambos conceptos. La respuesta incluye `extras` y
 `extrasGuardados`; `GET /api/ordenes/:idOrden` devuelve los cargos guardados.
@@ -471,7 +471,20 @@ transacción que bloquea y guarda los productos, registra los extras y recalcula
 La cuenta y el historial muestran Extras después de los productos; las comandas
 de cocina y el ticket de cobro incluyen descripción e importe al final del detalle
 (un envío con solo extras también sale en cocina). El total de cobro ya los incluye
-y la reimpresión recupera los registros de la base.
+y la reimpresión recupera los registros de la base. El botón «+ Extra» dentro de
+cada MIX agrega el cargo a ese plato, aunque ya se haya cerrado el MIX. La API
+convierte `mixGrupo` al número definitivo de los productos de ese envío y lo
+conserva en `orden_extra.mix_grupo`. En cocina el extra aparece dentro del MIX,
+con el mismo tamaño y negrita que el producto; los extras sueltos van al final.
+
+La migración `2026_10_25_000030_permitir_extras_gratis_y_guardar_su_mix.php`
+agrega esa columna y permite importe cero en MySQL. Conserva los cargos existentes.
+Aplicarla después del respaldo y antes de publicar la nueva API:
+
+```powershell
+.\artisan.ps1 migrate --force --path=database/migrations/2026_10_25_000030_permitir_extras_gratis_y_guardar_su_mix.php
+```
+
 Para actualizar una instalación existente después del respaldo:
 
 ```powershell

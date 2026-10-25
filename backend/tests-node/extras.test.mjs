@@ -5,8 +5,8 @@ import { lineasTicketCobro } from '../src/ticketCobro.ts';
 import { lineasTicketCocina, validarTicketCocina } from '../src/ticketCocina.ts';
 
 test('valida cobros libres y rechaza importes negativos, fracciones de centavo y descripciones vacías', () => {
-  assert.equal(extrasValidos([{ descripcion: 'Servicio adicional', importe: 12.5 }, { descripcion: 'Otro', importe: 0.01 }]), true);
-  for (const e of [null, { descripcion: '', importe: 10 }, { descripcion: ' ', importe: 10 }, { descripcion: 'Extra', importe: 0 }, { descripcion: 'Extra', importe: -10 }, { descripcion: 'Extra', importe: 1.001 }, { descripcion: 'Extra', importe: '10' }, { descripcion: 'Extra', importe: Infinity }]) {
+  assert.equal(extrasValidos([{ descripcion: 'Servicio adicional', importe: 12.5 }, { descripcion: 'Otro', importe: 0.01 }, { descripcion: 'Extra gratis', importe: 0, mixGrupo: 2 }]), true);
+  for (const e of [null, { descripcion: '', importe: 10 }, { descripcion: ' ', importe: 10 }, { descripcion: 'Extra', importe: -10 }, { descripcion: 'Extra', importe: 1.001 }, { descripcion: 'Extra', importe: '10' }, { descripcion: 'Extra', importe: Infinity }, { descripcion: 'Extra', importe: 0, mixGrupo: -1 }, { descripcion: 'Extra', importe: 0, mixGrupo: '1' }]) {
     assert.equal(extrasValidos([e]), false);
   }
 });
@@ -15,11 +15,14 @@ test('guarda extras sin crear productos y recalcula total con productos más car
   const sql = [];
   const conexion = { async execute(consulta, valores) { sql.push({ consulta, valores }); return [{ insertId: sql.length }]; } };
   const fecha = new Date('2026-10-18T20:00:00Z');
-  const guardados = await guardarExtrasPedido(conexion, 7, [{ descripcion: '  Cargo   adicional ', importe: 10.25 }, { descripcion: 'Empaque', importe: 0.1 }], fecha);
+  const guardados = await guardarExtrasPedido(conexion, 7, [{ descripcion: '  Cargo   adicional ', importe: 10.25 }, { descripcion: 'Extra queso', importe: 0, mixGrupo: 1 }], fecha, new Map([[1, 4]]));
   await recalcularTotalOrden(conexion, 7, fecha);
   assert.ok(sql.slice(0,2).every(s => s.consulta.startsWith('INSERT INTO orden_extra')));
-  assert.deepEqual(sql.slice(0,2).map(s => s.valores.slice(0,3)), [[7,'Cargo adicional','10.25'],[7,'Empaque','0.10']]);
+  assert.deepEqual(sql.slice(0,2).map(s => s.valores.slice(0,4)), [[7,'Cargo adicional','10.25',null],[7,'Extra queso','0.00',4]]);
   assert.equal(guardados[0].importe, 10.25);
+  assert.equal(guardados[1].importe, 0);
+  assert.equal(guardados[1].mix_grupo, 4, 'Guarda el número definitivo del MIX, no el del borrador');
+  await assert.rejects(() => guardarExtrasPedido(conexion, 7, [{ descripcion: 'Extra', importe: 0, mixGrupo: 99 }], fecha), /MIX/);
   assert.match(sql[2].consulta, /SUM\(subtotal\).*orden_has_detalle/s);
   assert.match(sql[2].consulta, /SUM\(importe\).*orden_extra/s);
   assert.deepEqual(sql[2].valores, [7,7,fecha,7]);
@@ -58,14 +61,21 @@ test('un extra agregado dentro de un MIX sale justo debajo de ese MIX; los demá
   const ticket = {
     orden_cocina: '#7-1', mesa: 'Mesa 7', enviada_en: new Date().toISOString(),
     productos: [producto('Tostadas · Pierna', 3), producto('Tacos · Pollo', null)],
-    extras: [{ descripcion: 'Queso extra', importe: 10, mix_grupo: 3 }, { descripcion: 'Desechables', importe: 5 }, { descripcion: 'De un MIX sin productos', importe: 2, mix_grupo: 9 }],
+    extras: [{ descripcion: 'Queso extra', importe: 0, mix_grupo: 3 }, { descripcion: 'Desechables', importe: 5 }, { descripcion: 'De un MIX sin productos', importe: 2, mix_grupo: 9 }],
   };
   assert.equal(validarTicketCocina(ticket), null);
   const textos = lineasTicketCocina(ticket).map((l) => l.texto).filter(Boolean);
   const mix = textos.indexOf('MIX');
   assert.deepEqual(textos.slice(mix, mix + 3), ['MIX', '1 TOSTADAS · PIERNA', '+ QUESO EXTRA']);
+  const papel = lineasTicketCocina(ticket);
+  const extra = papel.find(l => l.texto === '+ QUESO EXTRA');
+  const plato = papel.find(l => l.texto === '1 TOSTADAS · PIERNA');
+  assert.equal(extra.derecha, '$0.00');
+  assert.equal(extra.escala, plato.escala);
+  assert.equal(extra.negrita, plato.negrita);
   const final = textos.indexOf('EXTRAS');
   assert.ok(final > textos.indexOf('1 TACOS · POLLO'));
   assert.deepEqual(textos.slice(final + 1), ['DESECHABLES', 'DE UN MIX SIN PRODUCTOS']);
+  assert.equal(papel.find(l => l.texto === 'DESECHABLES').escala, plato.escala);
   assert.ok(validarTicketCocina({ ...ticket, extras: [{ descripcion: 'X', importe: 1, mix_grupo: 0 }] }));
 });

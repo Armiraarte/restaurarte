@@ -257,7 +257,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
     siguienteExtra = Math.max(siguienteExtra, ...guardados.map((e) => e.id + 1));
     return guardados;
   });
-  const [agregandoExtra, setAgregandoExtra] = useState(false);
+  const [agregandoExtra, setAgregandoExtra] = useState<{ mixGrupo: number | null } | null>(null);
   useEffect(() => guardarBorrador(claveBorrador, nuevo, mixActivo, extrasNuevos), [claveBorrador, nuevo, mixActivo, extrasNuevos]);
   // Pestañas: PEDIDO (lo ya enviado) y AGREGAR (menú + nuevo pedido).
   const [pestana, setPestana] = useState<'pedido' | 'agregar'>('pedido');
@@ -309,7 +309,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
     setCategoriaAbierta(null);
     setNuevo([]);
     setExtrasNuevos([]);
-    setAgregandoExtra(false);
+    setAgregandoExtra(null);
     setMixActivo(null);
     setPestana('pedido');
   }, [bloqueada]);
@@ -461,7 +461,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
           ...(l.sinQueso && { sinQueso: true }),
           ...(l.carneExtra && { carneExtra: l.carneExtra }),
         })),
-        extrasDelBorrador.map(({ descripcion, importe }) => ({ descripcion, importe })),
+        extrasDelBorrador.map(({ descripcion, importe, mixGrupo }) => ({ descripcion, importe, mixGrupo: mixGrupo != null && mixEnLista.has(mixGrupo) ? mixGrupo : null })),
         esLlamada ? 'llamada' : orden?.origen,
       );
       actualizarOrden(datos);
@@ -479,12 +479,11 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
       // donde se preparan. Salen al mismo tiempo, cada uno en su impresora.
       const paraTicket = confirmado.filter(vaEnTicket);
       const bebidas = confirmado.filter((l) => !vaEnTicket(l));
-      // Cada extra agregado dentro de un MIX lleva el número definitivo de ese MIX (sale debajo de él en cocina).
-      const mixDefinitivo = new Map(enviado.map((l, i) => [l.mixGrupo ?? null, datos.guardados[i].mix_grupo]));
-      const extrasTicket = (datos.extrasGuardados ?? extrasDelBorrador).map((e, i) => ({
+      // Usa el MIX confirmado y guardado por el servidor, también disponible para reimpresiones.
+      const extrasTicket = datos.extrasGuardados.map((e) => ({
         descripcion: e.descripcion,
         importe: e.importe,
-        mix_grupo: extrasDelBorrador[i]?.mixGrupo != null ? mixDefinitivo.get(extrasDelBorrador[i].mixGrupo!) ?? null : null,
+        mix_grupo: e.mix_grupo ?? null,
       }));
       const ronda = rondasPrevias + 1;
       const tickets = [
@@ -912,7 +911,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
                 >
                   <UtensilsCrossed className="w-4 h-4 shrink-0" /> MIX
                 </button>
-                <button type="button" disabled={!puedeEditar} onClick={() => setAgregandoExtra(true)} aria-label="Agregar extra" title="Agregar extra" className="w-10 h-10 rounded-xl border-2 border-amber-300 bg-amber-50 text-amber-900 flex items-center justify-center cursor-pointer disabled:opacity-40"><Plus className="w-5 h-5" /></button>
+                <button type="button" disabled={!puedeEditar} onClick={() => setAgregandoExtra({ mixGrupo: mixActivo })} aria-label="Agregar extra" title="Agregar extra" className="w-10 h-10 rounded-xl border-2 border-amber-300 bg-amber-50 text-amber-900 flex items-center justify-center cursor-pointer disabled:opacity-40"><Plus className="w-5 h-5" /></button>
               </div>
             </div>
             {mixActivo !== null && (
@@ -926,7 +925,10 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
               ) : (
                 gruposNuevos.map((grupo, indice) => (
                   <div key={grupo.grupo === null ? `suelto-${indice}` : `mix-${grupo.grupo}`} className={grupo.grupo !== null ? 'rounded-xl border-2 border-violet-200 bg-violet-50/50 p-2 space-y-2' : ''}>
-                    {grupo.grupo !== null && <div className="text-xs font-black tracking-wide text-violet-800">MIX</div>}
+                    {grupo.grupo !== null && <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-black tracking-wide text-violet-800">MIX</span>
+                      <button type="button" disabled={!puedeEditar} onClick={() => setAgregandoExtra({ mixGrupo: grupo.grupo })} aria-label={`Agregar extra al MIX ${indice + 1}`} className="h-9 px-2 rounded-lg border border-violet-300 text-violet-800 text-sm font-bold flex items-center gap-1 cursor-pointer disabled:opacity-40"><Plus className="w-4 h-4" />Extra</button>
+                    </div>}
                     {grupo.lineas.map((l) => (
                   <div key={l.id} className={`border-b pb-2 last:border-0 space-y-1.5 ${lineaAgotada(l) ? 'bg-red-100 border-red-500 text-red-900 rounded-lg p-2' : 'border-neutral-100'}`}>
                     <div className="flex items-start justify-between gap-2">
@@ -1053,11 +1055,11 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
           onCancelar={() => setEditandoComentario(false)}
         />
       )}
-      {agregandoExtra && puedeEditar && <DialogoAgregarExtra onCancelar={() => setAgregandoExtra(false)} onAgregar={(extra) => {
+      {agregandoExtra && puedeEditar && <DialogoAgregarExtra enMix={agregandoExtra.mixGrupo !== null} onCancelar={() => setAgregandoExtra(null)} onAgregar={(extra) => {
         if (!puedeEditar) return;
         // Con un MIX abierto, el extra queda dentro de ese MIX (en cocina sale justo debajo de él).
-        setExtrasNuevos((lista) => [...lista, { ...extra, id: siguienteExtra++, mixGrupo: mixActivo }]);
-        setAgregandoExtra(false);
+        setExtrasNuevos((lista) => [...lista, { ...extra, id: siguienteExtra++, mixGrupo: agregandoExtra.mixGrupo }]);
+        setAgregandoExtra(null);
       }} />}
       <AnimatePresence>
         {nombrando && (

@@ -92,7 +92,7 @@ export function construirComandasCocina(orden: OrdenBD, detalle: DetalleOrdenBD[
       comanda_id: `${orden.idOrden}-${ronda}`, cuenta_id: String(orden.idOrden), mesa: orden.etiqueta,
       tipo_identificador: /^\d+$/.test(orden.nombre) ? 'mesa' : 'nombre', para_llevar: orden.tipo_orden === 2,
       ronda, adicion: ronda > 1, mesero: origen, tablet: origen, enviada_en: fecha, area: 'cocina',
-      productos, extras: cargos.map(({ descripcion, importe }) => ({ descripcion, importe })),
+      productos, extras: cargos.map(({ descripcion, importe, mix_grupo }) => ({ descripcion, importe, ...(mix_grupo != null && { mix_grupo }) })),
       total_piezas: productos.reduce((n, p) => n + p.cantidad, 0),
     }];
   });

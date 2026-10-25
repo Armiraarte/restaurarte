@@ -132,10 +132,10 @@ async function ordenConDetalle(idOrden: number) {
   const detalles: RowDataPacket[] = detalle.map((d) => ({ ...d, opciones: typeof d.opciones === 'string' ? JSON.parse(d.opciones) : d.opciones }));
   const origen = origenOrden(o.nombre, o.origen ?? detalles.find((d) => d.opciones?.comanda?.tipoPedido)?.opciones?.comanda?.tipoPedido);
   const [extras] = await pool!.query<RowDataPacket[]>(
-    'SELECT id, descripcion, importe, creado_en FROM orden_extra WHERE idOrden = ? ORDER BY id', [idOrden],
+    'SELECT id, descripcion, importe, mix_grupo, creado_en FROM orden_extra WHERE idOrden = ? ORDER BY id', [idOrden],
   );
   return {
-    extras: extras.map((e) => ({ ...e, importe: Number(e.importe) })),
+    extras: extras.map((e) => ({ ...e, importe: Number(e.importe), mix_grupo: e.mix_grupo == null ? null : Number(e.mix_grupo) })),
     // Sin sesión de tablet = la abrió la caja.
     orden: { ...o, origen, total: Number(o.total), etiqueta: etiquetaOrden(o.nombre), abierta_por: o.abierta_por ?? 'Caja' },
     detalle: detalles.map((d) => ({
@@ -323,7 +323,11 @@ pedidosRouter.post('/ordenes/:idOrden/pedido', async (req, res) => {
     return;
   }
   if ((req.body?.items !== undefined && !Array.isArray(req.body.items)) || !extrasValidos(extras) || (items.length > 0 && !itemsValidos(items)) || (items.length === 0 && extras.length === 0)) {
-    res.status(400).json({ error: 'Agrega productos válidos o extras con descripción e importe mayor que cero (hasta dos decimales).' });
+    res.status(400).json({ error: 'Agrega productos válidos o extras con descripción e importe de cero o más (hasta dos decimales).' });
+    return;
+  }
+  if (extras.some((e) => e.mixGrupo != null && !items.some((i) => i.mixGrupo === e.mixGrupo))) {
+    res.status(400).json({ error: 'Agrega al menos un producto al MIX del extra antes de enviar el pedido.' });
     return;
   }
 
@@ -476,7 +480,8 @@ pedidosRouter.post('/ordenes/:idOrden/pedido', async (req, res) => {
     const ahora = new Date();
     const guardados = await guardarDetallePedido(conexion, idOrden, items, porId, complementos, ahora, papas, productosReparto,
       req.usuario!.rol === 'tablet' ? req.usuario!.nombre : 'CAJA', req.body?.origenPedido);
-    const extrasGuardados = await guardarExtrasPedido(conexion, idOrden, extras, ahora);
+    const gruposMix = new Map(items.flatMap((item, i) => item.mixGrupo == null ? [] : [[item.mixGrupo, guardados[i].mix_grupo!] as const]));
+    const extrasGuardados = await guardarExtrasPedido(conexion, idOrden, extras, ahora, gruposMix);
     await recalcularTotalOrden(conexion, idOrden, ahora);
     await conexion.commit();
 

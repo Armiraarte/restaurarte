@@ -55,11 +55,13 @@ export interface OrdenBD {
 export interface ExtraPedido {
   descripcion: string;
   importe: number;
+  mixGrupo?: number | null;
 }
 
 export interface ExtraOrdenBD extends ExtraPedido {
   id: number;
   creado_en: string;
+  mix_grupo?: number | null;
 }
 
 export const ESTATUS_ORDEN: Record<number, string> = { 0: 'ABIERTA', 1: 'PAGANDO', 2: 'PAGADO' };

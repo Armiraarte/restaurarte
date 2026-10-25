@@ -14,7 +14,7 @@ export const TicketCocinaPapel: React.FC<{ ticket: TicketCocina }> = ({ ticket: 
   const extrasEnMix = (t.extras ?? []).filter((e) => e.mix_grupo != null && grupos.some((g) => g.grupo === e.mix_grupo));
   const extrasFinales = (t.extras ?? []).filter((e) => !extrasEnMix.includes(e));
   const separador = <div className="border-t border-dashed border-neutral-400 my-2" />;
-  const extra = (e: NonNullable<TicketCocina['extras']>[number], i: number) => <div key={i} className="flex justify-between gap-2"><span>{mayusculasComanda(e.descripcion)}</span><span>${e.importe.toFixed(2)}</span></div>;
+  const extra = (e: NonNullable<TicketCocina['extras']>[number], i: number) => <div key={i} className="flex justify-between gap-2 text-[19px] font-bold"><span className="min-w-0 break-words">{mayusculasComanda(e.descripcion)}</span><span className="shrink-0">${e.importe.toFixed(2)}</span></div>;
   return (
   <div className="w-[300px] max-w-full mx-auto bg-white text-neutral-950 font-mono text-[13px] leading-snug px-4 py-5 shadow-md border border-neutral-200">
     <div>{t.area === 'bebidas' ? 'BEBIDAS' : 'ORDEN COCINA'} {mayusculasComanda(t.orden_cocina)}{t.tablet && ` · ${mayusculasComanda(t.tablet)}`}</div>
