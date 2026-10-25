@@ -3,6 +3,7 @@
 //   Ya enviado     → GET /api/ordenes/:idOrden (orden_has_detalle)
 //   Enviar a cocina→ POST /api/ordenes/:idOrden/pedido (orden_has_detalle + orden.total)
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertTriangle,
@@ -262,6 +263,19 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
   const [pestana, setPestana] = useState<'pedido' | 'agregar'>('pedido');
   // Tablet: lo ya enviado se ve en una ventana desde el botón de historial.
   const [verHistorial, setVerHistorial] = useState(false);
+  useEffect(() => {
+    if (!verHistorial) return;
+    const anterior = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const cerrarConEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setVerHistorial(false);
+    };
+    document.addEventListener('keydown', cerrarConEscape);
+    return () => {
+      document.body.style.overflow = anterior;
+      document.removeEventListener('keydown', cerrarConEscape);
+    };
+  }, [verHistorial]);
   const [dividiendo, setDividiendo] = useState(false);
   const piezasEnviadas = detalle.reduce((acc, d) => acc + d.cantidad, 0);
   const [enviando, setEnviando] = useState(false);
@@ -1057,10 +1071,10 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
       </AnimatePresence>
 
       {/* Historial de lo enviado (tablet) */}
-      <AnimatePresence>
+      {createPortal(<AnimatePresence>
         {verHistorial && (
           <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/30"
+            className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden overscroll-none p-4 bg-black/30"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -1068,24 +1082,25 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
           >
             <motion.div
               role="dialog"
+              aria-modal="true"
               aria-label="Historial de lo enviado"
-              className="relative w-full max-w-xl max-h-full flex flex-col"
+              className="relative w-full max-w-xl min-h-0 max-h-[calc(100dvh-2rem)] overflow-hidden flex flex-col gap-3"
               initial={{ scale: 0.95, y: 10 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
             >
-              <PedidoEnviado orden={orden} detalle={detalle} extras={extrasEnviados} soloPedido className="min-h-0 shadow-xl" />
+              <PedidoEnviado orden={orden} detalle={detalle} extras={extrasEnviados} soloPedido className="flex-1 min-h-0 shadow-xl" />
               <button
                 onClick={() => setVerHistorial(false)}
-                className="mt-3 shrink-0 w-full h-14 rounded-xl bg-white hover:bg-neutral-50 border border-neutral-200 text-lg font-semibold flex items-center justify-center gap-2 cursor-pointer"
+                className="shrink-0 w-full h-12 sm:h-14 rounded-xl bg-white hover:bg-neutral-50 border border-neutral-200 text-lg font-semibold flex items-center justify-center gap-2 cursor-pointer"
               >
                 <X className="w-5 h-5" /> Cerrar
               </button>
             </motion.div>
           </motion.div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>, document.body)}
 
       {/* Dividir la cuenta (solo calcula cuánto le toca a cada persona) */}
       <AnimatePresence>

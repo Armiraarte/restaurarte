@@ -125,11 +125,11 @@ export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, extras = [], cl
   if (soloPedido) {
     const renglones = envios.flatMap((envio) => envio.renglones);
     return (
-      <section className={`bg-white/95 border border-neutral-200 rounded-2xl overflow-hidden flex flex-col ${className}`}>
+      <section className={`min-w-0 min-h-0 bg-white/95 border border-neutral-200 rounded-2xl overflow-hidden flex flex-col ${className}`}>
         <header className="shrink-0 px-4 py-3 border-b border-neutral-200">
-          <h2 className="text-xl font-bold">{orden?.etiqueta ?? 'Lo pedido'}</h2>
+          <h2 className="text-xl font-bold break-words">{orden?.etiqueta ?? 'Lo pedido'}</h2>
         </header>
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3">
+        <div className="flex-1 min-h-0 overflow-x-hidden overflow-y-auto overscroll-contain p-3">
           {!renglones.length && !extras.length ? <p className="py-6 text-center text-neutral-500">Aún no hay productos enviados.</p> : (
             <ul className="divide-y divide-neutral-100">
               {agruparMix(renglones, (r) => r.mixGrupo).map((grupo, indice) => (
