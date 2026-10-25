@@ -1065,7 +1065,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
               exit={{ scale: 0.95, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
             >
-              <PedidoEnviado orden={orden} detalle={detalle} extras={extrasEnviados} className="min-h-0 shadow-xl" />
+              <PedidoEnviado orden={orden} detalle={detalle} extras={extrasEnviados} soloPedido className="min-h-0 shadow-xl" />
               <button
                 onClick={() => setVerHistorial(false)}
                 className="mt-3 shrink-0 w-full h-14 rounded-xl bg-white hover:bg-neutral-50 border border-neutral-200 text-lg font-semibold flex items-center justify-center gap-2 cursor-pointer"

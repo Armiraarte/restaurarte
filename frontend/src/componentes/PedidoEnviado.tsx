@@ -84,9 +84,11 @@ interface Props {
   className?: string;
   /** Si no hay nada enviado, muestra un botón para ir a agregar productos. */
   onAgregar?: () => void;
+  /** Historial: únicamente lo pedido, sin datos administrativos ni importes. */
+  soloPedido?: boolean;
 }
 
-export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, extras = [], className = '', onAgregar }) => {
+export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, extras = [], className = '', onAgregar, soloPedido = false }) => {
   // Envíos: renglones con la misma hora de registro.
   const envios: Envio[] = [];
   detalle.forEach((d) => {
@@ -119,6 +121,48 @@ export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, extras = [], cl
 
   const piezas = detalle.reduce((acc, d) => acc + d.cantidad, 0);
   const estatus = orden?.estatus ?? 0;
+
+  if (soloPedido) {
+    const renglones = envios.flatMap((envio) => envio.renglones);
+    return (
+      <section className={`bg-white/95 border border-neutral-200 rounded-2xl overflow-hidden flex flex-col ${className}`}>
+        <header className="shrink-0 px-4 py-3 border-b border-neutral-200">
+          <h2 className="text-xl font-bold">{orden?.etiqueta ?? 'Lo pedido'}</h2>
+        </header>
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3">
+          {!renglones.length && !extras.length ? <p className="py-6 text-center text-neutral-500">Aún no hay productos enviados.</p> : (
+            <ul className="divide-y divide-neutral-100">
+              {agruparMix(renglones, (r) => r.mixGrupo).map((grupo, indice) => (
+                <React.Fragment key={grupo.grupo === null ? `suelto-${indice}` : `mix-${grupo.grupo}`}>
+                  {grupo.grupo !== null && <li className="px-3 py-2 text-sm font-bold text-violet-800 bg-violet-50">MIX</li>}
+                  {grupo.lineas.map((r) => {
+                    const sin = [...new Set([...r.sin.map((n) => n.toUpperCase()), ...(r.sinQueso ? ['QUESO'] : [])])];
+                    const indicaciones = [
+                      r.termino?.toUpperCase(), r.conPapas && 'CON PAPAS', r.conQueso && 'CON QUESO',
+                      r.carneExtra > 0 && textoCarneExtra(r.carneExtra),
+                      r.complementosExtra.length > 0 && textoComplementosExtra(r.complementosExtra),
+                      sin.length > 0 && `SIN ${sin.join(', ')}`,
+                    ].filter(Boolean);
+                    const nombre = r.producto.toLocaleLowerCase('es').startsWith(r.categoria.toLocaleLowerCase('es'))
+                      ? r.producto : `${r.categoria} · ${r.producto}`;
+                    return <li key={r.clave} className="grid grid-cols-[2.5rem_minmax(0,1fr)] items-start gap-3 px-2 py-3">
+                      <span className="rounded-lg bg-amber-100 text-amber-900 min-h-10 flex items-center justify-center font-mono font-bold">{r.cantidad}</span>
+                      <div className="min-w-0">
+                        <div className="font-semibold text-neutral-900 break-words">{nombre}</div>
+                        {indicaciones.length > 0 && <div className="mt-1 text-sm text-neutral-600 break-words">{indicaciones.join(' · ')}</div>}
+                        {r.nota && <div className="mt-1 text-sm text-neutral-600 break-words">{r.nota}</div>}
+                      </div>
+                    </li>;
+                  })}
+                </React.Fragment>
+              ))}
+              {extras.map((extra) => <li key={`extra-${extra.id}`} className="px-3 py-3 text-sm text-neutral-700 break-words">{extra.descripcion}</li>)}
+            </ul>
+          )}
+        </div>
+      </section>
+    );
+  }
 
   return (
     // Casi sólida (bg-white/90 no la vuelve cristal): la lista se lee mejor sin la marca de agua detrás.
