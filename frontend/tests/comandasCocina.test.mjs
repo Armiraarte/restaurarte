@@ -64,7 +64,7 @@ test('cocina: reimprime envíos de solo extras y reconstruye pedidos anteriores 
   const tickets = construirComandasCocina(orden, [fila(1, a, { con_queso: true,
     categoria: 'Tacos', opciones: { sin: [{ id: 1, nombre: 'Cebolla' }], mezcla: [] },
   })], [{ id: 1, creado_en: b, descripcion: 'Extra manual', importe: 7 }], []);
-  assert.equal(formatoProductoCocina(tickets[0].productos[0]).renglones[0].nombre, 'T Frijol Q');
+  assert.equal(formatoProductoCocina(tickets[0].productos[0]).renglones[0].nombre, 'T FRIJOL Q');
   assert.deepEqual(formatoProductoCocina(tickets[0].productos[0]).descripcion, ['SIN CEBOLLA']);
   assert.equal(tickets[1].productos.length, 0);
   assert.deepEqual(tickets[1].extras, [{ descripcion: 'Extra manual', importe: 7 }]);
@@ -77,14 +77,14 @@ test('la Q identifica el queso incluido, agregado o extra en cualquier categorí
     const p = construirComandasCocina(orden, [fila(1, a, { categoria,
       opciones: { sin: [cebolla], mezcla: [], comanda: { producto: { nombre: 'Pollo', tamano: null, categoria }, ofrecidos: [queso, cebolla] } },
     })], [], [])[0].productos[0];
-    assert.ok(formatoProductoCocina(p).renglones[0].nombre.endsWith('Pollo Q'), categoria);
+    assert.ok(formatoProductoCocina(p).renglones[0].nombre.toUpperCase().endsWith('POLLO Q'), categoria);
     assert.deepEqual(p.descripcion, ['SIN CEBOLLA']);
     assert.equal(p.nombre, `${categoria} · Pollo`, 'Conserva el nombre original del producto');
   }
   const extra = construirComandasCocina(orden, [fila(1, a, { categoria: 'Tacos',
     opciones: { sin: [], mezcla: [], complementosExtra: [queso] },
   })], [], [])[0].productos[0];
-  assert.equal(formatoProductoCocina(extra).renglones[0].nombre, 'T Frijol Q');
+  assert.equal(formatoProductoCocina(extra).renglones[0].nombre, 'T FRIJOL Q');
   assert.deepEqual(formatoProductoCocina(extra).descripcion, ['EXTRA QUESO']);
 });
 
@@ -96,7 +96,7 @@ test('sin queso y tacos con todo no agregan Q; el producto de queso sí la lleva
     assert.ok(!formatoProductoCocina(p).renglones[0].nombre.endsWith(' Q'));
   }
   const p = construirComandasCocina(orden, [fila(1, a, { nombre: 'Queso' })], [], [])[0].productos[0];
-  assert.equal(formatoProductoCocina(p).renglones[0].nombre, 'Q Queso Q');
+  assert.equal(formatoProductoCocina(p).renglones[0].nombre, 'Q QUESO Q');
   const mixta = construirComandasCocina(orden, [fila(1, a, {
     opciones: { sin: [], mezcla: ['Queso', 'Frijol'], reparto: [{ nombre: 'Queso', cantidad: 1 }, { nombre: 'Frijol', cantidad: 1 }] },
   })], [], [])[0].productos[0];

@@ -55,7 +55,7 @@ test('el papel usa las mismas abreviaturas de Cocina y conserva piezas y modific
     { categoria: 'Alitas', nombre: 'Alitas · MIXTAS', cantidad: 10, reparto: [{ opcion: 'BBQ', cantidad: 4 }, { opcion: 'Buffalo', cantidad: 6 }], descripcion: ['4 BBQ', '6 Buffalo'] },
   ] };
   const textos = lineasTicketCocina(ticket).map((l) => l.texto).filter(Boolean);
-  for (const texto of ['2 T Papa', '1 Ham Res', '1 Milanesa', '4 BBQ', '6 Buffalo', '  - SIN CHILE, CEBOLLA', '  - DOBLE CARNE']) assert.ok(textos.includes(texto), texto);
+  for (const texto of ['2 T PAPA', '1 Ham Res', '1 Milanesa', '4 BBQ', '6 Buffalo', '  - SIN CHILE, CEBOLLA', '  - DOBLE CARNE']) assert.ok(textos.includes(texto), texto);
   assert.equal(textos.some((t) => t.includes('Alitas') || t.includes('Hamburguesas') || t.includes('Carnes')), false);
 });
 
