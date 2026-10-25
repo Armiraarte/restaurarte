@@ -405,8 +405,7 @@ es aparte de «Pollo a la plancha». Repetirlo no las duplica ni cambia un preci
 ```
 
 **Complementos EXTRA**: en las opciones de cualquier platillo, un toque incluye o quita un complemento y
-**doble toque** lo marca EXTRA (otro doble toque lo quita); cada uno cuesta $1 por pieza
-(`PRECIO_COMPLEMENTO_EXTRA` en `backend/src/detallePedido.ts` y en el frontend). Se manda como
+**doble toque** lo marca EXTRA (otro doble toque lo quita), sin cargo adicional. Se manda como
 `complementosExtra` (IDs de los complementos del producto, nunca también en `sin`) y se guarda en
 `opciones.complementosExtra` sin columna nueva; cocina y cobro muestran «EXTRA CREMA Y QUESO».
 

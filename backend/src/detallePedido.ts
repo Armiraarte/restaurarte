@@ -1,8 +1,6 @@
 import type { PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 
 const PRECIO_CARNE_EXTRA = 20;
-/** Complemento EXTRA (doble toque en la pantalla de opciones): cada uno cuesta esto por pieza. */
-export const PRECIO_COMPLEMENTO_EXTRA = 1;
 
 export function terminoPermitido(categoria: string, nombre: string | undefined): boolean {
   return nombre !== undefined && (categoria === 'Tacos' || (categoria === 'Tacos Dorados' && nombre !== 'Dorado'));
@@ -22,7 +20,7 @@ export interface ItemPedido {
   mixGrupo?: number | null;
   /** MIXTAS (cualquier categoría): cuántas piezas de cada sabor en un solo renglón; suman `cantidad`. */
   reparto?: RepartoPedido[];
-  /** Complementos EXTRA (IDs, de los del producto), cada uno con costo por pieza; no pueden estar también en `sin`. */
+  /** Complementos EXTRA (IDs, de los del producto), sin cargo; no pueden estar también en `sin`. */
   complementosExtra?: number[];
   /** Comentario del platillo (lo que no está en el menú ni en las opciones): sale como NOTA en la comanda. */
   nota?: string;
@@ -121,11 +119,11 @@ export async function guardarDetallePedido(
       ? [...new Map([item.idProducto, ...sabores.map((s) => s.id)].flatMap((id) => complementos.get(id) ?? []).map((c) => [c.id, c])).values()]
       : complementos.get(item.idProducto) ?? [];
     const extra = ofrecidos.filter((c) => item.complementosExtra?.includes(c.id));
-    // En centavos. En MIXTAS cada pieza a su precio; lo extra (carnes, EXTRA y papas) va en cada pieza.
+    // En centavos. En MIXTAS cada pieza a su precio; carnes extra y papas se cobran por pieza.
     const base = sabores
       ? item.reparto!.reduce((acc, r, i) => acc + Math.round(sabores[i].precio * 100) * r.cantidad, 0)
       : Math.round(Number(p.precio) * 100) * item.cantidad;
-    const porPieza = carneExtra * PRECIO_CARNE_EXTRA * 100 + extra.length * PRECIO_COMPLEMENTO_EXTRA * 100 +
+    const porPieza = carneExtra * PRECIO_CARNE_EXTRA * 100 +
       (item.conPapas ? Math.round(papas!.precio * 100) : 0);
     const subtotal = (base + porPieza * item.cantidad) / 100;
     const opciones = {
@@ -136,7 +134,7 @@ export async function guardarDetallePedido(
       ...(item.reparto && {
         reparto: item.reparto.map((r, i) => ({ nombre: r.nombre, cantidad: r.cantidad, ...(sabores && { precio: sabores[i].precio }) })),
       }),
-      ...(extra.length && { complementosExtra: extra, precioComplementoExtra: PRECIO_COMPLEMENTO_EXTRA }),
+      ...(extra.length && { complementosExtra: extra }),
       ...(item.nota && { nota: item.nota.trim().replace(/\s+/g, ' ') }),
       ...(item.conPapas && { papas }),
     };

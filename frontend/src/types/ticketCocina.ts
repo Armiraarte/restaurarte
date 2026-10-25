@@ -49,7 +49,7 @@ export interface ProductoTicketCocina {
   mix_grupo?: number | null; // mismo número = un plato; cada producto conserva su renglón
   opciones: OpcionTicket[]; // producto normal
   piezas?: { pieza: string; opciones: OpcionTicket[] }[]; // paquete (Burritas): una entrada por pieza
-  reparto?: { opcion: string; cantidad: number }[]; // reparto (Alitas): cuántas de cada sabor
+  reparto?: { opcion: string; cantidad: number; con_queso?: boolean }[]; // MIXTAS: piezas y queso de cada sabor
   descripcion: string[]; // texto ya armado para cocina ("Sin repollo ni lechuga", "Burrita 1: …")
   notas?: string; // BD: partidas.notas
 }

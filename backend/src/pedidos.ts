@@ -7,7 +7,7 @@
 //   GET   /api/ordenes/:idOrden             la orden con su detalle y total
 //   POST  /api/ordenes/:idOrden/pedido      { items: [{ idProducto, cantidad, sin?, mezcla?, reparto?, sinQueso?, conQueso?, carneExtra?, mixGrupo? }] }
 //                                           reparto = MIXTAS (cualquier categoría): [{ nombre, cantidad }] por sabor, en un solo renglón; cada pieza a su precio
-//                                           complementosExtra = IDs de complementos EXTRA (doble toque); +$1 c/u por pieza
+//                                           complementosExtra = IDs de complementos EXTRA (doble toque), sin cargo
 //                                           nota = comentario del platillo (hasta 200 caracteres); en cocina sale como NOTA
 //                                           Cada producto conserva precio, opciones y grupo MIX en orden_has_detalle.
 //                                           sinQueso = Quesadillas y Hamburguesas: SIN QUESO

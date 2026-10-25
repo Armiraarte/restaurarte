@@ -25,7 +25,7 @@ export const TicketCocinaPapel: React.FC<{ ticket: TicketCocina }> = ({ ticket: 
       {g.grupo !== null && <>{separador}<div className="text-xl font-bold">MIX</div></>}
       {g.lineas.map((p) => { const formato = formatoProductoCocina(p); return <div key={p.partida_id} className="text-[19px] mb-1 break-words">
         {formato.renglones.map((r, j) => <div key={j} className="font-bold">{r.cantidad} {r.nombre}</div>)}
-        {formato.descripcion.map((d, j) => <div key={j} className="pl-3">- {d}</div>)}
+        {formato.descripcion.map((d, j) => <div key={j} className={`pl-3${/^EXTRA\b/i.test(d.trim()) ? ' font-bold' : ''}`}>- {d}</div>)}
         {p.notas && <div className="text-[13px] pl-3 font-bold">NOTA: {p.notas}</div>}
       </div>; })}
       {extrasEnMix.filter((e) => e.mix_grupo === g.grupo).map((e, j) => extra({ ...e, descripcion: `+ ${e.descripcion}` }, j))}

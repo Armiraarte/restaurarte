@@ -50,12 +50,15 @@ test('copia el nombre, complementos y origen para reimprimir sin depender de cam
 test('el papel usa las mismas abreviaturas de Cocina y conserva piezas y modificadores', () => {
   const ticket = { orden_cocina: '#1-1', mesa: 'Mesa 2', productos: [
     { categoria: 'Tacos Dorados', nombre: 'Tacos Dorados · Papa', cantidad: 2, descripcion: ['SIN CHILE, CEBOLLA'] },
-    { categoria: 'Hamburguesas', nombre: 'Hamburguesas · Res', cantidad: 1, descripcion: ['DOBLE CARNE'] },
+    { categoria: 'Hamburguesas', nombre: 'Hamburguesas · Res', cantidad: 1, con_queso: true, descripcion: ['DOBLE CARNE'] },
     { categoria: 'Carnes', nombre: 'Carnes · Milanesa', cantidad: 1, descripcion: [] },
     { categoria: 'Alitas', nombre: 'Alitas · MIXTAS', cantidad: 10, reparto: [{ opcion: 'BBQ', cantidad: 4 }, { opcion: 'Buffalo', cantidad: 6 }], descripcion: ['4 BBQ', '6 Buffalo'] },
+    { categoria: 'Sopes', nombre: 'Sopes · MIXTAS', cantidad: 3, con_queso: true,
+      reparto: [{ opcion: 'Papa', cantidad: 1, con_queso: true }, { opcion: 'Frijol', cantidad: 2, con_queso: false }], descripcion: ['1 Papa', '2 Frijol'] },
   ] };
   const textos = lineasTicketCocina(ticket).map((l) => l.texto).filter(Boolean);
-  for (const texto of ['2 T PAPA', '1 Ham Res', '1 Milanesa', '4 BBQ', '6 Buffalo', '  - SIN CHILE, CEBOLLA', '  - DOBLE CARNE']) assert.ok(textos.includes(texto), texto);
+  for (const texto of ['2 T PAPA', '1 Ham Res', '1 Milanesa', '4 BBQ', '6 BFF', '1 SOP PAPA Q', '2 SOP FRI', '  - SIN CHILE, CEBOLLA', '  - DOBLE CARNE']) assert.ok(textos.includes(texto), texto);
+  assert.ok(!textos.some((t) => t.includes('MIXTAS') || /^3 SOP\b/.test(t)), 'No imprime MIXTAS ni el total de los sopes');
   assert.equal(textos.some((t) => t.includes('Alitas') || t.includes('Hamburguesas') || t.includes('Carnes')), false);
 });
 
@@ -141,7 +144,7 @@ test('MEZCLAR (Alitas): un solo renglón con las piezas de cada sabor', async ()
 test('MIXTAS en cualquier categoría: cada pieza a su precio, con lo extra en todas y los complementos de todos los sabores', async () => {
   const filas = [];
   const conexion = { async execute(sql, v) { filas.push({ cantidad: v[2], opciones: JSON.parse(v[7]), subtotal: v[8] }); return [{ insertId: filas.length }]; } };
-  // Lonches: 2 Mixto ($70) + 3 Jamón ($50), con papas ($30) y EXTRA chile ($1) en cada pieza.
+  // Lonches: 2 Mixto ($70) + 3 Jamón ($50), con papas ($30) y EXTRA chile sin cargo.
   const reparto = [{ nombre: 'Mixto', cantidad: 2 }, { nombre: 'Jamón', cantidad: 3 }];
   const item = { idProducto: 70, cantidad: 5, mezcla: ['Mixto', 'Jamón'], reparto, conPapas: true, sin: [4], complementosExtra: [5] };
   assert.equal(itemsValidos([item]), true);
@@ -149,20 +152,20 @@ test('MIXTAS en cualquier categoría: cada pieza a su precio, con lo extra en to
   const sabores = new Map([[item, [{ id: 70, precio: 70 }, { id: 50, precio: 50 }]]]);
   const papas = { idProducto: 77, nombre: 'Papas a la Francesa', tamano: 'Orden completa', precio: 30 };
   await guardarDetallePedido(conexion, 1, [item], new Map([[70, { precio: '70.00' }]]), complementos, new Date(), papas, sabores);
-  assert.equal(filas[0].subtotal, '445.00'); // 2 × 70 + 3 × 50 + 5 × (30 + 1)
+  assert.equal(filas[0].subtotal, '440.00'); // 2 × 70 + 3 × 50 + 5 × 30
   assert.deepEqual(filas[0].opciones.reparto, [{ nombre: 'Mixto', cantidad: 2, precio: 70 }, { nombre: 'Jamón', cantidad: 3, precio: 50 }]);
   assert.deepEqual(filas[0].opciones.sin, [{ id: 4, nombre: 'Cebolla' }]);
   assert.deepEqual(filas[0].opciones.complementosExtra, [{ id: 5, nombre: 'Chile' }], 'El EXTRA de otro sabor de la mezcla también cuenta');
 });
 
-test('complementos EXTRA: cada uno cobra $1 por pieza y queda guardado con su nombre', async () => {
+test('complementos EXTRA: se guardan con su nombre sin aumentar el subtotal', async () => {
   const filas = [];
   const conexion = { async execute(sql, v) { filas.push({ opciones: JSON.parse(v[7]), subtotal: v[8] }); return [{ insertId: filas.length }]; } };
   const complementos = new Map([[28, [{ id: 1, nombre: 'Crema' }, { id: 2, nombre: 'Queso' }, { id: 3, nombre: 'Salsa' }]]]);
   const item = { idProducto: 28, cantidad: 3, sin: [3], complementosExtra: [1, 2] };
   assert.equal(itemsValidos([item]), true);
   await guardarDetallePedido(conexion, 1, [item, { idProducto: 28, cantidad: 2 }], new Map([[28, { precio: '15.00' }]]), complementos, new Date());
-  assert.equal(filas[0].subtotal, '51.00'); // 3 × (15 + 2 × 1)
+  assert.equal(filas[0].subtotal, '45.00'); // 3 × 15, con dos complementos EXTRA sin cargo
   assert.deepEqual(filas[0].opciones.complementosExtra, [{ id: 1, nombre: 'Crema' }, { id: 2, nombre: 'Queso' }]);
   assert.deepEqual(filas[0].opciones.sin, [{ id: 3, nombre: 'Salsa' }]);
   assert.equal(filas[1].subtotal, '30.00');

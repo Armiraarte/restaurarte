@@ -5,7 +5,7 @@ interface ProductoCocina {
   cantidad: number;
   con_queso?: boolean;
   descripcion: string[];
-  reparto?: { opcion: string; cantidad: number }[];
+  reparto?: { opcion: string; cantidad: number; con_queso?: boolean }[];
 }
 
 const normal = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleLowerCase('es');
@@ -34,15 +34,34 @@ function abreviarSabor(nombre: string, categoria: string): string {
   }).join('');
 }
 
-export function formatoProductoCocina(p: ProductoCocina) {
+export function formatoProductoCocina(p: ProductoCocina): { renglones: { cantidad: number; nombre: string }[]; descripcion: string[] } {
   const categoria = normal(p.categoria ?? '');
   const conQueso = p.con_queso ?? p.descripcion.some((d) => normal(d) === 'con queso');
-  const marcarQueso = (nombre: string) => conQueso && !/\sQ$/i.test(nombre) ? `${nombre} Q` : nombre;
+  if (p.reparto?.length) {
+    const tamano = p.nombre.match(/(\s*\([^)]*\))\s*(?:Q)?$/i)?.[1] ?? '';
+    const sabores = new Set(p.reparto.map((r) => normal(`${r.cantidad} ${r.opcion}`)));
+    return {
+      // Cada sabor es un renglón del producto: sin encabezado MIXTAS, total ni Q general.
+      renglones: p.reparto.flatMap((r) => formatoProductoCocina({
+        categoria: p.categoria,
+        nombre: `${r.opcion}${tamano && !r.opcion.endsWith(tamano.trim()) ? tamano : ''}`,
+        cantidad: r.cantidad,
+        con_queso: r.con_queso ?? conQueso,
+        descripcion: [],
+      }).renglones),
+      descripcion: p.descripcion.filter((d) => !['con todo', 'con queso'].includes(normal(d)) && !sabores.has(normal(d))),
+    };
+  }
+  const marcarQueso = (nombre: string) => {
+    if (categoria === 'hamburguesas') return nombre.replace(/\s+Q$/i, '');
+    return conQueso && !/\sQ$/i.test(nombre) ? `${nombre} Q` : nombre;
+  };
   let nombre = p.nombre.trim();
   const prefijo = p.categoria?.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   if (prefijo) nombre = nombre.replace(new RegExp(`^${prefijo}\\s*[·:–—-]\\s*`, 'i'), '');
+  if (categoria === 'alitas') nombre = nombre.replace(/\bbuffalo\b/gi, 'BFF');
   if (categoria === 'papas a la francesa' || categoria === 'papas') {
-    nombre = /media orden/i.test(nombre) ? 'Media orden de papas' : 'Orden de papas';
+    nombre = /\bmedia\b/i.test(nombre) ? 'MEDIA PAPAS' : 'ORDEN PAPAS';
   } else if (ABREVIATURAS[categoria]) {
     const abreviatura = ABREVIATURAS[categoria];
     if (PRODUCTOS_ABREVIADOS[categoria]) {
@@ -53,18 +72,11 @@ export function formatoProductoCocina(p: ProductoCocina) {
       if (categoria === 'enchiladas') nombre = nombre.replace(/^ENCH\s+/i, '');
       if (categoria === 'tacos') nombre = nombre.replace(/^T(?=[BH](?:\s|$))/i, '');
       nombre = abreviarSabor(nombre, categoria);
-      const separacion = categoria === 'tacos' && /^(B|H)(\s*\([^)]*\))?$/.test(nombre) ? '' : ' ';
+      const separacion = categoria === 'tacos' && /^B(\s*\([^)]*\))?$/.test(nombre) ? '' : ' ';
       nombre = `${abreviatura}${separacion}${nombre}${quesoEnNombre ? ' Q' : ''}`;
     } else if (!new RegExp(`^${abreviatura}(?:\\s|$)`, 'i').test(nombre)) nombre = `${abreviatura} ${nombre}`;
   }
-  const alitasMixtas = categoria === 'alitas' && !!p.reparto?.length;
-  const renglones = alitasMixtas
-    ? p.reparto!.map((r) => ({ cantidad: r.cantidad, nombre: marcarQueso(r.opcion) }))
-    : [{ cantidad: p.cantidad, nombre: marcarQueso(nombre) }];
-  const sabores = new Set((p.reparto ?? []).map((r) => normal(`${r.cantidad} ${r.opcion}`)));
-  const reparto = new Map((p.reparto ?? []).map((r) => [normal(`${r.cantidad} ${r.opcion}`), `${r.cantidad} ${abreviarSabor(r.opcion, categoria)}`]));
-  const descripcion = p.descripcion
-    .filter((d) => !['con todo', 'con queso'].includes(normal(d)) && (!alitasMixtas || !sabores.has(normal(d))))
-    .map((d) => reparto.get(normal(d)) ?? d);
+  const renglones = [{ cantidad: p.cantidad, nombre: marcarQueso(nombre) }];
+  const descripcion = p.descripcion.filter((d) => !['con todo', 'con queso'].includes(normal(d)));
   return { renglones, descripcion };
 }

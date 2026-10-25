@@ -118,8 +118,6 @@ export const nombrePapas = (tamano: string | null) => (tamano === 'Media orden' 
  */
 export const CATEGORIA_CARNE_EXTRA = 'Hamburguesas';
 export const PRECIO_CARNE_EXTRA = 20;
-/** Complemento EXTRA (doble toque en las opciones): cuesta esto por pieza; el servidor lo cobra igual. */
-export const PRECIO_COMPLEMENTO_EXTRA = 1;
 /** «EXTRA CREMA Y QUESO». */
 export const textoComplementosExtra = (nombres: string[]) => `EXTRA ${nombres.join(' Y ').toUpperCase()}`;
 export const MAX_CARNE_EXTRA = 2;

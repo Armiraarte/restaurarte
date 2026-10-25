@@ -68,7 +68,13 @@ export function construirComandasCocina(orden: OrdenBD, detalle: DetalleOrdenBD[
           ofrecidos, quitados: sin, sinQueso: d.sin_queso, conQueso: d.con_queso,
           quesoOpcional: original.categoria === 'Tacos', complementosExtra: opciones?.complementosExtra,
         }),
-        ...(opciones?.reparto?.length && { reparto: opciones.reparto.map((r) => ({ opcion: r.nombre, cantidad: r.cantidad })) }),
+        ...(opciones?.reparto?.length && { reparto: opciones.reparto.map((r) => ({
+          opcion: r.nombre, cantidad: r.cantidad,
+          con_queso: llevaQuesoComanda({ nombre: r.nombre, descripcion: complementos }, {
+            ofrecidos, quitados: sin, sinQueso: d.sin_queso, conQueso: d.con_queso,
+            quesoOpcional: original.categoria === 'Tacos', complementosExtra: opciones.complementosExtra,
+          }),
+        })) }),
         ...(opciones?.nota && { notas: opciones.nota }),
         descripcion: [
           ...(opciones?.reparto ?? []).map((r) => `${r.cantidad} ${r.nombre}`),

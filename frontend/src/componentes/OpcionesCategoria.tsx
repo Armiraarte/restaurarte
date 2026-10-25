@@ -15,7 +15,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Check, Minus, Plus } from 'lucide-react';
 import {
   CATEGORIA_CARNE_EXTRA,
-  PRECIO_COMPLEMENTO_EXTRA,
   textoComplementosExtra,
   CATEGORIAS_CON_QUESO,
   CATEGORIAS_QUESO_OPCIONAL,
@@ -95,7 +94,7 @@ export interface ExtrasLinea {
   ofrecidos?: ComplementoMenu[];
   /** MIXTAS: piezas de cada sabor; suman la cantidad del renglón. */
   reparto?: RepartoPedido[];
-  /** Complementos EXTRA (doble toque), con costo por pieza. */
+  /** Complementos EXTRA (doble toque), sin cargo adicional. */
   complementosExtra?: ComplementoMenu[];
 }
 
@@ -127,7 +126,7 @@ export const OpcionesCategoria: React.FC<Props> = ({
   const [termino, setTermino] = useState<TerminoMenu | null>(null);
   // Hamburguesas: cada toque suma una carne (DOBLE, luego TRIPLE) y el siguiente la quita.
   const [carneExtra, setCarneExtra] = useState(0);
-  // Complementos marcados EXTRA con doble toque (cuestan PRECIO_COMPLEMENTO_EXTRA por pieza).
+  // Complementos marcados EXTRA con doble toque, sin cargo adicional.
   const [extras, setExtras] = useState<number[]>([]);
   const ultimoToque = useRef<{ id: number; hora: number; eraExtra: boolean } | null>(null);
   const [cantidad, setCantidad] = useState(1);
@@ -185,8 +184,8 @@ export const OpcionesCategoria: React.FC<Props> = ({
   const papasAgotadas = !!categoria.papas && agotados.has(categoria.papas.idProducto);
   // EXTRA solo cuenta si el complemento sigue en la lista y está incluido.
   const extrasElegidos = complementos.filter((c) => extras.includes(c.id) && !quitados.includes(c.id));
-  // Lo que se suma a cada pieza (en MIXTAS, a todas): carnes extra, papas y complementos EXTRA.
-  const extraPorPieza = carnesExtra * PRECIO_CARNE_EXTRA + (papas?.precio ?? 0) + extrasElegidos.length * PRECIO_COMPLEMENTO_EXTRA;
+  // Lo que se suma a cada pieza (en MIXTAS, a todas): carnes extra y papas.
+  const extraPorPieza = carnesExtra * PRECIO_CARNE_EXTRA + (papas?.precio ?? 0);
   const cantidadLinea = mezclando ? totalPiezas : cantidad;
   const importe =
     (mezclando ? reparto.reduce((acc, r) => acc + (r.precio ?? 0) * r.cantidad, 0) : (producto?.precio ?? 0) * cantidad) +
@@ -492,7 +491,7 @@ export const OpcionesCategoria: React.FC<Props> = ({
               <div className="text-sm font-semibold text-neutral-700">
                 {++paso}. Complementos{' '}
                 <span className="font-normal text-neutral-500">
-                  · toca para incluir o quitar · <b className="font-semibold text-amber-700">doble toque: EXTRA +{dinero(PRECIO_COMPLEMENTO_EXTRA)}</b>
+                  · toca para incluir o quitar · <b className="font-semibold text-amber-700">doble toque: EXTRA</b>
                 </span>
               </div>
               <button
@@ -523,7 +522,7 @@ export const OpcionesCategoria: React.FC<Props> = ({
                       {incluido && <Check className="w-4 h-4" />}
                       {c.nombre}
                     </span>
-                    {extra && <span className="text-[11px] font-black tracking-wide leading-none">EXTRA +{dinero(PRECIO_COMPLEMENTO_EXTRA)}</span>}
+                    {extra && <span className="text-[11px] font-black tracking-wide leading-none">EXTRA</span>}
                   </button>
                 );
               })}

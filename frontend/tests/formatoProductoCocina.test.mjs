@@ -16,8 +16,8 @@ test('las categorías usan las abreviaturas solicitadas, sin cambiar el catálog
 });
 test('papas muestran la orden; carnes y alitas muestran solo el producto o aderezo', () => {
   const producto = (categoria, nombre) => formatoProductoCocina({ categoria, nombre, cantidad: 1, descripcion: [] }).renglones[0].nombre;
-  assert.equal(producto('Papas a la Francesa', 'Papas a la Francesa · Papas a la Francesa (Media orden)'), 'Media orden de papas');
-  assert.equal(producto('Papas a la Francesa', 'Orden de papas'), 'Orden de papas');
+  assert.equal(producto('Papas a la Francesa', 'Papas a la Francesa · Papas a la Francesa (Media orden)'), 'MEDIA PAPAS');
+  assert.equal(producto('Papas a la Francesa', 'Orden de papas'), 'ORDEN PAPAS');
   assert.equal(producto('Carnes', 'Carnes · Milanesa'), 'Milanesa');
   assert.equal(producto('Alitas', 'Alitas · Mango Habanero'), 'Mango Habanero');
 });
@@ -26,16 +26,16 @@ test('alitas mixtas conservan las cantidades por aderezo sin repetir el total ni
     reparto: [{ opcion: 'BBQ', cantidad: 4 }, { opcion: 'Buffalo', cantidad: 6 }],
     descripcion: ['4 BBQ', '6 Buffalo', 'SIN CHILE', 'CON TODO'],
   });
-  assert.deepEqual(formato.renglones, [{ cantidad: 4, nombre: 'BBQ' }, { cantidad: 6, nombre: 'Buffalo' }]);
+  assert.deepEqual(formato.renglones, [{ cantidad: 4, nombre: 'BBQ' }, { cantidad: 6, nombre: 'BFF' }]);
   assert.deepEqual(formato.descripcion, ['SIN CHILE']);
 });
 
 test('la Q va después del producto incluso en papas y alitas mixtas, sin repetir CON QUESO', () => {
   const p = { categoria: 'Papas a la Francesa', nombre: 'Media orden de papas', cantidad: 1, con_queso: true, descripcion: ['CON QUESO', 'SIN CHILE'] };
-  assert.deepEqual(formatoProductoCocina(p), { renglones: [{ cantidad: 1, nombre: 'Media orden de papas Q' }], descripcion: ['SIN CHILE'] });
+  assert.deepEqual(formatoProductoCocina(p), { renglones: [{ cantidad: 1, nombre: 'MEDIA PAPAS Q' }], descripcion: ['SIN CHILE'] });
   const alitas = { categoria: 'Alitas', nombre: 'Alitas · MIXTAS', cantidad: 10, con_queso: true,
     reparto: [{ cantidad: 4, opcion: 'BBQ' }, { cantidad: 6, opcion: 'Buffalo' }], descripcion: ['4 BBQ', '6 Buffalo', 'CON QUESO'] };
-  assert.deepEqual(formatoProductoCocina(alitas), { renglones: [{ cantidad: 4, nombre: 'BBQ Q' }, { cantidad: 6, nombre: 'Buffalo Q' }], descripcion: [] });
+  assert.deepEqual(formatoProductoCocina(alitas), { renglones: [{ cantidad: 4, nombre: 'BBQ Q' }, { cantidad: 6, nombre: 'BFF Q' }], descripcion: [] });
   assert.equal(formatoProductoCocina({ categoria: 'Tacos', nombre: 'TB Q', cantidad: 2, con_queso: true, descripcion: [] }).renglones[0].nombre, 'TB Q');
   assert.equal(formatoProductoCocina({ categoria: 'Tacos', nombre: 'Tacos · Barbacoa', cantidad: 2, descripcion: ['CON QUESO'] }).renglones[0].nombre, 'TB Q', 'Acepta comandas de dispositivos que aún no se han recargado');
 });
@@ -43,7 +43,7 @@ test('la Q va después del producto incluso en papas y alitas mixtas, sin repeti
 test('cada producto usa la abreviatura solicitada y conserva la Q cuando lleva queso', () => {
   const casos = [
     ['Tacos Dorados', 'Papa', 'T PAPA'], ['Tacos Dorados', 'Frijol', 'T FRIJOL'], ['Tacos Dorados', 'Jamón', 'T JAM'],
-    ['Tacos', 'Barbacoa', 'TB'], ['Tacos', 'Chicharrón', 'TH'], ['Tacos', 'Pollo', 'T POLLO'],
+    ['Tacos', 'Barbacoa', 'TB'], ['Tacos', 'Chicharrón', 'T H'], ['Tacos', 'Pollo', 'T POLLO'],
     ['Quesadillas', 'Papa', 'Q PAPA'], ['Quesadillas', 'Frijol', 'Q FRIJ'], ['Quesadillas', 'Picadillo', 'Q PICA'],
     ['Quesadillas', 'Pollo', 'Q POLLO'], ['Quesadillas', 'Jamón', 'Q JAM'], ['Quesadillas', 'Chicharrón', 'Q H'], ['Quesadillas', 'Jalapeño', 'Q JALAP'],
     ['Sopes', 'Papa', 'SOP PAPA'], ['Sopes', 'Frijol', 'SOP FRI'], ['Sopes', 'Picadillo', 'SOP PICA'],
@@ -67,5 +67,16 @@ test('las mezclas abrevian sabores y mantienen tamaños, cantidades e indicacion
   const p = { categoria: 'Quesadillas', nombre: 'Quesadillas · Papa con Frijol (Grande)', cantidad: 2, con_queso: true, descripcion: ['SIN CHILE'] };
   assert.deepEqual(formatoProductoCocina(p), { renglones: [{ cantidad: 2, nombre: 'Q PAPA CON FRIJ (Grande) Q' }], descripcion: ['SIN CHILE'] });
   const mixtas = { ...p, nombre: 'Quesadillas · MIXTAS (Grande)', reparto: [{ opcion: 'Frijol', cantidad: 1 }, { opcion: 'Jamón', cantidad: 1 }], descripcion: ['1 Frijol', '1 Jamón', 'CON PAPAS', 'SIN CHILE'] };
-  assert.deepEqual(formatoProductoCocina(mixtas), { renglones: [{ cantidad: 2, nombre: 'Q MIXTAS (Grande) Q' }], descripcion: ['1 FRIJ', '1 JAM', 'CON PAPAS', 'SIN CHILE'] });
+  assert.deepEqual(formatoProductoCocina(mixtas), { renglones: [{ cantidad: 1, nombre: 'Q FRIJ (Grande) Q' }, { cantidad: 1, nombre: 'Q JAM (Grande) Q' }], descripcion: ['CON PAPAS', 'SIN CHILE'] });
+});
+
+test('sopes mixtos muestran solo las piezas de cada sabor con su queso, sin total ni MIXTAS', () => {
+  const p = { categoria: 'Sopes', nombre: 'Sopes · MIXTAS', cantidad: 5, con_queso: true,
+    reparto: [{ opcion: 'Papa', cantidad: 2, con_queso: true }, { opcion: 'Frijol', cantidad: 1, con_queso: false }, { opcion: 'Picadillo', cantidad: 2, con_queso: true }],
+    descripcion: ['2 Papa', '1 Frijol', '2 Picadillo', 'CON QUESO', 'EXTRA CREMA', 'SIN CEBOLLA'],
+  };
+  assert.deepEqual(formatoProductoCocina(p), {
+    renglones: [{ cantidad: 2, nombre: 'SOP PAPA Q' }, { cantidad: 1, nombre: 'SOP FRI' }, { cantidad: 2, nombre: 'SOP PICA Q' }],
+    descripcion: ['EXTRA CREMA', 'SIN CEBOLLA'],
+  });
 });

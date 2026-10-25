@@ -25,7 +25,7 @@ export interface ProductoTicketCocina {
   mix_grupo?: number | null;
   opciones: OpcionTicket[]; // producto normal
   piezas?: { pieza: string; opciones: OpcionTicket[] }[]; // paquete (Burritas): una entrada por pieza
-  reparto?: { opcion: string; cantidad: number }[]; // reparto (Alitas): cuántas de cada sabor
+  reparto?: { opcion: string; cantidad: number; con_queso?: boolean }[]; // MIXTAS: piezas y queso de cada sabor
   descripcion: string[]; // texto ya armado para cocina ("Sin repollo ni lechuga", "Burrita 1: …")
   notas?: string; // BD: partidas.notas
 }
@@ -121,7 +121,7 @@ export function lineasTicketCocina(t: TicketCocina): LineaTicket[] {
     for (const p of bloque.productos) {
       const formato = formatoProductoCocina(p);
       for (const r of formato.renglones) lineas.push({ texto: `${r.cantidad} ${r.nombre}`, negrita: true, escala: 1.5 });
-      for (const d of formato.descripcion) lineas.push({ texto: `  - ${d}`, escala: 1.5 });
+      for (const d of formato.descripcion) lineas.push({ texto: `  - ${d}`, ...(/^EXTRA\b/i.test(d.trim()) && { negrita: true }), escala: 1.5 });
       if (p.notas) lineas.push({ texto: `  NOTA: ${p.notas}`, negrita: true });
     }
     for (const extra of extrasEnMix.filter((e) => e.mix_grupo === bloque.grupo)) {

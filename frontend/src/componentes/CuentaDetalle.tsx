@@ -2,6 +2,7 @@
 // una sola vez (aunque se haya pedido en varios envíos), su precio unitario e importe, y el total.
 // Se actualiza sola con los avisos en vivo.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { AlertTriangle, Clock, Home, Loader2, ShoppingBag, Tablet, X } from 'lucide-react';
 import { DetalleOrdenBD, ESTATUS_ORDEN, ExtraOrdenBD, nombreDetalle, obtenerOrden, OrdenBD } from '../services/pedidosService';
@@ -41,6 +42,12 @@ export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones }) 
   }, [cargar]);
   useEnVivo(['ordenes'], cargar);
 
+  useEffect(() => {
+    const anterior = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = anterior; };
+  }, []);
+
   // Un renglón por producto, agrupado por categoría (SIN QUESO y DOBLE / TRIPLE CARNE van en su propio renglón).
   const categorias = useMemo(() => {
     const porProducto = new Map<
@@ -75,9 +82,9 @@ export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones }) 
   const estatus = orden?.estatus ?? 0;
   const paraLlevar = orden?.tipo_orden === 2;
 
-  return (
+  return createPortal(
     <motion.div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden overscroll-none p-4 bg-black/40"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -85,43 +92,44 @@ export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones }) 
     >
       <motion.div
         role="dialog"
+        aria-modal="true"
         aria-label="Cuenta"
-        className="w-full max-w-xl max-h-full bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+        className="w-full max-w-lg min-h-0 max-h-[min(42rem,calc(100dvh-2rem))] bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col"
         initial={{ scale: 0.95, y: 10 }}
         animate={{ scale: 1, y: 0 }}
         exit={{ scale: 0.95, opacity: 0 }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Encabezado */}
-        <div className="shrink-0 bg-neutral-900 text-white px-5 pt-4 pb-5">
+        <div className="shrink-0 bg-neutral-900 text-white px-4 py-3">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="text-[11px] uppercase tracking-widest text-neutral-400">Cuenta · Orden #{idOrden}</div>
-              <div className="text-3xl font-bold truncate">{orden?.etiqueta ?? '…'}</div>
+              <div className="text-2xl font-bold truncate">{orden?.etiqueta ?? '…'}</div>
             </div>
             <button onClick={onCerrar} aria-label="Cerrar" className="p-1.5 -mr-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10 cursor-pointer">
               <X className="w-5 h-5" />
             </button>
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-            <span className={`font-bold tracking-wide px-3 py-1 rounded-full border ${COLOR_ESTATUS_ORDEN[estatus] ?? COLOR_ESTATUS_ORDEN[0]}`}>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
+            <span className={`font-bold tracking-wide px-2 py-1 rounded-full border ${COLOR_ESTATUS_ORDEN[estatus] ?? COLOR_ESTATUS_ORDEN[0]}`}>
               {ESTATUS_ORDEN[estatus] ?? `ESTATUS ${estatus}`}
             </span>
-            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-white/10 text-neutral-200">
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white/10 text-neutral-200">
               {paraLlevar ? <ShoppingBag className="w-4 h-4" /> : <Home className="w-4 h-4" />}
               {paraLlevar ? 'Para llevar' : 'Comer aquí'}
             </span>
-            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-white/10 text-neutral-200">
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white/10 text-neutral-200">
               <Tablet className="w-4 h-4" /> {orden?.abierta_por ?? '—'}
             </span>
-            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-white/10 text-neutral-200">
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white/10 text-neutral-200">
               <Clock className="w-4 h-4" /> {orden ? hora(orden.creado_en) : '—'}
             </span>
           </div>
         </div>
 
         {/* Productos */}
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-3">
+        <div className="flex-1 min-h-0 overflow-x-hidden overflow-y-auto overscroll-contain px-4 py-2">
           {error && (
             <div className="mb-2 flex items-center gap-2 text-sm text-rose-700 bg-rose-50 border border-rose-200 px-3 py-2 rounded-lg">
               <AlertTriangle className="w-4 h-4 shrink-0" /> {error}
@@ -135,25 +143,25 @@ export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones }) 
             <p className="py-8 text-center text-sm text-neutral-500">Esta orden no tiene productos.</p>
           ) : (
             categorias.map(([categoria, productos]) => (
-              <div key={categoria} className="py-3">
-                <div className="text-sm font-bold uppercase tracking-widest text-amber-600 mb-2">{categoria}</div>
+              <div key={categoria} className="py-2">
+                <div className="text-xs font-bold uppercase tracking-widest text-amber-600 mb-1">{categoria}</div>
                 {productos.map((p) => (
-                  <div key={p.clave} className="flex items-center gap-3 py-2 border-b border-neutral-100 last:border-0">
-                    <span className="shrink-0 min-w-10 h-10 px-2 rounded-xl bg-amber-100 text-amber-900 font-mono font-bold text-xl flex items-center justify-center">
+                  <div key={p.clave} className="flex items-center gap-2 py-1.5 border-b border-neutral-100 last:border-0">
+                    <span className="shrink-0 min-w-8 h-8 px-2 rounded-lg bg-amber-100 text-amber-900 font-mono font-bold text-base flex items-center justify-center">
                       {p.cantidad}
                     </span>
                     <span className="flex-1 min-w-0">
-                      <span className="flex items-center gap-2 min-w-0">
-                        <span className="text-xl font-semibold leading-tight truncate">{p.nombre}</span>
+                      <span className="flex flex-wrap items-center gap-1.5 min-w-0">
+                        <span className="min-w-0 max-w-full text-base font-semibold leading-tight break-words">{p.nombre}</span>
                         {p.sinQueso && <EtiquetaSinQueso />}
                         {p.conQueso && <EtiquetaConQueso />}
                         {p.carneExtra > 0 && <EtiquetaCarneExtra carneExtra={p.carneExtra} />}
                       </span>
-                      <span className="block text-sm text-neutral-500 font-mono">{dinero(p.importe / p.cantidad)} c/u</span>
+                      <span className="block text-xs text-neutral-500 font-mono">{dinero(p.importe / p.cantidad)} c/u</span>
                       {p.conPapas && <EtiquetaConPapas />}
                       {p.complementosExtra.length > 0 && <EtiquetaComplementosExtra nombres={p.complementosExtra} />}
                     </span>
-                    <span className="shrink-0 font-mono font-bold text-xl">{dinero(p.importe)}</span>
+                    <span className="shrink-0 font-mono font-bold text-base">{dinero(p.importe)}</span>
                   </div>
                 ))}
               </div>
@@ -163,19 +171,20 @@ export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones }) 
         </div>
 
         {/* Total */}
-        <div className="shrink-0 border-t-2 border-dashed border-neutral-200 px-5 py-4 bg-amber-50/60">
+        <div className="shrink-0 border-t-2 border-dashed border-neutral-200 px-4 py-3 bg-amber-50/60">
           <div className="flex items-end justify-between">
             <div className="text-xs text-neutral-500">
               {piezas} {piezas === 1 ? 'pieza' : 'piezas'}
             </div>
             <div className="text-right">
               <div className="text-[11px] uppercase tracking-widest text-neutral-500">Total</div>
-              <div className="text-3xl font-bold font-mono leading-none">{dinero(orden?.total ?? 0)}</div>
+              <div className="text-2xl font-bold font-mono leading-none">{dinero(orden?.total ?? 0)}</div>
             </div>
           </div>
-          {acciones && <div className="mt-4">{acciones}</div>}
+          {acciones && <div className="mt-3">{acciones}</div>}
         </div>
       </motion.div>
-    </motion.div>
+    </motion.div>,
+    document.body,
   );
 };

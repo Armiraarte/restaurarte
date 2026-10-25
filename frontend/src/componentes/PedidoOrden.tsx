@@ -37,7 +37,6 @@ import {
   pedirCuenta,
   nombreProducto,
   PRECIO_CARNE_EXTRA,
-  PRECIO_COMPLEMENTO_EXTRA,
   textoComplementosExtra,
   textoCarneExtra,
   obtenerMenu,
@@ -97,7 +96,7 @@ interface LineaNueva {
   ofrecidos?: ComplementoMenu[];
   /** MIXTAS: piezas de cada sabor en este mismo renglón, cada una a su precio; suman `cantidad` (no se cambia con +/−). */
   reparto?: RepartoPedido[];
-  /** Complementos EXTRA (doble toque), +PRECIO_COMPLEMENTO_EXTRA c/u por pieza. */
+  /** Complementos EXTRA (doble toque), sin cargo adicional. */
   complementosExtra?: ComplementoMenu[];
   /** Comentario del platillo (botón junto a VOLVER): sale en la comanda como NOTA. */
   nota?: string;
@@ -125,13 +124,13 @@ const textoSin = (l: LineaNueva) =>
   }`;
 /**
  * Importe del renglón (el servidor lo calcula igual al guardar): en MIXTAS cada pieza a su precio; a todas se les
- * suman sus carnes extra, papas y complementos EXTRA. Los borradores viejos de MIXTAS no traen precio por sabor.
+ * suman sus carnes extra y papas. Los borradores viejos de MIXTAS no traen precio por sabor.
  */
 const importeLinea = (l: LineaNueva) =>
   (l.reparto?.length && l.reparto.every((r) => r.precio != null)
     ? l.reparto.reduce((acc, r) => acc + r.precio! * r.cantidad, 0)
     : l.producto.precio * l.cantidad) +
-  ((l.carneExtra ?? 0) * PRECIO_CARNE_EXTRA + (l.papas?.precio ?? 0) + (l.complementosExtra?.length ?? 0) * PRECIO_COMPLEMENTO_EXTRA) * l.cantidad;
+  ((l.carneExtra ?? 0) * PRECIO_CARNE_EXTRA + (l.papas?.precio ?? 0)) * l.cantidad;
 
 /** Categorías que se muestran como cuadrícula rápida (Bebidas): sin complementos y con muchos productos. */
 const esCuadricula = (c: CategoriaMenu) =>
@@ -179,7 +178,7 @@ function ticketDe(orden: OrdenBD, lineas: LineaNueva[], ronda: number, origen: s
     productos: lineas.map((l) => ({
       partida_id: String(l.id),
       producto_id: String(l.producto.id),
-      // MIXTAS: un solo registro («10 Alitas · MIXTAS», «3 Ensaladas · MIXTAS (Grande)») con las piezas de cada sabor debajo.
+      // Un registro por mezcla; el formato de cocina desglosa cada sabor sin mostrar el total ni MIXTAS.
       nombre: l.reparto?.length
         ? `${l.categoria} · MIXTAS${l.producto.tamano ? ` (${l.producto.tamano})` : ''}`
         : l.categoria === CATEGORIA_PAPAS
@@ -194,7 +193,13 @@ function ticketDe(orden: OrdenBD, lineas: LineaNueva[], ronda: number, origen: s
       mix_grupo: l.mixGrupo ?? null,
       opciones: [],
       ...(l.nota && { notas: l.nota }), // en la comanda: «NOTA: …» debajo del platillo
-      ...(l.reparto?.length && { reparto: l.reparto.map((r) => ({ opcion: r.nombre, cantidad: r.cantidad })) }),
+      ...(l.reparto?.length && { reparto: l.reparto.map((r) => ({
+        opcion: r.nombre, cantidad: r.cantidad,
+        con_queso: llevaQuesoComanda({ nombre: r.nombre, descripcion: [] }, {
+          ofrecidos: l.ofrecidos ?? l.producto.complementos, quitados: l.sin, sinQueso: l.sinQueso,
+          conQueso: l.conQueso, quesoOpcional: quesoOpcional(l), complementosExtra: l.complementosExtra,
+        }),
+      })) }),
       // Solo lo que se quita, en una lista SIN separada por comas; con todo no ocupa un renglón.
       descripcion: [
         ...(l.reparto ?? []).map((r) => `${r.cantidad} ${r.nombre}`),
@@ -920,7 +925,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
                         {l.papas && <span className="block text-xs font-semibold text-amber-800">CON PAPAS (+{dinero(l.papas.precio)} c/u)</span>}
                         {!!l.complementosExtra?.length && (
                           <span className="block text-xs font-black tracking-wide text-amber-800">
-                            {textoComplementosExtra(l.complementosExtra.map((c) => c.nombre))} (+{dinero(l.complementosExtra.length * PRECIO_COMPLEMENTO_EXTRA)} c/u)
+                            {textoComplementosExtra(l.complementosExtra.map((c) => c.nombre))}
                           </span>
                         )}
                         {!!l.carneExtra && (
