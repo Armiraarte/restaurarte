@@ -1,10 +1,10 @@
 // Dividir la cuenta (botón junto al historial): cuánto le toca a cada persona, en partes iguales o por productos.
-// «Guardar e imprimir» la registra como Cuenta 1…N de la orden e imprime un ticket por persona en caja.
-// La orden y el cobro no cambian (la caja cobra el total como siempre); en Ventas se ve que fue dividida.
+// «Guardar e imprimir» la registra como Cuenta 1…N de la orden, imprime un ticket por persona en caja y manda
+// la cuenta a Cajas (como «Pedir cuenta»). La caja cobra el total como siempre; en Cajas y Ventas se ve dividida.
 import React, { useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Loader2, Lock, Minus, Plus, Printer, Split, Users, X } from 'lucide-react';
 import {
-  CuentaDividida, DetalleOrdenBD, divisionVigente, ExtraOrdenBD, guardarCuentasDivididas, nombreDetalle, reimprimirCuentasDivididas,
+  CuentaDividida, DetalleOrdenBD, divisionVigente, ExtraOrdenBD, guardarCuentasDivididas, nombreDetalle, OrdenBD, reimprimirCuentasDivididas,
 } from '../services/pedidosService';
 import { alternarAsignacion, partesIguales, totalesPorPersona, unidadesDeCuenta } from '../services/dividirCuenta';
 
@@ -26,12 +26,18 @@ const hora = (fecha: string) => new Date(fecha).toLocaleTimeString('es-MX', { ho
 
 type Aviso = { tipo: 'ok' | 'aviso' | 'error'; texto: string; reimprimir?: boolean };
 
-/** Texto del resultado de imprimir: todo bien, o cuántos salieron y por qué falló. */
-function avisoImpresion(n: number, impresion: { ok: boolean; impresas: number; error?: string }, guardadas: boolean): Aviso {
-  const inicio = guardadas ? `Se guardaron Cuenta 1 a ${n}` : 'Las cuentas siguen guardadas';
-  if (impresion.ok) return { tipo: 'ok', texto: `${guardadas ? `Listo: se guardaron Cuenta 1 a ${n} y se` : 'Se'} imprimieron ${n} tickets en caja.` };
+/**
+ * Texto del resultado: todo bien, o cuántos tickets salieron y por qué falló. `enCajas` = la cuenta quedó por cobrar
+ * en Cajas (al guardar); null al reimprimir.
+ */
+function avisoImpresion(n: number, impresion: { ok: boolean; impresas: number; error?: string }, enCajas: boolean | null): Aviso {
+  const cajas = enCajas ? ' La cuenta ya está en Cajas para cobrarla.' : '';
+  if (impresion.ok) {
+    return { tipo: 'ok', texto: `${enCajas !== null ? `Listo: se guardaron Cuenta 1 a ${n} y se` : 'Se'} imprimieron ${n} tickets en caja.${cajas}` };
+  }
+  const inicio = enCajas !== null ? `Se guardaron Cuenta 1 a ${n}` : 'Las cuentas siguen guardadas';
   const cuantas = impresion.impresas ? `solo se imprimieron ${impresion.impresas} de ${n}` : 'no se imprimieron los tickets';
-  return { tipo: 'aviso', texto: `${inicio}, pero ${cuantas}: ${impresion.error ?? 'falló la impresora'}.`, reimprimir: true };
+  return { tipo: 'aviso', texto: `${inicio}, pero ${cuantas}: ${impresion.error ?? 'falló la impresora'}.${cajas}`, reimprimir: true };
 }
 
 export function DividirCuenta({
@@ -41,6 +47,7 @@ export function DividirCuenta({
   detalle,
   extras,
   guardadas,
+  sinEnviar = false,
   onGuardadas,
   onCerrar,
 }: {
@@ -51,7 +58,10 @@ export function DividirCuenta({
   extras: ExtraOrdenBD[];
   /** Cuenta 1…N si ya se guardó una división. */
   guardadas: CuentaDividida[];
-  onGuardadas: (cuentas: CuentaDividida[]) => void;
+  /** Hay productos en «Nuevo pedido» sin enviar: al pasar a Cajas se perderían. */
+  sinEnviar?: boolean;
+  /** La orden como quedó (ya en Cajas) con sus cuentas. */
+  onGuardadas: (datos: { orden: OrdenBD; detalle: DetalleOrdenBD[]; extras: ExtraOrdenBD[]; cuentas_divididas: CuentaDividida[] }) => void;
   onCerrar: () => void;
 }) {
   // Si ya se dividió, abre como quedó (modo y personas); los productos de cada quien se vuelven a tocar.
@@ -103,7 +113,8 @@ export function DividirCuenta({
     ? Array.from({ length: personas }, (_, i) => i).find((i) => !unidades.some((u) => asignadas[u.clave] === i))
     : undefined;
   const motivoNoGuardar =
-    modo === 'productos' && unidades.length === 0 ? 'Todavía no hay nada enviado.'
+    sinEnviar ? 'Primero envía o quita lo que falta por enviar: al guardar, la cuenta pasa a Cajas.'
+      : modo === 'productos' && unidades.length === 0 ? 'Todavía no hay nada enviado.'
       : modo === 'productos' && sinAsignar > 0 ? `Falta asignar ${pesos(sinAsignar)} para poder guardar.`
         : sinNada !== undefined ? `La Persona ${sinNada + 1} no tiene productos.`
           : null;
@@ -117,8 +128,8 @@ export function DividirCuenta({
         modo, personas, total,
         ...(modo === 'productos' && { asignadas: Object.fromEntries(Object.entries(asignadas).filter(([, p]) => p < personas)) }),
       });
-      onGuardadas(r.cuentas);
-      setAviso(avisoImpresion(r.cuentas.length, r.impresion, true));
+      onGuardadas(r);
+      setAviso(avisoImpresion(r.cuentas.length, r.impresion, r.orden.estatus === 1));
     } catch (err) {
       setAviso({ tipo: 'error', texto: err instanceof Error ? err.message : 'No se pudo guardar la cuenta dividida.' });
     } finally {
@@ -129,7 +140,7 @@ export function DividirCuenta({
     setImprimiendo(true);
     try {
       const r = await reimprimirCuentasDivididas(idOrden);
-      setAviso(avisoImpresion(guardadas.length, r.impresion, false));
+      setAviso(avisoImpresion(guardadas.length, r.impresion, null));
     } catch (err) {
       setAviso({ tipo: 'error', texto: err instanceof Error ? err.message : 'No se pudieron imprimir los tickets.', reimprimir: true });
     } finally {
@@ -277,8 +288,8 @@ export function DividirCuenta({
           </>
         )}
         <p className="text-xs text-neutral-500">
-          «Guardar e imprimir» la registra como Cuenta 1 a {personas} de esta orden e imprime un ticket por persona en caja.
-          El cobro sigue siendo uno solo, por el total.
+          «Guardar e imprimir» la registra como Cuenta 1 a {personas} de esta orden, imprime un ticket por persona en caja
+          y manda la cuenta a Cajas para cobrarla (ya no se le pueden agregar productos).
         </p>
       </div>
 

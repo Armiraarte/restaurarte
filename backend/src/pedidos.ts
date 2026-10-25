@@ -17,8 +17,9 @@
 //   POST  /api/ordenes/:idOrden/ticket-cobro  { recibido? } reimprime el ticket de cobro de una orden pagada
 //                                           (sin recibido, p. ej. desde Ventas, no imprime efectivo ni cambio)
 //   POST  /api/ordenes/:idOrden/dividir     { modo: 'iguales' | 'productos', personas, total, asignadas? }
-//                                           guarda Cuenta 1…N (reemplaza la división anterior) e imprime un ticket
-//                                           por persona en caja; la orden y el cobro no cambian (cuentasDivididas.ts)
+//                                           guarda Cuenta 1…N (reemplaza la división anterior), imprime un ticket
+//                                           por persona en caja y, si estaba abierta, la orden pasa a PAGANDO (Cajas);
+//                                           el total y el cobro no cambian (cuentasDivididas.ts)
 //   POST  /api/ordenes/:idOrden/cuentas-divididas/imprimir   reimprime los tickets de las cuentas guardadas
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import type { RowDataPacket } from 'mysql2/promise';
@@ -330,6 +331,8 @@ pedidosRouter.post('/ordenes/:idOrden/dividir', soloRoles('tablet', 'admin', 'ca
     const creadoPor = req.usuario!.rol === 'tablet' ? req.usuario!.nombre : `Caja · ${req.usuario!.nombre}`;
     const ahora = new Date();
     await guardarCuentasDivididas(conexion, idOrden, calculo.cuentas, creadoPor, ahora);
+    // Dividir es pedir la cuenta: si estaba abierta pasa a PAGANDO y aparece en Cajas para cobrarla.
+    await conexion.execute('UPDATE orden SET estatus = 1, actualizado_en = ? WHERE idOrden = ? AND estatus = 0', [ahora, idOrden]);
     await conexion.commit();
     cuentas = calculo.cuentas.map((c) => ({ ...c, creado_por: creadoPor, creado_en: ahora.toISOString() }));
   } catch (err) {
@@ -340,7 +343,8 @@ pedidosRouter.post('/ordenes/:idOrden/dividir', soloRoles('tablet', 'admin', 'ca
   } finally {
     conexion.release();
   }
-  res.status(201).json({ cuentas, impresion: await imprimirCuentasDivididas(idOrden, cuentas) });
+  const impresion = await imprimirCuentasDivididas(idOrden, cuentas);
+  res.status(201).json({ ...(await ordenConDetalle(idOrden)), cuentas, impresion });
 });
 
 /** Reimprime los tickets de las cuentas divididas guardadas. */

@@ -134,6 +134,17 @@ export const CajasView: React.FC = () => {
                       <span className="text-xs text-neutral-500">Total a cobrar</span>
                       <span className="text-xl font-bold font-mono">{dinero(Number(m.total))}</span>
                     </div>
+                    {/* Cuenta dividida: lo que paga cada persona (su ticket ya se imprimió) */}
+                    {m.partes_divididas && m.partes_divididas.length > 0 && (
+                      <ul aria-label="Cuentas divididas" className="grid grid-cols-2 gap-1 -mt-1">
+                        {m.partes_divididas.map((p) => (
+                          <li key={p.numero} className="flex items-baseline justify-between gap-1 px-2 py-1 rounded-md bg-violet-50 text-violet-900 text-xs">
+                            <span className="font-semibold">Cuenta {p.numero}</span>
+                            <span className="font-mono font-bold">{dinero(p.importe)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                     <div className="grid grid-cols-[auto_1fr] gap-2">
                       <button
                         onClick={() => setCuentaAbierta(m.id)}

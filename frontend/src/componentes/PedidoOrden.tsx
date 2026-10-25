@@ -1134,7 +1134,8 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
                 detalle={detalle}
                 extras={extrasEnviados}
                 guardadas={cuentasDivididas}
-                onGuardadas={setCuentasDivididas}
+                sinEnviar={hayNuevo}
+                onGuardadas={actualizarOrden}
                 onCerrar={() => setDividiendo(false)}
               />
             </motion.div>

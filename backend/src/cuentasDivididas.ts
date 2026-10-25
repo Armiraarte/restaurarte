@@ -1,7 +1,8 @@
 // Cuentas divididas (botón Dividir en la pantalla de la orden): cada persona queda guardada como Cuenta 1…N
 // de la misma orden (tabla orden_cuenta_dividida, migración 2026_10_25_000031) y se imprime un ticket por persona.
-// La orden, su total y su cobro no cambian: Ventas y el corte la siguen contando una sola vez, y en Ventas,
-// el detalle de la cuenta y el ticket de cobro se ve que fue una cuenta dividida.
+// Dividir también pide la cuenta (la orden pasa a PAGANDO y aparece en Cajas). El total y el cobro no cambian:
+// Ventas y el corte la siguen contando una sola vez, y en Cajas, Ventas, el detalle de la cuenta y el ticket de
+// cobro se ve que fue una cuenta dividida.
 //
 // El servidor vuelve a calcular las partes con lo guardado en la base (no confía en los importes de la pantalla):
 //   iguales   → el total entre N; los centavos que sobran van a las primeras cuentas.
@@ -174,13 +175,18 @@ export async function leerCuentasDivididas(idOrden: number): Promise<CuentaDivid
   return filas.map(deFila);
 }
 
-/** En cuántas cuentas se dividió cada orden (para las listas de Cajas y Ventas). */
-export async function personasPorOrden(ids: number[]): Promise<Map<number, number>> {
-  if (!ids.length || !(await hayTablaCuentasDivididas())) return new Map();
+/** Lo de cada cuenta de las órdenes divididas (para las listas de Cajas y Ventas). */
+export async function cuentasPorOrden(ids: number[]): Promise<Map<number, { numero: number; importe: number }[]>> {
+  const porOrden = new Map<number, { numero: number; importe: number }[]>();
+  if (!ids.length || !(await hayTablaCuentasDivididas())) return porOrden;
   const [filas] = await pool!.query<RowDataPacket[]>(
-    'SELECT idOrden, MAX(personas) AS personas FROM orden_cuenta_dividida WHERE idOrden IN (?) GROUP BY idOrden', [ids],
+    'SELECT idOrden, numero, importe FROM orden_cuenta_dividida WHERE idOrden IN (?) ORDER BY idOrden, numero', [ids],
   );
-  return new Map(filas.map((f) => [Number(f.idOrden), Number(f.personas)]));
+  for (const f of filas) {
+    const id = Number(f.idOrden);
+    porOrden.set(id, [...(porOrden.get(id) ?? []), { numero: Number(f.numero), importe: Number(f.importe) }]);
+  }
+  return porOrden;
 }
 
 /** Reemplaza la división anterior de la orden por la nueva (dentro de la transacción de quien llama). */

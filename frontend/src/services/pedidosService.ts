@@ -155,13 +155,17 @@ export const divisionVigente = (cuentas: { importe: number }[] | undefined, tota
   !!cuentas?.length && cuentas.reduce((acc, c) => acc + Math.round(c.importe * 100), 0) === Math.round(total * 100);
 
 /**
- * Guarda la cuenta dividida como Cuenta 1…N de la orden (reemplaza la anterior) e imprime un ticket por persona.
+ * Guarda la cuenta dividida como Cuenta 1…N de la orden (reemplaza la anterior), imprime un ticket por persona y,
+ * si estaba abierta, la manda a Cajas (PAGANDO). Devuelve la orden actualizada.
  * `total` es el que se ve en pantalla: si la orden cambió mientras tanto, el servidor no la guarda.
  */
 export const guardarCuentasDivididas = (
   idOrden: number,
   datos: { modo: 'iguales' | 'productos'; personas: number; total: number; asignadas?: Record<string, number> },
-) => pedir<{ cuentas: CuentaDividida[]; impresion: ImpresionCuentas }>(`/ordenes/${idOrden}/dividir`, { method: 'POST', body: JSON.stringify(datos) });
+) => pedir<{
+  orden: OrdenBD; detalle: DetalleOrdenBD[]; extras: ExtraOrdenBD[]; cuentas_divididas: CuentaDividida[];
+  cuentas: CuentaDividida[]; impresion: ImpresionCuentas;
+}>(`/ordenes/${idOrden}/dividir`, { method: 'POST', body: JSON.stringify(datos) });
 
 /** Vuelve a imprimir los tickets de las cuentas divididas guardadas. */
 export const reimprimirCuentasDivididas = (idOrden: number) =>

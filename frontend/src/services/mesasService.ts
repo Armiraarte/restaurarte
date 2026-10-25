@@ -13,6 +13,7 @@ export interface MesaRegistrada {
   creado_en?: string;
   actualizado_en?: string; // al cobrarla (PAGADO) es la hora del cobro
   cuentas_divididas?: number; // en cuántas cuentas se dividió con el botón Dividir (0 = no se dividió)
+  partes_divididas?: { numero: number; importe: number }[]; // lo de cada cuenta (Cuenta 1, 2…)
 }
 
 /**
