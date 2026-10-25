@@ -32,6 +32,7 @@ const PRODUCTOS_ABREVIADOS: Record<string, Record<string, string>> = {
 };
 
 const PALABRAS_ABREVIADAS: Record<string, string> = {
+  'pollo a la plancha': 'POLLO/PLANCHA',
   barbacoa: 'B', milanesa: 'MILA', chicharron: 'H', jamon: 'JAM', picadillo: 'PICA',
   jalapeno: 'JALAP', frijol: 'FRIJ', mixta: 'MIX', mixto: 'MIX', cuerito: 'CUERI',
   salchicha: 'SAL', queso: 'Q',
