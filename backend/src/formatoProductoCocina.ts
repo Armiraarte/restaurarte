@@ -15,8 +15,8 @@ const ABREVIATURAS: Record<string, string> = {
 };
 
 const PRODUCTOS_ABREVIADOS: Record<string, Record<string, string>> = {
-  'tacos dorados': { papa: 'PAPA', frijol: 'FRIJOL', jamon: 'JAM' },
-  tacos: { barbacoa: 'B', chicharron: 'H', pollo: 'POLLO' },
+  'tacos dorados': { papa: 'PAPA', frijol: 'FRIJOL', jamon: 'JAM', salchicha: 'SAL' },
+  tacos: { barbacoa: 'B', chicharron: 'H', pollo: 'POLLO', salchicha: 'SAL' },
   quesadillas: { papa: 'PAPA', frijol: 'FRIJ', picadillo: 'PICA', pollo: 'POLLO', jamon: 'JAM', chicharron: 'H', jalapeno: 'JALAP' },
   sopes: { papa: 'PAPA', frijol: 'FRI', picadillo: 'PICA', pollo: 'POLLO', chicharron: 'H', pierna: 'PIERNA' },
   enchiladas: { papa: 'PAPA', frijol: 'FRIJOL', picadillo: 'PICA', pollo: 'POLLO', 'queso/cebolla': 'QUESO CEBOLLA' },
