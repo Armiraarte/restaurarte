@@ -60,6 +60,8 @@ interface Renglon {
   conQueso: boolean;
   conPapas: boolean;
   complementosExtra: string[];
+  /** Comentario del platillo (sale en la comanda como NOTA). */
+  nota: string | null;
   mixGrupo: number | null;
   termino: string | null;
   sin: string[];
@@ -96,6 +98,7 @@ export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, extras = [], cl
       conQueso: d.con_queso,
       conPapas: !!d.opciones?.papas,
       complementosExtra: d.opciones?.complementosExtra?.map((c) => c.nombre) ?? [],
+      nota: d.opciones?.nota ?? null,
       mixGrupo: d.mix_grupo ?? null,
       termino: d.termino ?? null,
       // En tacos el queso no va de base: no se muestra «sin queso».
@@ -195,6 +198,7 @@ export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, extras = [], cl
                           {r.termino && <span className="block text-xs font-semibold text-orange-800">Término: {r.termino}</span>}
                           {r.conPapas && <EtiquetaConPapas />}
                           {r.complementosExtra.length > 0 && <EtiquetaComplementosExtra nombres={r.complementosExtra} />}
+                          {r.nota && <span className="block text-xs font-semibold text-sky-800">Nota: {r.nota}</span>}
                           <span className="flex items-center gap-1.5 min-w-0">
                             <span className="font-semibold text-neutral-900 truncate">{r.producto}</span>
                             {r.sinQueso && <EtiquetaSinQueso />}

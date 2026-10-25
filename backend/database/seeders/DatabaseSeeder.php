@@ -31,6 +31,7 @@ class DatabaseSeeder extends Seeder
                 TostadasJitomateSeeder::class,
                 CafeSeeder::class,
                 LoncheMixtoSeeder::class,
+                HamburguesasPolloPiernaSeeder::class,
             ]);
         });
     }

@@ -396,11 +396,23 @@ que los demás lonches. Repetirlo no lo duplica ni cambia un precio ajustado des
 .\artisan.ps1 db:seed --class=LoncheMixtoSeeder --force
 ```
 
+**Hamburguesas de Pollo y de Pierna**: `HamburguesasPolloPiernaSeeder` las agrega con el precio y los
+complementos de las demás hamburguesas ($50; Catsup, Cebolla, Chile, Jitomate, Lechuga y Queso). «Pollo»
+es aparte de «Pollo a la plancha». Repetirlo no las duplica ni cambia un precio ajustado después.
+
+```powershell
+.\artisan.ps1 db:seed --class=HamburguesasPolloPiernaSeeder --force
+```
+
 **Complementos EXTRA**: en las opciones de cualquier platillo, un toque incluye o quita un complemento y
-**doble toque** lo marca EXTRA (otro doble toque lo quita); cada uno cuesta $5 por pieza
+**doble toque** lo marca EXTRA (otro doble toque lo quita); cada uno cuesta $1 por pieza
 (`PRECIO_COMPLEMENTO_EXTRA` en `backend/src/detallePedido.ts` y en el frontend). Se manda como
 `complementosExtra` (IDs de los complementos del producto, nunca también en `sin`) y se guarda en
 `opciones.complementosExtra` sin columna nueva; cocina y cobro muestran «EXTRA CREMA Y QUESO».
+
+**Comentario del platillo**: mientras se arma un producto, el botón COMENTARIO (junto a VOLVER) guarda
+un texto libre (hasta 200 caracteres) para lo que no está en el menú ni en las opciones. Se manda como
+`nota`, se guarda en `opciones.nota` y en la comanda sale como «NOTA: …» debajo del platillo.
 
 ### Orden completa de papas y distribución de opciones
 

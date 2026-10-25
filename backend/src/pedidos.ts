@@ -5,8 +5,9 @@
 //   GET   /api/menu                         categorías activas con sus productos (grupo, precio) y complementos
 //   GET   /api/ordenes/:idOrden             la orden con su detalle y total
 //   POST  /api/ordenes/:idOrden/pedido      { items: [{ idProducto, cantidad, sin?, mezcla?, reparto?, sinQueso?, conQueso?, carneExtra?, mixGrupo? }] }
-//                                           reparto = MEZCLAR (Alitas): [{ nombre, cantidad }] por sabor, en un solo renglón
-//                                           complementosExtra = IDs de complementos EXTRA (doble toque); +$5 c/u por pieza
+//                                           reparto = MIXTAS (cualquier categoría): [{ nombre, cantidad }] por sabor, en un solo renglón; cada pieza a su precio
+//                                           complementosExtra = IDs de complementos EXTRA (doble toque); +$1 c/u por pieza
+//                                           nota = comentario del platillo (hasta 200 caracteres); en cocina sale como NOTA
 //                                           Cada producto conserva precio, opciones y grupo MIX en orden_has_detalle.
 //                                           sinQueso = Quesadillas y Hamburguesas: SIN QUESO
 //                                           carneExtra = solo Hamburguesas: 1 doble, 2 triple; +$20 c/u por pieza
@@ -22,7 +23,7 @@ import { mysqlDisponible } from './usuarios.js';
 import { turnoAbierto } from './turnos.js';
 import { imprimirLineas } from './impresion.js';
 import { lineasTicketCobro } from './ticketCobro.js';
-import { guardarDetallePedido, itemsValidos, terminoPermitido, type ItemPedido, type PapasPedido, type RepartoPedido } from './detallePedido.js';
+import { guardarDetallePedido, itemsValidos, terminoPermitido, type ItemPedido, type PapasPedido, type ProductosReparto, type RepartoPedido } from './detallePedido.js';
 import { extrasValidos, guardarExtrasPedido, recalcularTotalOrden } from './extrasPedido.js';
 
 // Opciones por renglón; las mismas constantes que OrdenDetalle en Laravel.
@@ -187,7 +188,7 @@ async function imprimirTicketCobro(idOrden: number, recibido: number | null, cob
   const porProducto = new Map<string, { cantidad: number; nombre: string; importe: number }>();
   type Renglon = { idProducto: number; categoria: string; nombre: string; tamano: string | null; cantidad: number; sin_queso: boolean; con_queso: boolean; carne_extra: number; subtotal: number; opciones: { mezcla?: string[]; reparto?: RepartoPedido[]; papas?: PapasPedido; complementosExtra?: { nombre: string }[] } | null };
   for (const d of datos.detalle as unknown as Renglon[]) {
-    // MEZCLAR: "4 BBQ + 6 Buffalo"; mezcla sin cantidades: "Papa con Frijol".
+    // MIXTAS: "4 BBQ + 6 Buffalo"; mezcla sin cantidades: "Papa con Frijol".
     const nombre = d.opciones?.reparto?.length
       ? d.opciones.reparto.map((r) => `${r.cantidad} ${r.nombre}`).join(' + ')
       : d.opciones?.mezcla && d.opciones.mezcla.length > 1 ? d.opciones.mezcla.join(' con ') : d.nombre;
@@ -363,21 +364,38 @@ pedidosRouter.post('/ordenes/:idOrden/pedido', async (req, res) => {
       }
     }
 
+    // Productos de las categorías del pedido: los nombres de una mezcla y, en MIXTAS, el de cada sabor
+    // (misma categoría y mismo tamaño), con el que se cobra cada pieza a su precio.
+    const [rellenos] = await conexion.query<RowDataPacket[]>(
+      'SELECT id, nombre, tamano, precio, categoria_id FROM producto WHERE categoria_id IN (?) AND estatus = 1',
+      [[...new Set(productos.map((p) => p.categoria_id)), 0]],
+    );
+    const productosReparto: ProductosReparto = new Map();
+    let saborFaltante = false;
+    for (const i of items) {
+      if (!i.reparto) continue;
+      const base = porId.get(i.idProducto)!;
+      const sabores = i.reparto.map((r) =>
+        rellenos.find((p) => p.categoria_id === base.categoria_id && p.nombre === r.nombre && (p.tamano ?? null) === (base.tamano ?? null)));
+      if (sabores.some((s) => !s)) saborFaltante = true;
+      else productosReparto.set(i, sabores.map((s) => ({ id: s!.id as number, precio: Number(s!.precio) })));
+    }
+    const idsConSabores = [...new Set([...ids, ...[...productosReparto.values()].flat().map((s) => s.id)])];
     const [relaciones] = await conexion.query<RowDataPacket[]>(
       `SELECT phc.producto_id, c.id, c.nombre FROM producto_has_complemento phc
-       JOIN complementos c ON c.id = phc.complemento_id WHERE phc.producto_id IN (?) AND c.estatus = 1 ORDER BY c.nombre, c.id`, [ids.length ? ids : [0]],
+       JOIN complementos c ON c.id = phc.complemento_id WHERE phc.producto_id IN (?) AND c.estatus = 1 ORDER BY c.nombre, c.id`,
+      [idsConSabores.length ? idsConSabores : [0]],
     );
     const complementos = new Map<number, { id: number; nombre: string }[]>();
     for (const c of relaciones) {
       complementos.set(c.producto_id, [...(complementos.get(c.producto_id) ?? []), { id: c.id, nombre: c.nombre }]);
     }
-    const [rellenos] = await conexion.query<RowDataPacket[]>(
-      'SELECT nombre, categoria_id FROM producto WHERE categoria_id IN (?) AND estatus = 1',
-      [[...new Set(productos.map((p) => p.categoria_id)), 0]],
-    );
-    if (items.some((i) =>
-      [...(i.sin ?? []), ...(i.complementosExtra ?? [])].some((id) => !complementos.get(i.idProducto)?.some((c) => c.id === id)) ||
-      [...(i.mezcla ?? []), ...(i.reparto ?? []).map((r) => r.nombre)].some((nombre) =>
+    // En MIXTAS se aceptan los complementos de todos los sabores.
+    const ofrecidosDe = (i: ItemPedido) =>
+      [i.idProducto, ...(productosReparto.get(i) ?? []).map((s) => s.id)].flatMap((id) => complementos.get(id) ?? []);
+    if (saborFaltante || items.some((i) =>
+      [...(i.sin ?? []), ...(i.complementosExtra ?? [])].some((id) => !ofrecidosDe(i).some((c) => c.id === id)) ||
+      (i.mezcla ?? []).some((nombre) =>
         !rellenos.some((p) => p.categoria_id === porId.get(i.idProducto)!.categoria_id && p.nombre === nombre))
     )) {
       await conexion.rollback();
@@ -399,7 +417,7 @@ pedidosRouter.post('/ordenes/:idOrden/pedido', async (req, res) => {
       papas = { idProducto: p.id, nombre: p.nombre, tamano: p.tamano, precio: Number(p.precio) };
     }
     const ahora = new Date();
-    const guardados = await guardarDetallePedido(conexion, idOrden, items, porId, complementos, ahora, papas);
+    const guardados = await guardarDetallePedido(conexion, idOrden, items, porId, complementos, ahora, papas, productosReparto);
     const extrasGuardados = await guardarExtrasPedido(conexion, idOrden, extras, ahora);
     await recalcularTotalOrden(conexion, idOrden, ahora);
     await conexion.commit();

@@ -15,7 +15,7 @@ import { config } from './config.js';
 import { esDuplicado, pool } from './db.js';
 import { mysqlDisponible } from './usuarios.js';
 import { sesionTabletAbierta, turnoAbierto } from './turnos.js';
-import { asignarNombreMesa, ErrorAltaMesa, validarNumeroMesa } from './numeracionMesas.js';
+import { asignarNombreMesa, cambiarMesaOrden, ErrorAltaMesa, validarNumeroMesa } from './numeracionMesas.js';
 
 const TIPO_VENTA = { comerAqui: 1, paraLlevar: 2 } as const;
 
@@ -187,6 +187,48 @@ mesasRouter.post('/', async (req, res) => {
     }
     console.error('[mesas] No se pudo registrar la mesa:', err);
     res.status(500).json({ error: 'No se pudo registrar la mesa en la base de datos.' });
+  } finally {
+    conexion.release();
+  }
+});
+
+
+/**
+ * Cambiar de mesa (botón CAMBIAR en Órdenes): la orden abierta pasa a una mesa libre del croquis (1 a 9) con todo lo
+ * que tiene; solo cambia orden.nombre (el pedido, los extras, el total y el código se quedan en la misma orden).
+ * Bajo el mismo bloqueo del turno que las altas, así dos tablets no pueden ocupar la misma mesa a la vez.
+ */
+mesasRouter.post('/:id/cambiar', async (req, res) => {
+  const id = Number(req.params.id);
+  const destino = normalizarNombreMesa(String(req.body?.mesa ?? ''));
+  if (!Number.isSafeInteger(id) || id < 1 || !/^[1-9]$/.test(destino)) {
+    res.status(400).json({ error: 'Elige una mesa libre del 1 al 9.' });
+    return;
+  }
+  if (!pool || !mysqlDisponible()) {
+    res.status(503).json({ error: 'La base de datos no está disponible; no se cambió la mesa.' });
+    return;
+  }
+  const turno = await turnoAbierto();
+  if (!turno) {
+    res.status(409).json({ error: 'La caja no ha iniciado turno.', sinTurno: true });
+    return;
+  }
+  const conexion = await pool.getConnection();
+  try {
+    await conexion.beginTransaction();
+    const anterior = await cambiarMesaOrden(conexion, turno.idTurno, id, destino);
+    await conexion.commit();
+    const [filas] = await pool.query<MesaFila[]>(`SELECT ${COLUMNAS} FROM orden WHERE idOrden = ?`, [id]);
+    res.json({ mesa: filas[0], anterior });
+  } catch (err) {
+    await conexion.rollback();
+    if (err instanceof ErrorAltaMesa) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    console.error('[mesas] No se pudo cambiar de mesa:', err);
+    res.status(500).json({ error: 'No se pudo cambiar de mesa.' });
   } finally {
     conexion.release();
   }

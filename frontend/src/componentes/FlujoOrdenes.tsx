@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { AlertTriangle, ArrowLeft, Loader2, Phone, Send, User } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRightLeft, Loader2, Phone, Send, User } from 'lucide-react';
 import { BORRADOR_LLAMADA, piezasSinEnviar } from '../services/borradorPedido';
 import { esOrdenActiva, etiquetaMesaRegistrada, MesaRegistrada, registrarMesa } from '../services/mesasService';
 import { useMesasTurno } from '../services/sincronizacion';
@@ -10,6 +10,7 @@ import { SelectorTipoOrden } from './AppTabletCuenta';
 import { PedidoOrden } from './PedidoOrden';
 import { LimiteDeErrores } from './AlertasErrores';
 import { CroquisMesas, esMesaDelCroquis, ordenesPorMesa } from './CroquisMesas';
+import { DialogoCambiarMesa } from './DialogoCambiarMesa';
 
 export function FlujoOrdenes({ origen, cabecera, acciones }: {
   /** Identifica quién toma el pedido en los tickets; no cambia su flujo. */
@@ -23,6 +24,7 @@ export function FlujoOrdenes({ origen, cabecera, acciones }: {
   const [llamada, setLlamada] = useState(false);
   const enOrden = ordenAbierta !== null || llamada;
   const [pidiendoNombre, setPidiendoNombre] = useState(false);
+  const [cambiandoMesa, setCambiandoMesa] = useState(false);
   // Mesa del croquis que se está registrando en el servidor, y el error si no se pudo.
   const [abriendoMesa, setAbriendoMesa] = useState<number | null>(null);
   const [errorAlta, setErrorAlta] = useState<string | null>(null);
@@ -132,6 +134,7 @@ export function FlujoOrdenes({ origen, cabecera, acciones }: {
               onAbrirLlamada={abrirLlamada}
               onNombre={() => setPidiendoNombre(true)}
               mesaPrueba={mesaPrueba}
+              onCambiar={() => setCambiandoMesa(true)}
             />
           )}
         </LimiteDeErrores>
@@ -139,6 +142,16 @@ export function FlujoOrdenes({ origen, cabecera, acciones }: {
 
       <AnimatePresence>
         {pidiendoNombre && <DialogoNombre onAbrir={abrirPorNombre} onCancelar={() => setPidiendoNombre(false)} />}
+        {cambiandoMesa && mesas && (
+          <DialogoCambiarMesa
+            mesas={mesas}
+            onCambiada={() => {
+              setCambiandoMesa(false);
+              cargarMesas();
+            }}
+            onCerrar={() => setCambiandoMesa(false)}
+          />
+        )}
       </AnimatePresence>
     </div>
   );
@@ -163,6 +176,7 @@ function VistaMesas({
   onAbrirLlamada,
   onNombre,
   mesaPrueba,
+  onCambiar,
 }: {
   mesas: MesaRegistrada[] | null;
   error: string | null;
@@ -175,6 +189,8 @@ function VistaMesas({
   onNombre: () => void;
   /** Mesa de prueba del croquis (solo PC de desarrollo); null en producción. */
   mesaPrueba: string | null;
+  /** Abre «Cambiar de mesa». */
+  onCambiar: () => void;
 }) {
   const otras = (mesas ?? []).filter((m) => !esMesaDelCroquis(m.nombre, mesaPrueba));
   // El conteo del salón es de las 9 mesas reales (la de prueba no cuenta).
@@ -195,9 +211,19 @@ function VistaMesas({
             En pantallas anchas mide lo justo para el croquis (proporción del dibujo) y PEDIDOS toma el resto. */}
         <div className="flex-1 md:flex-none md:h-full md:aspect-[33/25] md:max-w-[72%] min-w-0 min-h-0 flex flex-col rounded-2xl border border-neutral-200 bg-white shadow-sm overflow-hidden">
           <div className="shrink-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-2 border-b border-neutral-100">
-            <div className="flex items-baseline gap-2">
+            <div className="flex items-center gap-2">
               <h3 className="text-sm font-black tracking-wide text-neutral-800">SALÓN</h3>
               <span className="text-xs text-neutral-500">{ocupadas} de 9 ocupadas</span>
+              {/* Pasar una mesa abierta a una libre, con toda su cuenta */}
+              <button
+                type="button"
+                onClick={onCambiar}
+                disabled={ocupadas === 0 || ocupadas === 9}
+                title={ocupadas === 0 ? 'No hay mesas abiertas' : ocupadas === 9 ? 'No hay mesas libres' : 'Cambiar una mesa abierta a una libre'}
+                className="h-8 px-3 rounded-lg border-2 border-sky-300 bg-white text-sky-800 text-xs font-black tracking-wide flex items-center gap-1.5 hover:bg-sky-50 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <ArrowRightLeft className="w-4 h-4" /> CAMBIAR
+              </button>
             </div>
             <div className="flex items-center gap-3 text-[11px] font-semibold text-neutral-600">
               <Leyenda clase="bg-[#efe7dc] border-[#d3c7b8]" texto={`Libres ${9 - ocupadas}`} />

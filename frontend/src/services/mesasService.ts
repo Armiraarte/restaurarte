@@ -33,6 +33,23 @@ export async function registrarMesa(codigo: string, paraLlevar: boolean): Promis
   return data;
 }
 
+/** Cambia la orden `id` a la mesa libre `mesa` (1 a 9) con todo lo que tiene; devuelve el número anterior. */
+export async function cambiarMesa(id: number, mesa: string): Promise<{ mesa: MesaRegistrada; anterior: string }> {
+  let res: Response;
+  try {
+    res = await fetch(`/api/mesas/${id}/cambiar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken() ?? ''}` },
+      body: JSON.stringify({ mesa }),
+    });
+  } catch {
+    throw new Error('No se pudo conectar con el servidor; la mesa no se cambió.');
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'No se pudo cambiar de mesa.');
+  return data;
+}
+
 /**
  * Mesas registradas en el turno abierto (lo único que la tablet muestra). Sin turno, la lista va vacía.
  * mesaPrueba: número de la mesa de prueba (solo en la PC de desarrollo; en producción siempre null).

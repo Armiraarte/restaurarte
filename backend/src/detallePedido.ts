@@ -2,7 +2,7 @@ import type { PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql2/prom
 
 const PRECIO_CARNE_EXTRA = 20;
 /** Complemento EXTRA (doble toque en la pantalla de opciones): cada uno cuesta esto por pieza. */
-export const PRECIO_COMPLEMENTO_EXTRA = 5;
+export const PRECIO_COMPLEMENTO_EXTRA = 1;
 
 export function terminoPermitido(categoria: string, nombre: string | undefined): boolean {
   return nombre !== undefined && (categoria === 'Tacos' || (categoria === 'Tacos Dorados' && nombre !== 'Dorado'));
@@ -20,16 +20,30 @@ export interface ItemPedido {
   conPapas?: boolean;
   /** Identificador temporal del borrador; se asigna un número definitivo bajo el bloqueo de la orden. */
   mixGrupo?: number | null;
-  /** MEZCLAR (Alitas): cuántas piezas de cada sabor en un solo renglón; suman `cantidad`. */
+  /** MIXTAS (cualquier categoría): cuántas piezas de cada sabor en un solo renglón; suman `cantidad`. */
   reparto?: RepartoPedido[];
   /** Complementos EXTRA (IDs, de los del producto), cada uno con costo por pieza; no pueden estar también en `sin`. */
   complementosExtra?: number[];
+  /** Comentario del platillo (lo que no está en el menú ni en las opciones): sale como NOTA en la comanda. */
+  nota?: string;
 }
+
+/** Comentario de un platillo: texto de 1 a 200 caracteres (se guarda sin espacios repetidos). */
+export const MAX_NOTA = 200;
+const notaValida = (nota: unknown) => typeof nota === 'string' && nota.trim().length > 0 && nota.length <= MAX_NOTA;
 
 export interface RepartoPedido {
   nombre: string;
   cantidad: number;
+  /** Lo pone el servidor al guardar: el precio de una pieza de ese sabor. */
+  precio?: number;
 }
+
+/**
+ * MIXTAS: el producto de cada sabor del reparto (misma categoría y tamaño), en el mismo orden. Con él cada pieza
+ * se cobra a su precio y se aceptan los complementos de todos los sabores.
+ */
+export type ProductosReparto = Map<ItemPedido, { id: number; precio: number }[]>;
 
 /** Al menos dos sabores distintos, cada uno con piezas, y que sumen la cantidad del renglón. */
 function repartoValido(reparto: unknown, cantidad: number): boolean {
@@ -59,6 +73,7 @@ export function itemsValidos(items: ItemPedido[]): boolean {
     (i.carneExtra === undefined || (Number.isSafeInteger(i.carneExtra) && i.carneExtra >= 0 && i.carneExtra <= 2)) &&
     (i.mixGrupo == null || (Number.isSafeInteger(i.mixGrupo) && i.mixGrupo > 0 && i.mixGrupo <= 2147483647)) &&
     (i.reparto === undefined || repartoValido(i.reparto, i.cantidad)) &&
+    (i.nota === undefined || notaValida(i.nota)) &&
     (i.complementosExtra === undefined || (Array.isArray(i.complementosExtra) && i.complementosExtra.length <= 20 &&
       new Set(i.complementosExtra).size === i.complementosExtra.length &&
       i.complementosExtra.every((id) => Number.isSafeInteger(id) && id > 0 && !i.sin?.includes(id))))
@@ -81,6 +96,7 @@ export async function guardarDetallePedido(
   complementos: Map<number, { id: number; nombre: string }[]>,
   ahora: Date,
   papas: PapasPedido | null = null,
+  productosReparto: ProductosReparto = new Map(),
 ): Promise<{ idDetalle_Orden: number; mix_grupo: number | null }[]> {
   const grupos = new Map<number, number>();
   let ultimo = 0;
@@ -97,14 +113,27 @@ export async function guardarDetallePedido(
     const mix = item.mixGrupo == null ? null : grupos.get(item.mixGrupo)!;
     const p = productos.get(item.idProducto)!;
     const carneExtra = item.carneExtra ?? 0;
-    const extra = (complementos.get(item.idProducto) ?? []).filter((c) => item.complementosExtra?.includes(c.id));
-    const subtotal = ((Math.round(Number(p.precio) * 100) + carneExtra * PRECIO_CARNE_EXTRA * 100 +
-      extra.length * PRECIO_COMPLEMENTO_EXTRA * 100 + (item.conPapas ? Math.round(papas!.precio * 100) : 0)) * item.cantidad) / 100;
+    // MIXTAS: cada sabor con su producto; los complementos que se ofrecen son los de todos ellos.
+    const sabores = item.reparto ? productosReparto.get(item) : undefined;
+    const ofrecidos = sabores
+      ? [...new Map([item.idProducto, ...sabores.map((s) => s.id)].flatMap((id) => complementos.get(id) ?? []).map((c) => [c.id, c])).values()]
+      : complementos.get(item.idProducto) ?? [];
+    const extra = ofrecidos.filter((c) => item.complementosExtra?.includes(c.id));
+    // En centavos. En MIXTAS cada pieza a su precio; lo extra (carnes, EXTRA y papas) va en cada pieza.
+    const base = sabores
+      ? item.reparto!.reduce((acc, r, i) => acc + Math.round(sabores[i].precio * 100) * r.cantidad, 0)
+      : Math.round(Number(p.precio) * 100) * item.cantidad;
+    const porPieza = carneExtra * PRECIO_CARNE_EXTRA * 100 + extra.length * PRECIO_COMPLEMENTO_EXTRA * 100 +
+      (item.conPapas ? Math.round(papas!.precio * 100) : 0);
+    const subtotal = (base + porPieza * item.cantidad) / 100;
     const opciones = {
-      sin: (complementos.get(item.idProducto) ?? []).filter((c) => item.sin?.includes(c.id)),
+      sin: ofrecidos.filter((c) => item.sin?.includes(c.id)),
       mezcla: item.mezcla ?? [],
-      ...(item.reparto && { reparto: item.reparto.map((r) => ({ nombre: r.nombre, cantidad: r.cantidad })) }),
+      ...(item.reparto && {
+        reparto: item.reparto.map((r, i) => ({ nombre: r.nombre, cantidad: r.cantidad, ...(sabores && { precio: sabores[i].precio }) })),
+      }),
       ...(extra.length && { complementosExtra: extra, precioComplementoExtra: PRECIO_COMPLEMENTO_EXTRA }),
+      ...(item.nota && { nota: item.nota.trim().replace(/\s+/g, ' ') }),
       ...(item.conPapas && { papas }),
     };
     const [resultado] = await conexion.execute<ResultSetHeader>(

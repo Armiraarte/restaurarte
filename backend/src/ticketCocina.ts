@@ -5,7 +5,6 @@
 //   - Repartirlo en tablas (los comentarios `BD:` indican la columna sugerida).
 // El mismo tipo existe en frontend/src/types/ticketCocina.ts; si cambias uno, cambia el otro.
 import type { LineaTicket } from './impresion.js';
-import { encabezadoRestaurante } from './ticketMarca.js';
 import { extrasValidos, type ExtraPedido } from './extrasPedido.js';
 
 /** Una elección dentro de un grupo de opciones. BD: partida_opciones (partida_id, grupo, eleccion). */
@@ -70,27 +69,11 @@ export function validarTicketCocina(t: any): string | null {
   return null;
 }
 
-/** "10/10/2026 09:05 a.m." en hora de México. */
-function fechaHora(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleString('es-MX', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: 'America/Mexico_City',
-  });
-}
-
 /**
- * Formato impreso (impresora térmica de 80 mm), todo alineado a la izquierda:
- *   [logo]
- *   Orden cocina #00004-2
- *   Mesa 1
- *   Tablet 01
- *   10/10/2026 09:05 a.m.
+ * Formato impreso (impresora térmica de 80 mm), todo alineado a la izquierda (sin logo ni fecha):
+ *   Orden cocina #00004-2 · Tablet 01   (chico)
+ *   MESA 1                      (muy grande; o el nombre del cliente)
+ *   PARA LLEVAR                 (grande, solo si es para llevar; comer aquí no se escribe)
  *   ------------------------------------
  *   2 Tacos Dorados · Frijol
  *     - CON TODO
@@ -105,11 +88,14 @@ function fechaHora(iso: string): string {
  */
 export function lineasTicketCocina(t: TicketCocina): LineaTicket[] {
   const lineas: LineaTicket[] = [
-    ...encabezadoRestaurante({ anchoMm: 35, alinear: 'izquierda' }), // logo 30% más chico que en los demás tickets
-    { texto: `${t.area === 'bebidas' ? 'BEBIDAS' : 'Orden cocina'} ${t.orden_cocina}`, grande: true },
-    { texto: t.para_llevar ? `${t.mesa} · PARA LLEVAR` : t.mesa, negrita: true },
-    ...(t.tablet ? [{ texto: t.tablet }] : []),
-    { texto: fechaHora(t.enviada_en) },
+    // Sin logo ni fecha: arriba y chico el número de orden; luego de quién es el pedido, en grande, y PARA LLEVAR
+    // solo si lo es (comer aquí no se escribe).
+    {
+      texto: `${t.area === 'bebidas' ? 'BEBIDAS' : 'Orden cocina'} ${t.orden_cocina}${t.tablet ? ` · ${t.tablet}` : ''}`,
+      negrita: t.area === 'bebidas',
+    },
+    { texto: t.mesa, grande: true, escala: 1.6 },
+    ...(t.para_llevar ? [{ texto: 'PARA LLEVAR', grande: true, escala: 1.3 }] : []),
     { separador: true },
   ];
 

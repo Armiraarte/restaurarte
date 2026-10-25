@@ -14,6 +14,7 @@ import {
   Home,
   Loader2,
   LockKeyhole,
+  MessageSquareText,
   Minus,
   Phone,
   PhoneOff,
@@ -22,6 +23,7 @@ import {
   Send,
   ShoppingBag,
   Shuffle,
+  Split,
   Trash2,
   UtensilsCrossed,
   User,
@@ -46,7 +48,6 @@ import {
   PapasMenu,
   ExtraPedido,
   ExtraOrdenBD,
-  CATEGORIAS_REPARTO,
   CATEGORIAS_QUESO_OPCIONAL,
   CATEGORIA_PAPAS,
   nombrePapas,
@@ -65,6 +66,8 @@ import { registrarMesa } from '../services/mesasService';
 import { registrarError } from '../services/errores';
 import { TicketCocina } from '../types/ticketCocina';
 import { DialogoAgregarExtra } from './DialogoAgregarExtra';
+import { DividirCuenta } from './DividirCuenta';
+import { DialogoComentario } from './DialogoComentario';
 import { ListaExtras } from './ListaExtras';
 import { complementosTicket, complementosTicketQuesoOpcional, esQueso } from '../services/complementos';
 
@@ -90,10 +93,12 @@ interface LineaNueva {
   papas?: PapasMenu | null;
   /** Complementos que tenía el platillo. Puede faltar en borradores viejos (se usan los del producto). */
   ofrecidos?: ComplementoMenu[];
-  /** MIXTAS (Alitas): piezas de cada sabor en este mismo renglón; suman `cantidad`. */
+  /** MIXTAS: piezas de cada sabor en este mismo renglón, cada una a su precio; suman `cantidad` (no se cambia con +/−). */
   reparto?: RepartoPedido[];
   /** Complementos EXTRA (doble toque), +PRECIO_COMPLEMENTO_EXTRA c/u por pieza. */
   complementosExtra?: ComplementoMenu[];
+  /** Comentario del platillo (botón junto a VOLVER): sale en la comanda como NOTA. */
+  nota?: string;
 }
 
 /** Cobro extra por enviar; `mixGrupo`: el MIX abierto al agregarlo (en cocina sale debajo de ese MIX). */
@@ -105,18 +110,26 @@ let siguienteLinea = 1;
 let siguienteExtra = 1;
 /** "4 BBQ + 6 Buffalo" si es MIXTAS, "Papa con Frijol" si es mezcla; si no, el nombre del producto con su tamaño. */
 const nombreLinea = (l: LineaNueva) =>
-  l.reparto?.length ? textoReparto(l.reparto) : l.mezcla.length > 1 ? l.mezcla.join(' con ') : nombreProducto(l.producto);
+  l.reparto?.length
+    ? `${textoReparto(l.reparto)}${l.producto.tamano ? ` (${l.producto.tamano})` : ''}`
+    : l.mezcla.length > 1 ? l.mezcla.join(' con ') : nombreProducto(l.producto);
 /** Tacos: el queso no va de base (no se dice «sin queso»; solo CON QUESO si lo piden). */
 const quesoOpcional = (l: LineaNueva) => CATEGORIAS_QUESO_OPCIONAL.includes(l.categoria);
 const sinDescritos = (l: LineaNueva) => l.sin.filter((c) => !esQueso(c) || (!l.sinQueso && !quesoOpcional(l)));
 const textoSin = (l: LineaNueva) =>
   `${l.mixGrupo ? ' · MIX' : ''}${l.termino ? ` · ${l.termino.nombre}` : ''}${l.conQueso && (l.sin.length > 0 || quesoOpcional(l)) ? ' · CON QUESO' : ''}${l.sinQueso ? ' · SIN QUESO' : ''}${l.carneExtra ? ` · ${textoCarneExtra(l.carneExtra)}` : ''}${
     sinDescritos(l).length ? ` · sin ${sinDescritos(l).map((c) => c.nombre.toLowerCase()).join(', ')}` : ''
-  }${l.papas ? ' · CON PAPAS' : ''}${l.complementosExtra?.length ? ` · ${textoComplementosExtra(l.complementosExtra.map((c) => c.nombre))}` : ''
+  }${l.papas ? ' · CON PAPAS' : ''}${l.complementosExtra?.length ? ` · ${textoComplementosExtra(l.complementosExtra.map((c) => c.nombre))}` : ''}${l.nota ? ` · nota: ${l.nota}` : ''
   }`;
-/** Precio de una pieza con sus carnes extra (el servidor lo calcula igual al guardar). */
-const precioLinea = (l: LineaNueva) =>
-  l.producto.precio + (l.carneExtra ?? 0) * PRECIO_CARNE_EXTRA + (l.papas?.precio ?? 0) + (l.complementosExtra?.length ?? 0) * PRECIO_COMPLEMENTO_EXTRA;
+/**
+ * Importe del renglón (el servidor lo calcula igual al guardar): en MIXTAS cada pieza a su precio; a todas se les
+ * suman sus carnes extra, papas y complementos EXTRA. Los borradores viejos de MIXTAS no traen precio por sabor.
+ */
+const importeLinea = (l: LineaNueva) =>
+  (l.reparto?.length && l.reparto.every((r) => r.precio != null)
+    ? l.reparto.reduce((acc, r) => acc + r.precio! * r.cantidad, 0)
+    : l.producto.precio * l.cantidad) +
+  ((l.carneExtra ?? 0) * PRECIO_CARNE_EXTRA + (l.papas?.precio ?? 0) + (l.complementosExtra?.length ?? 0) * PRECIO_COMPLEMENTO_EXTRA) * l.cantidad;
 
 /** Categorías que se muestran como cuadrícula rápida (Bebidas): sin complementos y con muchos productos. */
 const esCuadricula = (c: CategoriaMenu) =>
@@ -164,9 +177,9 @@ function ticketDe(orden: OrdenBD, lineas: LineaNueva[], ronda: number, origen: s
     productos: lineas.map((l) => ({
       partida_id: String(l.id),
       producto_id: String(l.producto.id),
-      // MIXTAS: un solo registro («10 Alitas · MIXTAS») con las piezas de cada sabor debajo.
+      // MIXTAS: un solo registro («10 Alitas · MIXTAS», «3 Ensaladas · MIXTAS (Grande)») con las piezas de cada sabor debajo.
       nombre: l.reparto?.length
-        ? `${l.categoria} · MIXTAS`
+        ? `${l.categoria} · MIXTAS${l.producto.tamano ? ` (${l.producto.tamano})` : ''}`
         : l.categoria === CATEGORIA_PAPAS
           ? nombrePapas(l.producto.tamano) // «Orden de papas» / «Media orden de papas»
           : `${l.categoria} · ${nombreLinea(l)}`,
@@ -174,6 +187,7 @@ function ticketDe(orden: OrdenBD, lineas: LineaNueva[], ronda: number, origen: s
       cantidad: l.cantidad,
       mix_grupo: l.mixGrupo ?? null,
       opciones: [],
+      ...(l.nota && { notas: l.nota }), // en la comanda: «NOTA: …» debajo del platillo
       ...(l.reparto?.length && { reparto: l.reparto.map((r) => ({ opcion: r.nombre, cantidad: r.cantidad })) }),
       // Complementos en los menos renglones posibles: CON TODO, SIN NADA, SOLO CON … o lo que no quiere (ver complementosTicket).
       descripcion: [
@@ -209,10 +223,14 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
   const grupoVisible = grupoAbierto && gruposAbiertos.includes(grupoAbierto) ? grupoAbierto : gruposAbiertos[0];
   // Pantalla de opciones de una categoría (como la de antes): elige uno, tamaño, complementos y cantidad.
   const [opcionesDe, setOpcionesDe] = useState<CategoriaMenu | null>(null);
-  // MIXTAS (Alitas): botón junto a VOLVER; se apaga al cambiar de categoría.
+  // MIXTAS: botón junto a VOLVER en toda categoría con más de un producto; se apaga al cambiar de categoría.
   const [mezclar, setMezclar] = useState(false);
-  const puedeMezclar = !!opcionesDe && CATEGORIAS_REPARTO.includes(opcionesDe.nombre) && new Set(opcionesDe.productos.map((p) => p.nombre)).size > 1;
+  const puedeMezclar = !!opcionesDe && new Set(opcionesDe.productos.map((p) => p.nombre)).size > 1;
   useEffect(() => setMezclar(false), [opcionesDe?.id]);
+  // Comentario del platillo que se está armando (botón junto a VOLVER); se pega al agregarlo y se borra.
+  const [comentario, setComentario] = useState('');
+  const [editandoComentario, setEditandoComentario] = useState(false);
+  useEffect(() => setComentario(''), [opcionesDe?.id]);
   // Lo agregado y aún no enviado se guarda en el dispositivo: si se sale a ÓRDENES, al volver sigue aquí.
   const [nuevo, setNuevo] = useState<LineaNueva[]>(() => {
     const guardado = leerBorrador<LineaNueva>(claveBorrador);
@@ -233,6 +251,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
   const [pestana, setPestana] = useState<'pedido' | 'agregar'>('pedido');
   // Tablet: lo ya enviado se ve en una ventana desde el botón de historial.
   const [verHistorial, setVerHistorial] = useState(false);
+  const [dividiendo, setDividiendo] = useState(false);
   const piezasEnviadas = detalle.reduce((acc, d) => acc + d.cantidad, 0);
   const [enviando, setEnviando] = useState(false);
   const [pidiendoCuenta, setPidiendoCuenta] = useState(false);
@@ -331,8 +350,9 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
     if (!puedeEditar) return;
     setNuevo((lista) => [
       ...lista,
-      { id: siguienteLinea++, rapida: false, producto, categoria, cantidad, sin, mezcla, sinQueso, conQueso, carneExtra, termino, papas, ofrecidos, reparto, complementosExtra, mixGrupo: mixActivo },
+      { id: siguienteLinea++, rapida: false, producto, categoria, cantidad, sin, mezcla, sinQueso, conQueso, carneExtra, termino, papas, ofrecidos, reparto, complementosExtra, mixGrupo: mixActivo, ...(comentario && { nota: comentario }) },
     ]);
+    setComentario('');
   };
   /** Toque en la cuadrícula rápida (Bebidas): suma 1 al renglón rápido de ese producto. */
   const agregarRapido = (producto: ProductoMenu, categoria: string) => {
@@ -356,7 +376,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
 
   const hayNuevo = nuevo.length > 0 || extrasNuevos.length > 0;
   const hayEnviado = detalle.length > 0 || extrasEnviados.length > 0;
-  const totalNuevo = Math.round((nuevo.reduce((acc, l) => acc + precioLinea(l) * l.cantidad, 0) + extrasNuevos.reduce((acc, e) => acc + e.importe, 0)) * 100) / 100;
+  const totalNuevo = Math.round((nuevo.reduce((acc, l) => acc + importeLinea(l), 0) +extrasNuevos.reduce((acc, e) => acc + e.importe, 0)) * 100) / 100;
   const gruposNuevos = agruparMix(nuevo, (l) => l.mixGrupo);
   // Extras que no se ven dentro de un MIX de la lista (sin MIX, o su MIX aún no tiene productos): van al final.
   const mixEnLista = new Set(gruposNuevos.map((g) => g.grupo).filter((g) => g !== null));
@@ -386,8 +406,10 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
           cantidad: l.cantidad,
           sin: l.sin.map((c) => c.id),
           mezcla: l.mezcla,
-          ...(l.reparto?.length && { reparto: l.reparto }),
+          // El precio de cada sabor lo pone el servidor.
+          ...(l.reparto?.length && { reparto: l.reparto.map(({ nombre, cantidad }) => ({ nombre, cantidad })) }),
           ...(l.complementosExtra?.length && { complementosExtra: l.complementosExtra.map((c) => c.id) }),
+          ...(l.nota && { nota: l.nota }),
           mixGrupo: l.mixGrupo ?? null,
           terminoId: l.termino?.id ?? null,
           conPapas: !!l.papas,
@@ -559,6 +581,18 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
               )}
             </button>
           )}
+          {/* Dividir la cuenta entre varias personas (con lo ya enviado) */}
+          {pantallaCompleta && !esLlamada && (
+            <button
+              onClick={() => setDividiendo(true)}
+              disabled={!hayEnviado}
+              title={hayEnviado ? 'Dividir cuenta' : 'Dividir cuenta: primero envía algo'}
+              aria-label="Dividir cuenta"
+              className="w-14 h-14 rounded-xl bg-white border-2 border-violet-200 hover:border-violet-400 text-violet-700 flex items-center justify-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Split className="w-6 h-6" />
+            </button>
+          )}
         </div>
         <div className="text-right">
           <div className={`${pantallaCompleta ? 'text-3xl' : 'text-2xl'} font-bold`}>{esLlamada ? 'Pedido por teléfono' : (orden?.etiqueta ?? '…')}</div>
@@ -659,6 +693,21 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
               >
                 <ArrowLeft className="w-5 h-5 shrink-0" /> VOLVER
               </button>
+              {/* Mientras se elige un producto: comentario para cocina (lo que no está en el menú ni en las opciones) */}
+              {opcionesDe && (
+                <button
+                  type="button"
+                  onClick={() => setEditandoComentario(true)}
+                  disabled={!puedeEditar}
+                  title={comentario ? `Comentario: ${comentario}` : 'Agregar un comentario para cocina'}
+                  className={`min-h-12 min-w-0 px-4 rounded-xl border-2 font-black flex items-center gap-2 cursor-pointer disabled:opacity-40 ${
+                    comentario ? 'bg-sky-600 border-sky-700 text-white' : 'bg-white border-sky-300 text-sky-800 hover:bg-sky-50'
+                  }`}
+                >
+                  <MessageSquareText className="w-5 h-5 shrink-0" />
+                  {comentario ? <span className="truncate max-w-[14rem] font-semibold">{comentario}</span> : 'COMENTARIO'}
+                </button>
+              )}
               {/* Del lado opuesto: MIXTAS (piezas de cada sabor en un solo renglón) */}
               {opcionesDe && puedeMezclar && (
                 <button
@@ -844,12 +893,27 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
                         {!!l.carneExtra && (
                           <span className="block text-xs font-black tracking-wide text-red-700">{textoCarneExtra(l.carneExtra)}</span>
                         )}
+                        {l.nota && <span className="block text-xs font-semibold text-sky-800">Nota: {l.nota}</span>}
                         {sinDescritos(l).length > 0 && (
                           <span className="block text-xs font-normal text-rose-700">Sin {sinDescritos(l).map((c) => c.nombre.toLowerCase()).join(', ')}</span>
                         )}
                       </span>
-                      <span className="font-mono text-sm">{dinero(precioLinea(l) * l.cantidad)}</span>
+                      <span className="font-mono text-sm">{dinero(importeLinea(l))}</span>
                     </div>
+                    {l.reparto?.length ? (
+                      // MIXTAS: las piezas de cada sabor ya están contadas; se quita el renglón completo y se vuelve a armar.
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => cambiar(l.id, -l.cantidad)}
+                          disabled={!puedeEditar}
+                          aria-label="Quitar mixtas"
+                          className="w-10 h-10 rounded-lg border border-neutral-200 flex items-center justify-center cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4 text-rose-600" />
+                        </button>
+                        <span className="font-mono font-bold text-lg">{l.cantidad} pzas</span>
+                      </div>
+                    ) : (
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => cambiar(l.id, -1)}
@@ -869,6 +933,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
                         <Plus className="w-4 h-4" />
                       </button>
                     </div>
+                    )}
                   </div>
                     ))}
                     {/* Extras agregados con este MIX abierto: van dentro del plato (y en cocina salen debajo de él) */}
@@ -926,6 +991,16 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
       )}
 
       {/* LLAMADA terminada: nombre del cliente */}
+      {editandoComentario && puedeEditar && (
+        <DialogoComentario
+          inicial={comentario}
+          onGuardar={(texto) => {
+            setComentario(texto);
+            setEditandoComentario(false);
+          }}
+          onCancelar={() => setEditandoComentario(false)}
+        />
+      )}
       {agregandoExtra && puedeEditar && <DialogoAgregarExtra onCancelar={() => setAgregandoExtra(false)} onAgregar={(extra) => {
         if (!puedeEditar) return;
         // Con un MIX abierto, el extra queda dentro de ese MIX (en cocina sale justo debajo de él).
@@ -969,6 +1044,31 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
               >
                 <X className="w-5 h-5" /> Cerrar
               </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Dividir la cuenta (solo calcula cuánto le toca a cada persona) */}
+      <AnimatePresence>
+        {dividiendo && orden && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setDividiendo(false)}
+          >
+            <motion.div
+              role="dialog"
+              aria-label="Dividir cuenta"
+              className="w-full max-w-3xl max-h-full flex"
+              initial={{ scale: 0.95, y: 10 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <DividirCuenta etiqueta={orden.etiqueta} total={orden.total} detalle={detalle} extras={extrasEnviados} onCerrar={() => setDividiendo(false)} />
             </motion.div>
           </motion.div>
         )}

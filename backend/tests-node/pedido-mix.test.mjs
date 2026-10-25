@@ -117,18 +117,66 @@ test('MEZCLAR (Alitas): un solo renglón con las piezas de cada sabor', async ()
   ]) assert.equal(itemsValidos([{ ...item, reparto: malo }]), false);
 });
 
-test('complementos EXTRA: cada uno cobra $5 por pieza y queda guardado con su nombre', async () => {
+test('MIXTAS en cualquier categoría: cada pieza a su precio, con lo extra en todas y los complementos de todos los sabores', async () => {
+  const filas = [];
+  const conexion = { async execute(sql, v) { filas.push({ cantidad: v[2], opciones: JSON.parse(v[7]), subtotal: v[8] }); return [{ insertId: filas.length }]; } };
+  // Lonches: 2 Mixto ($70) + 3 Jamón ($50), con papas ($30) y EXTRA chile ($1) en cada pieza.
+  const reparto = [{ nombre: 'Mixto', cantidad: 2 }, { nombre: 'Jamón', cantidad: 3 }];
+  const item = { idProducto: 70, cantidad: 5, mezcla: ['Mixto', 'Jamón'], reparto, conPapas: true, sin: [4], complementosExtra: [5] };
+  assert.equal(itemsValidos([item]), true);
+  const complementos = new Map([[70, [{ id: 4, nombre: 'Cebolla' }]], [50, [{ id: 4, nombre: 'Cebolla' }, { id: 5, nombre: 'Chile' }]]]);
+  const sabores = new Map([[item, [{ id: 70, precio: 70 }, { id: 50, precio: 50 }]]]);
+  const papas = { idProducto: 77, nombre: 'Papas a la Francesa', tamano: 'Orden completa', precio: 30 };
+  await guardarDetallePedido(conexion, 1, [item], new Map([[70, { precio: '70.00' }]]), complementos, new Date(), papas, sabores);
+  assert.equal(filas[0].subtotal, '445.00'); // 2 × 70 + 3 × 50 + 5 × (30 + 1)
+  assert.deepEqual(filas[0].opciones.reparto, [{ nombre: 'Mixto', cantidad: 2, precio: 70 }, { nombre: 'Jamón', cantidad: 3, precio: 50 }]);
+  assert.deepEqual(filas[0].opciones.sin, [{ id: 4, nombre: 'Cebolla' }]);
+  assert.deepEqual(filas[0].opciones.complementosExtra, [{ id: 5, nombre: 'Chile' }], 'El EXTRA de otro sabor de la mezcla también cuenta');
+});
+
+test('complementos EXTRA: cada uno cobra $1 por pieza y queda guardado con su nombre', async () => {
   const filas = [];
   const conexion = { async execute(sql, v) { filas.push({ opciones: JSON.parse(v[7]), subtotal: v[8] }); return [{ insertId: filas.length }]; } };
   const complementos = new Map([[28, [{ id: 1, nombre: 'Crema' }, { id: 2, nombre: 'Queso' }, { id: 3, nombre: 'Salsa' }]]]);
   const item = { idProducto: 28, cantidad: 3, sin: [3], complementosExtra: [1, 2] };
   assert.equal(itemsValidos([item]), true);
   await guardarDetallePedido(conexion, 1, [item, { idProducto: 28, cantidad: 2 }], new Map([[28, { precio: '15.00' }]]), complementos, new Date());
-  assert.equal(filas[0].subtotal, '75.00'); // 3 × (15 + 2 × 5)
+  assert.equal(filas[0].subtotal, '51.00'); // 3 × (15 + 2 × 1)
   assert.deepEqual(filas[0].opciones.complementosExtra, [{ id: 1, nombre: 'Crema' }, { id: 2, nombre: 'Queso' }]);
   assert.deepEqual(filas[0].opciones.sin, [{ id: 3, nombre: 'Salsa' }]);
   assert.equal(filas[1].subtotal, '30.00');
   assert.equal(filas[1].opciones.complementosExtra, undefined);
   // Un complemento no puede ir quitado y EXTRA a la vez; IDs válidos y sin repetir.
   for (const malo of [[3], [1, 1], ['1'], [0], 'Crema']) assert.equal(itemsValidos([{ ...item, complementosExtra: malo }]), false);
+});
+
+test('comentario del platillo: se guarda limpio en el renglón y se rechaza vacío o muy largo', async () => {
+  const filas = [];
+  const conexion = { async execute(sql, v) { filas.push({ opciones: JSON.parse(v[7]) }); return [{ insertId: filas.length }]; } };
+  const item = { idProducto: 1, cantidad: 1, nota: '  bien   dorada, partida a la mitad ' };
+  assert.equal(itemsValidos([item]), true);
+  await guardarDetallePedido(conexion, 1, [item, { idProducto: 1, cantidad: 1 }], new Map([[1, { precio: '15.00' }]]), new Map(), new Date());
+  assert.equal(filas[0].opciones.nota, 'bien dorada, partida a la mitad');
+  assert.equal(filas[1].opciones.nota, undefined);
+  for (const mala of ['', '   ', 'x'.repeat(201), 5]) assert.equal(itemsValidos([{ ...item, nota: mala }]), false);
+});
+
+test('comanda: sin logo ni fecha, el número de orden arriba y chico, la mesa y PARA LLEVAR en grande', () => {
+  const ticket = {
+    orden_cocina: '#00012-2', mesa: 'Mesa 9', para_llevar: true, tablet: 'Tablet 01', enviada_en: '2026-10-24T02:00:00Z',
+    productos: [{ nombre: 'Tacos · Pollo', cantidad: 2, descripcion: ['CON TODO'] }],
+  };
+  const lineas = lineasTicketCocina(ticket);
+  assert.ok(!lineas.some((l) => l.imagen), 'Sin logo');
+  assert.equal(lineas[0].texto, 'Orden cocina #00012-2 · Tablet 01');
+  assert.ok(!lineas[0].grande && !lineas[0].escala, 'El número de orden va arriba, en letra normal');
+  assert.deepEqual(lineas[1], { texto: 'Mesa 9', grande: true, escala: 1.6 });
+  assert.deepEqual(lineas[2], { texto: 'PARA LLEVAR', grande: true, escala: 1.3 });
+  assert.deepEqual(lineas[3], { separador: true }, 'Sin fecha: después va la raya');
+  assert.ok(!lineas.some((l) => /\d{2}\/\d{2}\/\d{4}/.test(l.texto ?? '')), 'Sin fecha en ninguna línea');
+  // Comer aquí: no se escribe nada (ni PARA LLEVAR ni COMER AQUÍ); bebidas: el número en negritas.
+  const aqui = lineasTicketCocina({ ...ticket, para_llevar: false });
+  assert.deepEqual(aqui.slice(0, 3).map((l) => l.texto ?? '—'), ['Orden cocina #00012-2 · Tablet 01', 'Mesa 9', '—']);
+  assert.ok(!aqui.some((l) => /PARA LLEVAR|COMER AQU/i.test(l.texto ?? '')));
+  assert.equal(lineasTicketCocina({ ...ticket, para_llevar: false, area: 'bebidas' })[0].negrita, true);
 });
