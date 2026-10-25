@@ -101,7 +101,7 @@ test('ticket agrupa un solo plato sin perder modificadores y separa productos su
   const lineas = lineasTicketCocina(ticket).map((l) => l.texto).filter(Boolean);
   // El MIX solo agrupa: sin número ni leyenda; la cantidad va sin «x».
   const inicio = lineas.indexOf('MIX');
-  assert.deepEqual(lineas.slice(inicio, inicio + 6), ['MIX', '1 Taco', '  - CON QUESO', '  - Sin cebolla', '1 Sope', '  - Sin crema']);
+  assert.deepEqual(lineas.slice(inicio, inicio + 5), ['MIX', '1 Taco Q', '  - Sin cebolla', '1 Sope', '  - Sin crema']);
   assert.ok(lineas.indexOf('1 Suelto') > lineas.indexOf('1 Sope'));
   assert.equal(lineas.filter((l) => l === 'MIX').length, 2);
   assert.ok(!lineas.some((l) => /UN SOLO PLATO|^d+x /.test(l)));

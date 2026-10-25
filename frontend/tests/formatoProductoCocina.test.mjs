@@ -29,3 +29,13 @@ test('alitas mixtas conservan las cantidades por aderezo sin repetir el total ni
   assert.deepEqual(formato.renglones, [{ cantidad: 4, nombre: 'BBQ' }, { cantidad: 6, nombre: 'Buffalo' }]);
   assert.deepEqual(formato.descripcion, ['SIN CHILE']);
 });
+
+test('la Q va después del producto incluso en papas y alitas mixtas, sin repetir CON QUESO', () => {
+  const p = { categoria: 'Papas a la Francesa', nombre: 'Media orden de papas', cantidad: 1, con_queso: true, descripcion: ['CON QUESO', 'SIN CHILE'] };
+  assert.deepEqual(formatoProductoCocina(p), { renglones: [{ cantidad: 1, nombre: 'Media orden de papas Q' }], descripcion: ['SIN CHILE'] });
+  const alitas = { categoria: 'Alitas', nombre: 'Alitas · MIXTAS', cantidad: 10, con_queso: true,
+    reparto: [{ cantidad: 4, opcion: 'BBQ' }, { cantidad: 6, opcion: 'Buffalo' }], descripcion: ['4 BBQ', '6 Buffalo', 'CON QUESO'] };
+  assert.deepEqual(formatoProductoCocina(alitas), { renglones: [{ cantidad: 4, nombre: 'BBQ Q' }, { cantidad: 6, nombre: 'Buffalo Q' }], descripcion: [] });
+  assert.equal(formatoProductoCocina({ categoria: 'Tacos', nombre: 'T Bistec Q', cantidad: 2, con_queso: true, descripcion: [] }).renglones[0].nombre, 'T Bistec Q');
+  assert.equal(formatoProductoCocina({ categoria: 'Tacos', nombre: 'Tacos · Bistec', cantidad: 2, descripcion: ['CON QUESO'] }).renglones[0].nombre, 'T Bistec Q', 'Acepta comandas de dispositivos que aún no se han recargado');
+});

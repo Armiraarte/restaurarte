@@ -71,6 +71,7 @@ import { DividirCuenta } from './DividirCuenta';
 import { DialogoComentario } from './DialogoComentario';
 import { ListaExtras } from './ListaExtras';
 import { complementosTicket, complementosTicketQuesoOpcional, esQueso } from '../services/complementos';
+import { llevaQuesoComanda } from '../services/quesoComanda';
 
 interface LineaNueva {
   /** Cada vez que se agrega desde opciones es un plato aparte (3 y luego 5 = dos renglones). */
@@ -186,6 +187,10 @@ function ticketDe(orden: OrdenBD, lineas: LineaNueva[], ronda: number, origen: s
           : `${l.categoria} · ${nombreLinea(l)}`,
       categoria: l.categoria,
       cantidad: l.cantidad,
+      con_queso: llevaQuesoComanda({ nombre: nombreLinea(l), descripcion: [] }, {
+        ofrecidos: l.ofrecidos ?? l.producto.complementos, quitados: l.sin, sinQueso: l.sinQueso,
+        conQueso: l.conQueso, quesoOpcional: quesoOpcional(l), complementosExtra: l.complementosExtra,
+      }),
       mix_grupo: l.mixGrupo ?? null,
       opciones: [],
       ...(l.nota && { notas: l.nota }), // en la comanda: «NOTA: …» debajo del platillo

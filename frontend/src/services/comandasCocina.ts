@@ -1,6 +1,7 @@
 import type { CategoriaMenu, DetalleOrdenBD, ExtraOrdenBD, OrdenBD } from './pedidosService';
 import type { TicketCocina, ProductoTicketCocina } from '../types/ticketCocina';
 import { complementosTicket, complementosTicketQuesoOpcional } from './complementos.ts';
+import { llevaQuesoComanda } from './quesoComanda.ts';
 
 export interface OrdenCocina {
   id: number;
@@ -63,6 +64,10 @@ export function construirComandasCocina(orden: OrdenBD, detalle: DetalleOrdenBD[
       return {
         partida_id: String(d.idDetalle_Orden), producto_id: String(d.idProducto), nombre, categoria: original.categoria,
         cantidad: d.cantidad, mix_grupo: d.mix_grupo, opciones: [],
+        con_queso: llevaQuesoComanda({ nombre: [nombre, ...nombres].join(' '), descripcion: complementos }, {
+          ofrecidos, quitados: sin, sinQueso: d.sin_queso, conQueso: d.con_queso,
+          quesoOpcional: original.categoria === 'Tacos', complementosExtra: opciones?.complementosExtra,
+        }),
         ...(opciones?.reparto?.length && { reparto: opciones.reparto.map((r) => ({ opcion: r.nombre, cantidad: r.cantidad })) }),
         ...(opciones?.nota && { notas: opciones.nota }),
         descripcion: [

@@ -21,6 +21,7 @@ export interface ProductoTicketCocina {
   nombre: string; // BD: partidas.nombre (copia histórica: "Taco Dorado (Frijol)", "3 Burritas")
   categoria: string; // BD: productos.categoria_id → categorias.nombre
   cantidad: number; // BD: partidas.cantidad
+  con_queso?: boolean; // queso incluido o agregado: la comanda lo abrevia como Q después del producto
   mix_grupo?: number | null;
   opciones: OpcionTicket[]; // producto normal
   piezas?: { pieza: string; opciones: OpcionTicket[] }[]; // paquete (Burritas): una entrada por pieza

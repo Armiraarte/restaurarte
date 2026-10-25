@@ -3,6 +3,7 @@ interface ProductoCocina {
   nombre: string;
   categoria?: string;
   cantidad: number;
+  con_queso?: boolean;
   descripcion: string[];
   reparto?: { opcion: string; cantidad: number }[];
 }
@@ -15,6 +16,8 @@ const ABREVIATURAS: Record<string, string> = {
 
 export function formatoProductoCocina(p: ProductoCocina) {
   const categoria = normal(p.categoria ?? '');
+  const conQueso = p.con_queso ?? p.descripcion.some((d) => normal(d) === 'con queso');
+  const marcarQueso = (nombre: string) => conQueso && !/\sQ$/i.test(nombre) ? `${nombre} Q` : nombre;
   let nombre = p.nombre.trim();
   const prefijo = p.categoria?.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   if (prefijo) nombre = nombre.replace(new RegExp(`^${prefijo}\\s*[·:–—-]\\s*`, 'i'), '');
@@ -26,9 +29,9 @@ export function formatoProductoCocina(p: ProductoCocina) {
   }
   const alitasMixtas = categoria === 'alitas' && !!p.reparto?.length;
   const renglones = alitasMixtas
-    ? p.reparto!.map((r) => ({ cantidad: r.cantidad, nombre: r.opcion }))
-    : [{ cantidad: p.cantidad, nombre }];
+    ? p.reparto!.map((r) => ({ cantidad: r.cantidad, nombre: marcarQueso(r.opcion) }))
+    : [{ cantidad: p.cantidad, nombre: marcarQueso(nombre) }];
   const sabores = new Set((p.reparto ?? []).map((r) => normal(`${r.cantidad} ${r.opcion}`)));
-  const descripcion = p.descripcion.filter((d) => normal(d) !== 'con todo' && (!alitasMixtas || !sabores.has(normal(d))));
+  const descripcion = p.descripcion.filter((d) => !['con todo', 'con queso'].includes(normal(d)) && (!alitasMixtas || !sabores.has(normal(d))));
   return { renglones, descripcion };
 }
