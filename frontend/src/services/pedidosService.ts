@@ -39,6 +39,7 @@ export interface CategoriaMenu {
 
 export interface OrdenBD {
   idOrden: number;
+  origen?: 'mesa' | 'llamada' | 'nombre';
   codigo: string;
   nombre: string;
   etiqueta: string; // "Mesa 5" o el nombre del cliente
@@ -78,7 +79,8 @@ export interface DetalleOrdenBD {
   mix_grupo: number | null;
   termino_id: number | null;
   termino: string | null;
-  opciones: { sin: ComplementoMenu[]; mezcla: string[]; reparto?: RepartoPedido[]; papas?: PapasMenu; complementosExtra?: ComplementoMenu[]; nota?: string } | null;
+  opciones: { sin: ComplementoMenu[]; mezcla: string[]; reparto?: RepartoPedido[]; papas?: PapasMenu; complementosExtra?: ComplementoMenu[]; nota?: string;
+    comanda?: { origen: string; tipoPedido?: 'mesa' | 'llamada' | 'nombre'; producto: { nombre: string; tamano: string | null; categoria: string }; ofrecidos: ComplementoMenu[] } } | null;
   subtotal: number;
   creado_en: string;
 }
@@ -138,8 +140,9 @@ export const enviarPedido = (
   idOrden: number,
   items: { idProducto: number; cantidad: number; sin?: number[]; mezcla?: string[]; reparto?: RepartoPedido[]; complementosExtra?: number[]; nota?: string; sinQueso?: boolean; conQueso?: boolean; carneExtra?: number; mixGrupo?: number | null; terminoId?: number | null; conPapas?: boolean }[],
   extras: ExtraPedido[] = [],
+  origenPedido?: 'mesa' | 'llamada' | 'nombre',
 ) =>
-  pedir<{ orden: OrdenBD; detalle: DetalleOrdenBD[]; extras: ExtraOrdenBD[]; extrasGuardados: ExtraOrdenBD[]; guardados: { idDetalle_Orden: number; mix_grupo: number | null }[] }>(`/ordenes/${idOrden}/pedido`, { method: 'POST', body: JSON.stringify({ items, extras }) });
+  pedir<{ orden: OrdenBD; detalle: DetalleOrdenBD[]; extras: ExtraOrdenBD[]; extrasGuardados: ExtraOrdenBD[]; guardados: { idDetalle_Orden: number; mix_grupo: number | null }[] }>(`/ordenes/${idOrden}/pedido`, { method: 'POST', body: JSON.stringify({ items, extras, ...(origenPedido && { origenPedido }) }) });
 
 /** Pide la cuenta: la orden pasa a PAGANDO (estatus 1) y la caja hace el cobro. */
 export const pedirCuenta = (idOrden: number) =>

@@ -29,7 +29,7 @@ class Orden extends Model
 
     protected $keyType = 'int';
 
-    protected $fillable = ['codigo', 'nombre', 'total', 'tipo_orden', 'estatus', 'idTurno', 'idSesion_tablet'];
+    protected $fillable = ['codigo', 'nombre', 'origen', 'total', 'tipo_orden', 'estatus', 'idTurno', 'idSesion_tablet'];
 
     protected $attributes = [
         'tipo_orden' => TipoVenta::COMER_AQUI,

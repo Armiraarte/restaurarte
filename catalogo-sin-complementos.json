@@ -1,0 +1,432 @@
+{
+  "categorias": [
+    {
+      "nombre": "Tacos Dorados",
+      "productos": [
+        {
+          "nombre": "Papa",
+          "precio": 10
+        },
+        {
+          "nombre": "Frijol",
+          "precio": 10
+        },
+        {
+          "nombre": "Jamón",
+          "precio": 10
+        },
+        {
+          "nombre": "Salchicha",
+          "precio": 10
+        }
+      ]
+    },
+    {
+      "nombre": "Tacos",
+      "productos": [
+        {
+          "nombre": "Barbacoa",
+          "precio": 18
+        },
+        {
+          "nombre": "Chicharrón",
+          "precio": 18
+        },
+        {
+          "nombre": "Pollo",
+          "precio": 18
+        }
+      ]
+    },
+    {
+      "nombre": "Quesadillas",
+      "productos": [
+        {
+          "nombre": "Papa",
+          "precio": 15
+        },
+        {
+          "nombre": "Frijol",
+          "precio": 15
+        },
+        {
+          "nombre": "Picadillo",
+          "precio": 15
+        },
+        {
+          "nombre": "Pollo",
+          "precio": 15
+        },
+        {
+          "nombre": "Queso",
+          "precio": 15
+        },
+        {
+          "nombre": "Jamón",
+          "precio": 15
+        },
+        {
+          "nombre": "Chicharrón",
+          "precio": 15
+        },
+        {
+          "nombre": "Jalapeño",
+          "precio": 15
+        }
+      ]
+    },
+    {
+      "nombre": "Sopes",
+      "productos": [
+        {
+          "nombre": "Papa",
+          "precio": 15
+        },
+        {
+          "nombre": "Frijol",
+          "precio": 15
+        },
+        {
+          "nombre": "Picadillo",
+          "precio": 15
+        },
+        {
+          "nombre": "Pollo",
+          "precio": 15
+        },
+        {
+          "nombre": "Chicharrón",
+          "precio": 15
+        },
+        {
+          "nombre": "Queso",
+          "precio": 15
+        }
+      ]
+    },
+    {
+      "nombre": "Enchiladas",
+      "productos": [
+        {
+          "nombre": "Papa",
+          "precio": 15
+        },
+        {
+          "nombre": "Frijol",
+          "precio": 15
+        },
+        {
+          "nombre": "Picadillo",
+          "precio": 15
+        },
+        {
+          "nombre": "Pollo",
+          "precio": 15
+        },
+        {
+          "nombre": "Queso/Cebolla",
+          "precio": 15
+        },
+        {
+          "nombre": "Queso",
+          "precio": 15
+        }
+      ]
+    },
+    {
+      "nombre": "Tostadas",
+      "productos": [
+        {
+          "nombre": "Frijol",
+          "precio": 15
+        },
+        {
+          "nombre": "Jamón",
+          "precio": 15
+        },
+        {
+          "nombre": "Pierna",
+          "precio": 15
+        },
+        {
+          "nombre": "Pollo",
+          "precio": 15
+        },
+        {
+          "nombre": "Mixta",
+          "precio": 15
+        },
+        {
+          "nombre": "Cuerito",
+          "precio": 15
+        }
+      ]
+    },
+    {
+      "nombre": "Burritas",
+      "productos": [
+        {
+          "nombre": "Pierna",
+          "precio": 20
+        },
+        {
+          "nombre": "Chicharrón",
+          "precio": 20
+        },
+        {
+          "nombre": "Milanesa",
+          "precio": 20
+        }
+      ]
+    },
+    {
+      "nombre": "Lonches",
+      "productos": [
+        {
+          "nombre": "Pierna",
+          "precio": 50
+        },
+        {
+          "nombre": "Milanesa",
+          "precio": 50
+        },
+        {
+          "nombre": "Jamón",
+          "precio": 50
+        },
+        {
+          "nombre": "Barbacoa",
+          "precio": 50
+        },
+        {
+          "nombre": "Pollo",
+          "precio": 50
+        },
+        {
+          "nombre": "Mixto",
+          "precio": 70
+        }
+      ]
+    },
+    {
+      "nombre": "Hamburguesas",
+      "productos": [
+        {
+          "nombre": "Pollo a la plancha",
+          "precio": 50
+        },
+        {
+          "nombre": "Res",
+          "precio": 50
+        },
+        {
+          "nombre": "Milanesa",
+          "precio": 50
+        },
+        {
+          "nombre": "Pollo",
+          "precio": 50
+        },
+        {
+          "nombre": "Pierna",
+          "precio": 50
+        }
+      ]
+    },
+    {
+      "nombre": "Ensaladas",
+      "productos": [
+        {
+          "nombre": "Milanesa",
+          "tamano": "Chica",
+          "precio": 40
+        },
+        {
+          "nombre": "Milanesa",
+          "tamano": "Grande",
+          "precio": 70
+        },
+        {
+          "nombre": "Pollo a la plancha",
+          "tamano": "Chica",
+          "precio": 40
+        },
+        {
+          "nombre": "Pollo a la plancha",
+          "tamano": "Grande",
+          "precio": 70
+        },
+        {
+          "nombre": "Sin carne",
+          "tamano": "Chica",
+          "precio": 40
+        },
+        {
+          "nombre": "Sin carne",
+          "tamano": "Grande",
+          "precio": 70
+        },
+        {
+          "nombre": "Pierna",
+          "tamano": "Chica",
+          "precio": 40
+        },
+        {
+          "nombre": "Pierna",
+          "tamano": "Grande",
+          "precio": 70
+        }
+      ]
+    },
+    {
+      "nombre": "Papas a la Francesa",
+      "productos": [
+        {
+          "nombre": "Papas a la Francesa",
+          "tamano": "Media orden",
+          "precio": 15
+        },
+        {
+          "nombre": "Papas a la Francesa",
+          "tamano": "Orden completa",
+          "precio": 30
+        }
+      ]
+    },
+    {
+      "nombre": "Alitas",
+      "productos": [
+        {
+          "nombre": "Mango Habanero",
+          "precio": 13
+        },
+        {
+          "nombre": "Buffalo",
+          "precio": 13
+        },
+        {
+          "nombre": "BBQ",
+          "precio": 13
+        }
+      ]
+    },
+    {
+      "nombre": "Salchichas",
+      "productos": [
+        {
+          "nombre": "Entera",
+          "precio": 10
+        },
+        {
+          "nombre": "Picada",
+          "precio": 10
+        }
+      ]
+    },
+    {
+      "nombre": "Bebidas",
+      "productos": [
+        {
+          "nombre": "7UP",
+          "precio": 20
+        },
+        {
+          "nombre": "Agua de Lima",
+          "tamano": "Chica",
+          "precio": 15
+        },
+        {
+          "nombre": "Agua de Lima",
+          "tamano": "Mediana",
+          "precio": 20
+        },
+        {
+          "nombre": "Agua de Lima",
+          "tamano": "Grande",
+          "precio": 40
+        },
+        {
+          "nombre": "Agua Mineral",
+          "precio": 30
+        },
+        {
+          "nombre": "Agua Natural",
+          "precio": 20
+        },
+        {
+          "nombre": "Coca 1/2",
+          "precio": 25
+        },
+        {
+          "nombre": "Coca Light",
+          "precio": 30
+        },
+        {
+          "nombre": "Coca Zero",
+          "precio": 30
+        },
+        {
+          "nombre": "Coca-Cola",
+          "precio": 30
+        },
+        {
+          "nombre": "Jumex Durazno",
+          "precio": 30
+        },
+        {
+          "nombre": "Jumex Manzana",
+          "precio": 30
+        },
+        {
+          "nombre": "Limita",
+          "precio": 60
+        },
+        {
+          "nombre": "Manzanita",
+          "precio": 20
+        },
+        {
+          "nombre": "Mirinda",
+          "precio": 20
+        },
+        {
+          "nombre": "Pepsi",
+          "precio": 20
+        },
+        {
+          "nombre": "Sangría",
+          "precio": 20
+        },
+        {
+          "nombre": "Cerveza",
+          "precio": 30
+        },
+        {
+          "nombre": "Coquita 235",
+          "precio": 20
+        },
+        {
+          "nombre": "Café",
+          "precio": 25
+        }
+      ]
+    },
+    {
+      "nombre": "Carnes",
+      "productos": [
+        {
+          "nombre": "Milanesa",
+          "precio": 40
+        },
+        {
+          "nombre": "Pollo a la plancha",
+          "precio": 40
+        },
+        {
+          "nombre": "Carne de res",
+          "precio": 20
+        }
+      ]
+    }
+  ]
+}

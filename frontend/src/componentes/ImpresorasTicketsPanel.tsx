@@ -9,8 +9,9 @@ import {
   obtenerEstadoImpresion,
   sincronizarImpresoras,
 } from '../services/impresionService';
+import { conservarEstadoImpresion } from '../services/estadoImpresoras';
 
-const INTERVALO_REVISION_MS = 30_000;
+const INTERVALO_REVISION_MS = 5_000;
 
 type Aviso = { tipo: 'ok' | 'error'; texto: string } | null;
 const DESTINOS = [
@@ -24,27 +25,30 @@ export const ImpresorasTicketsPanel: React.FC = () => {
   const [imprimiendo, setImprimiendo] = useState<DestinoImpresion | null>(null);
   const [guardando, setGuardando] = useState<{ destino: DestinoImpresion; impresora: string } | null>(null);
   const guardandoRef = useRef(false);
+  const revisandoRef = useRef(false);
   const revision = useRef(0);
   const [aviso, setAviso] = useState<Aviso>(null);
   const [ultimaRevision, setUltimaRevision] = useState<string | null>(null);
   const [verInstalador, setVerInstalador] = useState(false);
 
-  // Cada 30 s solo se consulta el estado; el botón azul además sincroniza (la computadora de las impresoras las
+  // Cada 5 s se consulta el estado sin solapar peticiones; el botón azul además sincroniza cuando hay conexión.
   // vuelve a buscar y reinicia limpia su impresión).
   const revisar = useCallback(async (sincronizar = false) => {
-    if (guardandoRef.current) return;
+    if (guardandoRef.current || revisandoRef.current) return;
+    revisandoRef.current = true;
     const actual = ++revision.current;
     setRevisando(true);
     if (sincronizar) setAviso(null);
     try {
       const nuevo = await (sincronizar ? sincronizarImpresoras() : obtenerEstadoImpresion());
       if (actual === revision.current) {
-        setEstado(nuevo);
+        setEstado((anterior) => conservarEstadoImpresion(anterior, nuevo));
         if (sincronizar && nuevo.agente) setAviso({ tipo: 'ok', texto: 'Impresoras sincronizadas: se volvieron a buscar y la impresión se reinició.' });
       }
     } catch (err) {
-      if (actual === revision.current) setEstado({ agente: false, error: (err as Error).message });
+      if (actual === revision.current) setEstado((anterior) => conservarEstadoImpresion(anterior, { agente: false, error: (err as Error).message }));
     } finally {
+      revisandoRef.current = false;
       if (actual === revision.current) {
         setRevisando(false);
         setUltimaRevision(new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
@@ -101,8 +105,8 @@ export const ImpresorasTicketsPanel: React.FC = () => {
   // Sin agente, sin impresoras de tickets o con una asignada que no está: se ofrece el instalador.
   const faltanImpresoras =
     !!estado &&
-    (!estado.agente ||
-      impresoras.length === 0 ||
+    estado.agente &&
+    (impresoras.length === 0 ||
       DESTINOS.some(({ id }) => !nombres[id] || !(estado.destinos?.[id] ?? estado.impresoras?.find((i) => i.nombre === nombres[id]))?.conectada));
 
   return (
@@ -144,10 +148,10 @@ export const ImpresorasTicketsPanel: React.FC = () => {
             </button>
           )}
           <button
-            onClick={() => revisar(true)}
+            onClick={() => revisar(!!estado?.agente)}
             disabled={revisando || !!guardando}
-            aria-label="Sincronizar impresoras"
-            title="Sincronizar impresoras: volver a buscarlas y reiniciar la impresión"
+            aria-label={estado?.agente ? 'Sincronizar impresoras' : 'Revisar conexión de impresoras'}
+            title={estado?.agente ? 'Sincronizar impresoras: volver a buscarlas y reiniciar la impresión' : 'Revisar si la computadora de las impresoras ya se conectó'}
             className="w-8 h-8 text-sky-800 bg-sky-50 border border-sky-200 rounded-lg hover:bg-sky-100 disabled:opacity-50 transition-colors cursor-pointer flex items-center justify-center"
           >
             <RefreshCw className={`w-4 h-4 ${revisando ? 'animate-spin' : ''}`} />
@@ -155,7 +159,7 @@ export const ImpresorasTicketsPanel: React.FC = () => {
         </div>
       </div>
 
-      {estado?.agente && (
+      {(estado?.agente || estado?.asignaciones) && (
         <div className="space-y-2">
           <p className="text-xs text-neutral-600">Los pedidos se imprimen en cocina; los cobros y cortes, en caja.</p>
           <p className="text-xs text-neutral-500">Cada impresora puede asignarse a una sola función. Al cambiarla, se desmarca la anterior.</p>
@@ -167,12 +171,12 @@ export const ImpresorasTicketsPanel: React.FC = () => {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 text-sm font-semibold text-neutral-900"><Icono className="w-4 h-4" /> {nombre}</div>
                     <div className="mt-1 text-xs text-neutral-600 break-words">{nombres[id] ?? 'Sin asignar'}</div>
-                    {nombres[id] && !seleccionada?.conectada && <div className="mt-1 text-xs text-rose-700">Impresora no disponible</div>}
+                    {!estado?.agente ? <div className="mt-1 text-xs text-amber-800">Asignación conservada · esperando conexión</div> : nombres[id] && !seleccionada?.conectada && <div className="mt-1 text-xs text-rose-700">Impresora no disponible</div>}
                   </div>
                   <button
                     type="button"
                     onClick={() => handlePrueba(id)}
-                    disabled={!!imprimiendo || !!guardando || !seleccionada?.conectada}
+                    disabled={!estado?.agente || !!imprimiendo || !!guardando || !seleccionada?.conectada}
                     className="flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   >
                     {imprimiendo === id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Printer className="w-3.5 h-3.5" />}
@@ -185,7 +189,7 @@ export const ImpresorasTicketsPanel: React.FC = () => {
         </div>
       )}
 
-      {(!faltanImpresoras || verInstalador) && <InstalarImpresoras destacado={faltanImpresoras} />}
+      {estado?.agente && (!faltanImpresoras || verInstalador) && <InstalarImpresoras destacado={faltanImpresoras} />}
 
       {aviso && (
         <div

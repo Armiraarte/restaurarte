@@ -13,6 +13,7 @@ export interface EstadoImpresion {
   agente: boolean;
   /** Computadora que imprime cuando está conectada por internet (la del instalador). */
   equipo?: string | null;
+  configuracionConservada?: boolean;
   impresoras?: Impresora[];
   ticket?: Impresora | null;
   asignaciones?: Record<DestinoImpresion, string | null>;
@@ -33,7 +34,11 @@ async function pedir(ruta: string, init?: RequestInit) {
     throw new Error('No se pudo conectar con el servidor.');
   }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'Error de impresión.');
+  if (!res.ok) {
+    // El servidor puede conservar las asignaciones aunque la PC no responda a esta consulta.
+    if (ruta === '/estado' && data.agente === false && data.asignaciones) return data;
+    throw new Error(data.error || 'Error de impresión.');
+  }
   return data;
 }
 

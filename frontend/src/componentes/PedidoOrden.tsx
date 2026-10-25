@@ -190,7 +190,7 @@ function ticketDe(orden: OrdenBD, lineas: LineaNueva[], ronda: number, origen: s
       opciones: [],
       ...(l.nota && { notas: l.nota }), // en la comanda: «NOTA: …» debajo del platillo
       ...(l.reparto?.length && { reparto: l.reparto.map((r) => ({ opcion: r.nombre, cantidad: r.cantidad })) }),
-      // Complementos en los menos renglones posibles: CON TODO, SIN NADA, SOLO CON … o lo que no quiere (ver complementosTicket).
+      // Solo lo que se quita, en una lista SIN separada por comas; con todo no ocupa un renglón.
       descripcion: [
         ...(l.reparto ?? []).map((r) => `${r.cantidad} ${r.nombre}`),
         ...(l.termino ? [l.termino.nombre.toUpperCase()] : []), // solo el término: «DORADO»
@@ -328,7 +328,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
   useEnVivo(['ordenes'], refrescar);
   useCadaTantoVisible(refrescar, 5_000);
 
-  // Productos que se terminaron (apartado Agotados de la caja): en gris, sin poder comandarse; llegan en vivo.
+  // Productos que se terminaron: en rojo, sin poder comandarse; llegan en vivo.
   const { ids: agotados, recargar: recargarAgotados } = useAgotados();
   /** El renglón trae algo que se terminó después de agregarlo (el producto, o un sabor de su mezcla o MIXTAS). */
   const lineaAgotada = (l: LineaNueva) => {
@@ -438,6 +438,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
           ...(l.carneExtra && { carneExtra: l.carneExtra }),
         })),
         extrasDelBorrador.map(({ descripcion, importe }) => ({ descripcion, importe })),
+        esLlamada ? 'llamada' : orden?.origen,
       );
       actualizarOrden(datos);
       setNuevo([]);
@@ -499,7 +500,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
    * Si el envío falla, el pedido queda guardado en la orden nueva para volver a tocar Enviar ahí.
    */
   const terminarLlamada = async (nombre: string, paraLlevar: boolean) => {
-    const { mesa } = await registrarMesa(nombre.trim(), paraLlevar);
+    const { mesa } = await registrarMesa(nombre.trim(), paraLlevar, 'llamada');
     guardarBorrador(mesa.id, nuevo, mixActivo, extrasNuevos);
     guardarBorrador(BORRADOR_LLAMADA, []);
     setNombrando(false);
@@ -810,17 +811,13 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
                       disabled={!puedeEditar || sinExistencia}
                       aria-label={sinExistencia ? `${nombreProducto(p)}: agotado` : undefined}
                       className={`relative rounded-2xl border-2 p-3 flex flex-col items-center justify-center gap-1 text-center cursor-pointer disabled:cursor-not-allowed ${
-                        pantallaCompleta ? 'neon neon-cian' : 'border-orange-200 bg-orange-50/40 hover:bg-orange-50'
-                      } ${sinExistencia ? 'opacity-40 grayscale' : ''}`}
+                        sinExistencia ? 'bg-red-100 border-red-500 text-red-900' : pantallaCompleta ? 'neon neon-cian' : 'border-orange-200 bg-orange-50/40 hover:bg-orange-50'
+                      }`}
                     >
                       {logo && <img src={logo} alt="" width={40} height={40} decoding="async" draggable={false} className="w-10 h-10 shrink-0 object-contain" />}
                       <span className="text-xl font-bold leading-tight">{p.nombre}</span>
                       {p.tamano && <span className="text-sm font-semibold text-orange-800">{p.tamano}</span>}
-                      {sinExistencia ? (
-                        <span className="text-xs font-black tracking-wide text-rose-600">AGOTADO</span>
-                      ) : (
-                        <span className="font-mono text-sm text-neutral-600">{dinero(p.precio)}</span>
-                      )}
+                      {!sinExistencia && <span className="font-mono text-sm text-neutral-600">{dinero(p.precio)}</span>}
                       {p.complementos.length > 0 && (
                         <span className="text-[11px] text-neutral-500 leading-tight">{p.complementos.map((c) => c.nombre).join(' · ')}</span>
                       )}
@@ -842,7 +839,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
                   const Icono = iconoCategoria(c.nombre);
                   const foto = fotoCategoria(c.nombre);
                   const enPedido = nuevo.filter((l) => l.categoria === c.nombre).reduce((acc, l) => acc + l.cantidad, 0);
-                  // Se terminó todo lo de la categoría: en gris y sin abrirse.
+                  // Se terminó todo lo de la categoría: en rojo y sin abrirse.
                   const todoAgotado = c.productos.every((p) => agotados.has(p.id));
                   return (
                     <button
@@ -851,8 +848,8 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
                       disabled={!puedeEditar || todoAgotado}
                       aria-label={todoAgotado ? `${c.nombre}: agotado` : undefined}
                       className={`relative rounded-2xl border-2 p-2 flex flex-col items-center justify-center gap-2 text-center cursor-pointer disabled:cursor-not-allowed ${
-                        pantallaCompleta ? NEON_CATEGORIA[i % NEON_CATEGORIA.length] : COLORES_CATEGORIA[i % COLORES_CATEGORIA.length].normal
-                      } ${todoAgotado ? 'opacity-40 grayscale' : ''}`}
+                        todoAgotado ? 'bg-red-100 border-red-500 text-red-900' : pantallaCompleta ? NEON_CATEGORIA[i % NEON_CATEGORIA.length] : COLORES_CATEGORIA[i % COLORES_CATEGORIA.length].normal
+                      }`}
                     >
                       {foto ? (
                         <img src={foto} alt="" width={96} height={64} decoding="async" draggable={false} className="w-24 h-16 shrink-0 object-contain" />
@@ -860,7 +857,6 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
                         <Icono className="w-12 h-12 shrink-0" />
                       )}
                       <span className="text-lg font-bold leading-tight">{c.nombre}</span>
-                      {todoAgotado && <span className="text-xs font-black tracking-wide text-rose-600">AGOTADO</span>}
                       {enPedido > 0 && (
                         <span className="absolute top-2 right-2 min-w-6 h-6 px-1.5 rounded-full bg-orange-500 text-white text-xs font-bold flex items-center justify-center">
                           {enPedido}
@@ -908,14 +904,11 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
                   <div key={grupo.grupo === null ? `suelto-${indice}` : `mix-${grupo.grupo}`} className={grupo.grupo !== null ? 'rounded-xl border-2 border-violet-200 bg-violet-50/50 p-2 space-y-2' : ''}>
                     {grupo.grupo !== null && <div className="text-xs font-black tracking-wide text-violet-800">MIX</div>}
                     {grupo.lineas.map((l) => (
-                  <div key={l.id} className="border-b border-neutral-100 pb-2 last:border-0 space-y-1.5">
+                  <div key={l.id} className={`border-b pb-2 last:border-0 space-y-1.5 ${lineaAgotada(l) ? 'bg-red-100 border-red-500 text-red-900 rounded-lg p-2' : 'border-neutral-100'}`}>
                     <div className="flex items-start justify-between gap-2">
                       <span className="font-medium leading-tight">
                         {nombreLinea(l)}
                         <span className="block text-xs font-normal text-neutral-500">{l.categoria}</span>
-                        {lineaAgotada(l) && (
-                          <span className="block text-xs font-black tracking-wide text-rose-600">SE TERMINÓ · quítalo del pedido</span>
-                        )}
                         {l.termino && <span className="block text-xs font-semibold text-orange-800">Término: {l.termino.nombre}</span>}
                         {l.sinQueso && <span className="block text-xs font-black tracking-wide text-violet-700">SIN QUESO</span>}
                         {l.conQueso && <span className="block text-xs font-black tracking-wide text-amber-700">CON QUESO</span>}

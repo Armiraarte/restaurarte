@@ -464,6 +464,25 @@ Para actualizar una instalación existente después del respaldo:
 .\artisan.ps1 db:seed --class=QuesoComplementoSeeder --force
 ```
 
+### Origen de pedidos en Cocina: mesas, llamadas y nombres
+
+`2026_10_24_000029_agregar_origen_a_orden.php` agrega `orden.origen` para distinguir
+`mesa`, `llamada` y `nombre`, independientemente de comer aquí o para llevar.
+Al publicar, ejecutar la migración después del respaldo y antes de reiniciar la API:
+
+```powershell
+.\artisan.ps1 migrate --force --path=database/migrations/2026_10_24_000029_agregar_origen_a_orden.php
+```
+
+La migración conserva órdenes y ventas. Los nombres antiguos sin un origen registrado
+quedan en Nombres; una llamada no puede inferirse solo por ser para llevar. Las nuevas
+llamadas guardan su origen al registrarse y también en la copia de la comanda.
+Con la columna disponible, una llamada y un pedido por nombre del mismo cliente no
+reutilizan la misma orden activa. La lectura anterior sigue disponible mientras se prepara la migración.
+
+El formato de las categorías de cocina se comparte entre el papel y su vista previa
+mediante `src/formatoProductoCocina.ts`; abreviar no modifica el catálogo ni los precios.
+
 `001_initial.sql` se conserva como referencia histórica del esquema PostgreSQL.
 Laravel no lo ejecuta. Las tablas MySQL se construyen con las clases en
 `migrations/` y sus datos con las clases en `seeders/`.

@@ -97,6 +97,8 @@ export async function guardarDetallePedido(
   ahora: Date,
   papas: PapasPedido | null = null,
   productosReparto: ProductosReparto = new Map(),
+  origen?: string,
+  tipoPedido?: 'mesa' | 'llamada' | 'nombre',
 ): Promise<{ idDetalle_Orden: number; mix_grupo: number | null }[]> {
   const grupos = new Map<number, number>();
   let ultimo = 0;
@@ -127,6 +129,8 @@ export async function guardarDetallePedido(
       (item.conPapas ? Math.round(papas!.precio * 100) : 0);
     const subtotal = (base + porPieza * item.cantidad) / 100;
     const opciones = {
+      // Copia para reimprimir con el nombre y complementos que tenía al enviarse.
+      ...(origen && { comanda: { origen, ...(tipoPedido && { tipoPedido }), producto: { nombre: p.nombre, tamano: p.tamano, categoria: p.categoria }, ofrecidos } }),
       sin: ofrecidos.filter((c) => item.sin?.includes(c.id)),
       mezcla: item.mezcla ?? [],
       ...(item.reparto && {

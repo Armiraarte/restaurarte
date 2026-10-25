@@ -16,6 +16,7 @@ import { esDuplicado, pool } from './db.js';
 import { mysqlDisponible } from './usuarios.js';
 import { sesionTabletAbierta, turnoAbierto } from './turnos.js';
 import { asignarNombreMesa, cambiarMesaOrden, ErrorAltaMesa, validarNumeroMesa } from './numeracionMesas.js';
+import { esOrigenOrden, origenOrden, tieneOrigenOrden } from './origenOrden.js';
 
 const TIPO_VENTA = { comerAqui: 1, paraLlevar: 2 } as const;
 
@@ -59,7 +60,7 @@ async function siguienteCodigoPrueba(conexion: PoolConnection): Promise<string> 
 }
 
 const COLUMNAS =
-  'idOrden AS id, codigo, nombre, total, tipo_orden AS tipo_venta_id, estatus, idTurno AS turno_id, idSesion_tablet AS sesion_tablet_id, creado_en, actualizado_en';
+  '*, idOrden AS id, tipo_orden AS tipo_venta_id, idTurno AS turno_id, idSesion_tablet AS sesion_tablet_id';
 
 function soloRoles(...roles: string[]) {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -123,6 +124,11 @@ mesasRouter.post('/', async (req, res) => {
     return;
   }
   const tipoVentaId = req.body?.tipo_venta_id ?? (req.body?.paraLlevar === true ? TIPO_VENTA.paraLlevar : TIPO_VENTA.comerAqui);
+  if (req.body?.origen !== undefined && !esOrigenOrden(req.body.origen)) {
+    res.status(400).json({ error: 'El origen debe ser mesa, llamada o nombre.' });
+    return;
+  }
+  const origen = origenOrden(nombre, req.body?.origen);
   if (!Number.isSafeInteger(tipoVentaId) || tipoVentaId < 1) {
     res.status(400).json({ error: 'El tipo de venta debe ser un ID válido del catálogo.' });
     return;
@@ -139,6 +145,7 @@ mesasRouter.post('/', async (req, res) => {
     await conexion.beginTransaction();
     const ahora = new Date();
     const nombreAsignado = await asignarNombreMesa(conexion, turno.idTurno, nombre);
+    const guardaOrigen = await tieneOrigenOrden(conexion);
     const tabletId = req.usuario!.tablet?.id;
     const sesionId = tabletId ? ((await sesionTabletAbierta(tabletId, turno.idTurno, conexion))?.id ?? null) : null;
     // Mesa de prueba (solo PC de desarrollo): sus órdenes van fuera del turno, así producción no las ve.
@@ -148,8 +155,8 @@ mesasRouter.post('/', async (req, res) => {
     const [activas] = await conexion.query<MesaFila[]>(
       esPrueba
         ? 'SELECT idOrden AS id FROM orden WHERE idTurno IS NULL AND nombre = ? AND estatus IN (0, 1) FOR UPDATE'
-        : 'SELECT idOrden AS id FROM orden WHERE idTurno = ? AND nombre = ? AND estatus IN (0, 1) FOR UPDATE',
-      esPrueba ? [nombreAsignado] : [turno.idTurno, nombreAsignado],
+        : `SELECT idOrden AS id FROM orden WHERE idTurno = ? AND nombre = ? AND estatus IN (0, 1)${guardaOrigen && origen !== 'mesa' ? ' AND COALESCE(origen, \'nombre\') = ?' : ''} FOR UPDATE`,
+      esPrueba ? [nombreAsignado] : [turno.idTurno, nombreAsignado, ...(guardaOrigen && origen !== 'mesa' ? [origen] : [])],
     );
     let creada = false;
     let id: number;
@@ -164,6 +171,7 @@ mesasRouter.post('/', async (req, res) => {
         [codigo, nombreAsignado, tipoVentaId, esPrueba ? null : turno.idTurno, sesionId, ahora, ahora],
       );
       id = resultado.insertId;
+      if (guardaOrigen) await conexion.execute('UPDATE orden SET origen = ? WHERE idOrden = ?', [origen, id]);
       creada = true;
     }
     await conexion.commit();

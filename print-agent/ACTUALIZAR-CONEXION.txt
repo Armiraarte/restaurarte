@@ -1,0 +1,11 @@
+ACTUALIZAR LA CONEXION DE LAS IMPRESORAS
+
+Este paquete se abre en Isidro, la computadora donde estan conectadas las impresoras.
+
+1. Extrae todos los archivos del ZIP en una carpeta.
+2. Abre Actualizar-conexion.cmd.
+3. Espera el mensaje de conexion.
+
+Conserva los drivers, las impresoras instaladas y las asignaciones de cocina y caja.
+Antes de cambiar archivos guarda una copia de la version anterior.
+Si falta internet, el programa seguira intentando conectarse automaticamente.

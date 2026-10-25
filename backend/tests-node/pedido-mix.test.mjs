@@ -38,6 +38,27 @@ test('MIX conserva productos, cantidades, precios y opciones; cada envío recibe
   assert.equal(segundo[0].mix_grupo, 6, 'Otro borrador no se incorpora a un MIX de un envío anterior');
 });
 
+test('copia el nombre, complementos y origen para reimprimir sin depender de cambios del menú', async () => {
+  let opciones;
+  const conexion = { async execute(sql, valores) { opciones = JSON.parse(valores[7]); return [{ insertId: 1 }]; } };
+  const p = { nombre: 'Res', tamano: null, categoria: 'Hamburguesas', precio: 50 };
+  const ofrecidos = [{ id: 1, nombre: 'Cebolla' }];
+  await guardarDetallePedido(conexion, 1, [{ idProducto: 1, cantidad: 1 }], new Map([[1, p]]), new Map([[1, ofrecidos]]), new Date(), null, new Map(), 'Tablet 02');
+  assert.deepEqual(opciones.comanda, { origen: 'Tablet 02', producto: { nombre: 'Res', tamano: null, categoria: 'Hamburguesas' }, ofrecidos });
+});
+
+test('el papel usa las mismas abreviaturas de Cocina y conserva piezas y modificadores', () => {
+  const ticket = { orden_cocina: '#1-1', mesa: 'Mesa 2', productos: [
+    { categoria: 'Tacos Dorados', nombre: 'Tacos Dorados · Papa', cantidad: 2, descripcion: ['SIN CHILE, CEBOLLA'] },
+    { categoria: 'Hamburguesas', nombre: 'Hamburguesas · Res', cantidad: 1, descripcion: ['DOBLE CARNE'] },
+    { categoria: 'Carnes', nombre: 'Carnes · Milanesa', cantidad: 1, descripcion: [] },
+    { categoria: 'Alitas', nombre: 'Alitas · MIXTAS', cantidad: 10, reparto: [{ opcion: 'BBQ', cantidad: 4 }, { opcion: 'Buffalo', cantidad: 6 }], descripcion: ['4 BBQ', '6 Buffalo'] },
+  ] };
+  const textos = lineasTicketCocina(ticket).map((l) => l.texto).filter(Boolean);
+  for (const texto of ['2 T Papa', '1 Ham Res', '1 Milanesa', '4 BBQ', '6 Buffalo', '  - SIN CHILE, CEBOLLA', '  - DOBLE CARNE']) assert.ok(textos.includes(texto), texto);
+  assert.equal(textos.some((t) => t.includes('Alitas') || t.includes('Hamburguesas') || t.includes('Carnes')), false);
+});
+
 test('rechaza grupos, cantidades y opciones de tipos incorrectos', () => {
   const base = { idProducto: 1, cantidad: 1 };
   assert.equal(itemsValidos([base, { ...base, mixGrupo: 1, conQueso: true, mezcla: [] }]), true);
@@ -168,6 +189,7 @@ test('comanda: sin logo ni fecha, el número de orden arriba y chico, la mesa y 
   };
   const lineas = lineasTicketCocina(ticket);
   assert.ok(!lineas.some((l) => l.imagen), 'Sin logo');
+  assert.ok(!lineas.some((l) => /CON TODO/i.test(l.texto ?? '')), 'Con todo no agrega texto al papel');
   assert.equal(lineas[0].texto, 'Orden cocina #00012-2 · Tablet 01');
   assert.ok(!lineas[0].grande && !lineas[0].escala, 'El número de orden va arriba, en letra normal');
   assert.deepEqual(lineas[1], { texto: 'Mesa 9', grande: true, escala: 1.6 });

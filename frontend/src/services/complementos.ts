@@ -2,54 +2,29 @@ export const esQueso = (c: { nombre: string }) => c.nombre.trim().toLocaleLowerC
 export const ordenarComplementos = <T extends { nombre: string }>(lista: T[]): T[] =>
   [...lista].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }));
 
-/** "crema", "crema ni lechuga", "crema, lechuga ni salsa" (o con «Y»). */
-const enLista = (nombres: string[], union: string) =>
-  nombres.length < 2 ? nombres.join('') : `${nombres.slice(0, -1).join(', ')} ${union} ${nombres[nombres.length - 1]}`;
-
 /**
- * Complementos en el ticket de cocina, con los menos renglones posibles:
- *   nada quitado → CON TODO · todo quitado → SIN NADA
- *   quedan menos de los que se quitaron → SOLO CON QUESO Y SALSA
- *   si no, lo que no quiere en un renglón (Sin crema ni lechuga), con SIN QUESO / CON QUESO aparte para que no haya duda.
- * `ofrecidos`: los complementos que tenía el platillo; `quitados`: los que el cliente no quiere.
+ * Solo se imprime lo que se quitó: SIN CHILE, CEBOLLA, CREMA.
+ * Con todo no agrega renglones; ni SIN NADA ni SOLO CON sustituyen los nombres.
  */
 export function complementosTicket<T extends { id: number; nombre: string }>(
   ofrecidos: T[],
   quitados: T[],
   { sinQueso = false, conQueso = false }: { sinQueso?: boolean; conQueso?: boolean } = {},
 ): string[] {
-  // Sin queso cuando el queso no es un complemento que se pueda quitar: se avisa aparte, como siempre.
-  const quesoAparte = sinQueso && !ofrecidos.some(esQueso) ? ['SIN QUESO'] : [];
-  if (ofrecidos.length === 0) return quesoAparte;
-  const fuera = new Set(quitados.map((c) => c.id));
-  const quedan = ofrecidos.filter((c) => !fuera.has(c.id));
-  if (quitados.length === 0) return [...quesoAparte, 'CON TODO'];
-  if (quedan.length === 0) return [...quesoAparte, 'SIN NADA'];
-  if (quedan.length < quitados.length) return [...quesoAparte, `SOLO CON ${enLista(quedan.map((c) => c.nombre.toUpperCase()), 'Y')}`];
-  const sinDescritos = quitados.filter((c) => !sinQueso || !esQueso(c));
+  const nombres = [...new Set(quitados.map((c) => c.nombre.trim().toLocaleUpperCase('es')).filter(Boolean))];
+  if (sinQueso && !nombres.includes('QUESO')) nombres.push('QUESO');
   return [
-    ...(sinQueso ? ['SIN QUESO'] : []),
-    ...(conQueso ? ['CON QUESO'] : []),
-    ...(sinDescritos.length ? [`Sin ${enLista(sinDescritos.map((c) => c.nombre.toLowerCase()), 'ni')}`] : []),
+    // El queso incluido de base no se repite; una adición que no está entre los complementos sí se conserva.
+    ...(conQueso && !sinQueso && !ofrecidos.some(esQueso) ? ['CON QUESO'] : []),
+    ...(nombres.length ? [`SIN ${nombres.join(', ')}`] : []),
   ];
 }
 
 /**
- * Igual que complementosTicket, para categorías donde el queso no va de base (Tacos): no se dice SIN QUESO;
- * solo se menciona si lo pidieron. «CON TODO» = los demás complementos.
- *   todo y queso → CON TODO Y QUESO · solo queso → SOLO CON QUESO · quedan pocos → SOLO CON SALSA Y QUESO
- *   si no → CON QUESO + lo que no quiere (Sin cilantro)
+ * En tacos el queso no va de base: solo se menciona CON QUESO si se agregó.
  */
 export function complementosTicketQuesoOpcional<T extends { id: number; nombre: string }>(ofrecidos: T[], quitados: T[], conQueso: boolean): string[] {
   const otros = ofrecidos.filter((c) => !esQueso(c));
   const quitadosOtros = quitados.filter((c) => !esQueso(c));
-  const lineas = complementosTicket(otros, quitadosOtros);
-  if (!conQueso) return lineas;
-  const fuera = new Set(quitadosOtros.map((c) => c.id));
-  const quedan = otros.filter((c) => !fuera.has(c.id));
-  if (otros.length === 0) return ['CON QUESO'];
-  if (quitadosOtros.length === 0) return ['CON TODO Y QUESO'];
-  if (quedan.length === 0) return ['SOLO CON QUESO'];
-  if (quedan.length < quitadosOtros.length) return [`SOLO CON ${enLista([...quedan.map((c) => c.nombre.toUpperCase()), 'QUESO'], 'Y')}`];
-  return ['CON QUESO', ...lineas];
+  return [...(conQueso ? ['CON QUESO'] : []), ...complementosTicket(otros, quitadosOtros)];
 }

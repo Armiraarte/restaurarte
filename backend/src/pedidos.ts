@@ -27,6 +27,7 @@ import { lineasTicketCobro } from './ticketCobro.js';
 import { guardarDetallePedido, itemsValidos, terminoPermitido, type ItemPedido, type PapasPedido, type ProductosReparto, type RepartoPedido } from './detallePedido.js';
 import { extrasValidos, guardarExtrasPedido, recalcularTotalOrden } from './extrasPedido.js';
 import { agotadosActuales, estaAgotado } from './agotados.js';
+import { esOrigenOrden, origenOrden } from './origenOrden.js';
 
 // Opciones por renglón; las mismas constantes que OrdenDetalle en Laravel.
 /** Categorías que ofrecen SIN QUESO. */
@@ -108,7 +109,7 @@ pedidosRouter.get('/menu', async (_req, res) => {
 
 async function ordenConDetalle(idOrden: number) {
   const [ordenes] = await pool!.query<RowDataPacket[]>(
-    `SELECT o.idOrden, o.codigo, o.nombre, o.total, o.tipo_orden, o.estatus, o.idTurno, o.creado_en,
+    `SELECT o.*,
             t.nombre AS abierta_por
        FROM orden o
        LEFT JOIN sesiones_tablet st ON st.id = o.idSesion_tablet
@@ -128,14 +129,16 @@ async function ordenConDetalle(idOrden: number) {
     [idOrden],
   );
   const o = ordenes[0];
+  const detalles: RowDataPacket[] = detalle.map((d) => ({ ...d, opciones: typeof d.opciones === 'string' ? JSON.parse(d.opciones) : d.opciones }));
+  const origen = origenOrden(o.nombre, o.origen ?? detalles.find((d) => d.opciones?.comanda?.tipoPedido)?.opciones?.comanda?.tipoPedido);
   const [extras] = await pool!.query<RowDataPacket[]>(
     'SELECT id, descripcion, importe, creado_en FROM orden_extra WHERE idOrden = ? ORDER BY id', [idOrden],
   );
   return {
     extras: extras.map((e) => ({ ...e, importe: Number(e.importe) })),
     // Sin sesión de tablet = la abrió la caja.
-    orden: { ...o, total: Number(o.total), etiqueta: etiquetaOrden(o.nombre), abierta_por: o.abierta_por ?? 'Caja' },
-    detalle: detalle.map((d) => ({
+    orden: { ...o, origen, total: Number(o.total), etiqueta: etiquetaOrden(o.nombre), abierta_por: o.abierta_por ?? 'Caja' },
+    detalle: detalles.map((d) => ({
       ...d,
       sin_queso: Boolean(d.sin_queso),
       con_queso: Boolean(d.con_queso),
@@ -154,6 +157,31 @@ pedidosRouter.get('/ordenes/:idOrden', async (req, res) => {
     return;
   }
   res.json(datos);
+});
+
+/** Cocina: comandas del turno, incluidas las cuentas cobradas, agrupables por mesa. */
+pedidosRouter.get('/cocina', soloRoles('admin', 'cajero', 'cocina'), async (_req, res) => {
+  const turno = await turnoAbierto();
+  if (!turno) {
+    res.json({ turno: null, ordenes: [] });
+    return;
+  }
+  const [ordenes] = await pool!.query<RowDataPacket[]>(
+    `SELECT o.*, o.idOrden AS id,
+            COUNT(DISTINCT e.creado_en) AS envios, MAX(e.creado_en) AS ultimo_envio, MAX(e.origen_pedido) AS origen_detalle
+       FROM orden o
+       JOIN (
+         SELECT d.idOrden, d.creado_en, JSON_UNQUOTE(JSON_EXTRACT(d.opciones, '$.comanda.tipoPedido')) AS origen_pedido FROM orden_has_detalle d
+         JOIN producto p ON p.id = d.idProducto JOIN categorias c ON c.id = p.categoria_id
+         WHERE c.nombre <> 'Bebidas'
+         UNION ALL SELECT idOrden, creado_en, NULL FROM orden_extra
+       ) e ON e.idOrden = o.idOrden
+      WHERE o.idTurno = ?
+      GROUP BY o.idOrden
+      ORDER BY o.nombre REGEXP '^[0-9]+$' DESC, CAST(o.nombre AS UNSIGNED), o.nombre, o.idOrden`,
+    [turno.idTurno],
+  );
+  res.json({ turno: { idTurno: turno.idTurno }, ordenes: ordenes.map((o) => ({ ...o, origen: origenOrden(o.nombre, o.origen ?? o.origen_detalle) })) });
 });
 
 /** Pedir la cuenta: la orden pasa a PAGANDO (1) para que la caja la cobre. Solo si está abierta y tiene algo pedido. */
@@ -286,6 +314,10 @@ pedidosRouter.post('/ordenes/:idOrden/pedido', async (req, res) => {
     ? req.body.items
     : [];
   const extras = req.body?.extras ?? [];
+  if (req.body?.origenPedido !== undefined && !esOrigenOrden(req.body.origenPedido)) {
+    res.status(400).json({ error: 'Origen del pedido inválido.' });
+    return;
+  }
   if (!Number.isSafeInteger(idOrden) || idOrden < 1) {
     res.status(400).json({ error: 'Orden no válida.' });
     return;
@@ -442,7 +474,8 @@ pedidosRouter.post('/ordenes/:idOrden/pedido', async (req, res) => {
       papas = { idProducto: p.id, nombre: p.nombre, tamano: p.tamano, precio: Number(p.precio) };
     }
     const ahora = new Date();
-    const guardados = await guardarDetallePedido(conexion, idOrden, items, porId, complementos, ahora, papas, productosReparto);
+    const guardados = await guardarDetallePedido(conexion, idOrden, items, porId, complementos, ahora, papas, productosReparto,
+      req.usuario!.rol === 'tablet' ? req.usuario!.nombre : 'CAJA', req.body?.origenPedido);
     const extrasGuardados = await guardarExtrasPedido(conexion, idOrden, extras, ahora);
     await recalcularTotalOrden(conexion, idOrden, ahora);
     await conexion.commit();

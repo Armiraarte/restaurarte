@@ -23,7 +23,9 @@ if (-not $DriverStar -or -not (Test-Path (Join-Path $DriverStar 'smjt100.inf')))
 if (-not $Node -or -not (Test-Path $Node)) { throw 'No se encontró node.exe.' }
 
 $agente = Split-Path $PSScriptRoot
-$trabajo = Join-Path ([IO.Path]::GetTempPath()) ("crear-instalador-" + [guid]::NewGuid().ToString('N'))
+$raizTemporal = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\') + '\'
+$trabajo = [IO.Path]::GetFullPath((Join-Path $raizTemporal ("crear-instalador-" + [guid]::NewGuid().ToString('N'))))
+if (-not $trabajo.StartsWith($raizTemporal, [StringComparison]::OrdinalIgnoreCase)) { throw 'La carpeta de trabajo no pertenece al directorio temporal.' }
 $paquete = Join-Path $trabajo 'paquete'
 try {
     foreach ($carpeta in 'impresoras\Star-TSP143', 'agente\assets', 'node') { New-Item -ItemType Directory -Force (Join-Path $paquete $carpeta) | Out-Null }
@@ -79,5 +81,9 @@ try {
     $archivo = Get-Item $Salida
     Write-Output ("{0}  {1:N1} MB  sha256 {2}" -f $archivo.FullName, ($archivo.Length / 1MB), (Get-FileHash $Salida -Algorithm SHA256).Hash.ToLower())
 } finally {
-    Remove-Item -Recurse -Force $trabajo -ErrorAction SilentlyContinue
+    $limpiar = [IO.Path]::GetFullPath($trabajo)
+    if ($limpiar.StartsWith($raizTemporal, [StringComparison]::OrdinalIgnoreCase) -and
+        (Split-Path $limpiar -Leaf).StartsWith('crear-instalador-')) {
+        Remove-Item -LiteralPath $limpiar -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }

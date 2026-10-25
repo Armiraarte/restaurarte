@@ -63,10 +63,9 @@ const BOTON_COMPLEMENTO = {
 };
 /** Dos toques al mismo complemento dentro de este tiempo = EXTRA. */
 const DOBLE_TOQUE_MS = 350;
-/** Se terminó (apartado Agotados): en gris y sin poder elegirse. */
-const BOTON_AGOTADO = 'bg-neutral-100 border-neutral-200 text-neutral-400 cursor-not-allowed';
+/** Se terminó (apartado Agotados): en rojo y sin poder elegirse. */
+const BOTON_AGOTADO = 'bg-red-100 border-red-500 text-red-900 cursor-not-allowed';
 const SIN_AGOTADOS = new Set<number>();
-const EtiquetaAgotado = () => <span className="text-[11px] font-black tracking-wide text-rose-600 leading-none">AGOTADO</span>;
 
 interface Props {
   categoria: CategoriaMenu;
@@ -82,7 +81,7 @@ interface Props {
   mezclar?: boolean;
   /** Se agregó la mezcla: quien muestra el botón MIXTAS lo apaga. */
   onMezclaAgregada?: () => void;
-  /** IDs de los productos que se terminaron (apartado Agotados): salen en gris y no se pueden elegir. */
+  /** IDs de los productos que se terminaron: salen en rojo y no se pueden elegir. */
   agotados?: Set<number>;
 }
 
@@ -384,11 +383,7 @@ export const OpcionesCategoria: React.FC<Props> = ({
                     >
                       {n}
                       <span className={`font-mono text-2xl font-black leading-none ${cuantas > 0 ? '' : 'text-neutral-300'}`}>{cuantas}</span>
-                      {sinExistencia ? (
-                        <EtiquetaAgotado />
-                      ) : (
-                        precioDesde !== precioHasta && <span className="text-xs font-mono font-normal">{dinero(precio)} c/u</span>
-                      )}
+                      {!sinExistencia && precioDesde !== precioHasta && <span className="text-xs font-mono font-normal">{dinero(precio)} c/u</span>}
                     </button>
                     {cuantas > 0 && (
                       <button
@@ -437,11 +432,7 @@ export const OpcionesCategoria: React.FC<Props> = ({
                       <span className="absolute top-1 left-1.5 text-xs font-mono font-bold text-orange-700">{elegidos.indexOf(n) + 1}</span>
                     )}
                     {n}
-                    {sinExistencia ? (
-                      <EtiquetaAgotado />
-                    ) : (
-                      precioDesde !== precioHasta && <span className="text-sm font-mono font-normal">{dinero(Math.min(...precios))}</span>
-                    )}
+                    {!sinExistencia && precioDesde !== precioHasta && <span className="text-sm font-mono font-normal">{dinero(Math.min(...precios))}</span>}
                   </button>
                 );
               })}
@@ -467,7 +458,7 @@ export const OpcionesCategoria: React.FC<Props> = ({
                   }`}
                 >
                   {p.tamano}
-                  {p.agotado ? <EtiquetaAgotado /> : <span className="text-sm font-mono font-normal">{dinero(p.precio)}</span>}
+                  {!p.agotado && <span className="text-sm font-mono font-normal">{dinero(p.precio)}</span>}
                 </button>
               ))}
             </div>
@@ -572,7 +563,7 @@ export const OpcionesCategoria: React.FC<Props> = ({
                 }`}
               >
                 <span className="flex items-center gap-1">{conPapas && <Check className="w-4 h-4" />} CON PAPAS</span>
-                {papasAgotadas ? <EtiquetaAgotado /> : <span className="text-sm font-semibold">{categoria.papas ? `+${dinero(categoria.papas.precio)}` : 'No disponibles'}</span>}
+                {!papasAgotadas && <span className="text-sm font-semibold">{categoria.papas ? `+${dinero(categoria.papas.precio)}` : 'No disponibles'}</span>}
               </button>}
             </div>
           </div>

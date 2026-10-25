@@ -51,7 +51,7 @@ export function FlujoOrdenes({ origen, cabecera, acciones }: {
   };
   // NOMBRE: orden a nombre del cliente (comer aquí o para llevar).
   const abrirPorNombre = async (nombre: string, paraLlevar: boolean) => {
-    const { mesa } = await registrarMesa(nombre, paraLlevar);
+    const { mesa } = await registrarMesa(nombre, paraLlevar, 'nombre');
     setPidiendoNombre(false);
     setOrdenAbierta(mesa.id);
     cargarMesas();

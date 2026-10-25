@@ -6,6 +6,7 @@
 // El mismo tipo existe en frontend/src/types/ticketCocina.ts; si cambias uno, cambia el otro.
 import type { LineaTicket } from './impresion.js';
 import { extrasValidos, type ExtraPedido } from './extrasPedido.js';
+import { formatoProductoCocina } from './formatoProductoCocina.js';
 
 /** Una elección dentro de un grupo de opciones. BD: partida_opciones (partida_id, grupo, eleccion). */
 export interface OpcionTicket {
@@ -76,11 +77,10 @@ export function validarTicketCocina(t: any): string | null {
  *   PARA LLEVAR                 (grande, solo si es para llevar; comer aquí no se escribe)
  *   ------------------------------------
  *   2 Tacos Dorados · Frijol
- *     - CON TODO
  *   ------------------------------------
  *   MIX
  *   1 Tacos · Barbacoa
- *     - Sin cebolla
+ *     - SIN CHILE, CEBOLLA
  *   + Queso extra                  $10.00
  *   ------------------------------------
  * Sin precios en los productos: cocina solo necesita qué preparar. Los cobros extra van con su importe:
@@ -118,8 +118,9 @@ export function lineasTicketCocina(t: TicketCocina): LineaTicket[] {
     // Sin número ni leyenda: el MIX solo agrupa; los separadores marcan dónde empieza y termina cada plato.
     if (bloque.grupo !== null) lineas.push({ separador: true }, { texto: 'MIX', negrita: true, escala: 1.5 });
     for (const p of bloque.productos) {
-      lineas.push({ texto: `${p.cantidad} ${p.nombre}`, negrita: true, escala: 1.5 });
-      for (const d of p.descripcion) lineas.push({ texto: `  - ${d}`, escala: 1.5 });
+      const formato = formatoProductoCocina(p);
+      for (const r of formato.renglones) lineas.push({ texto: `${r.cantidad} ${r.nombre}`, negrita: true, escala: 1.5 });
+      for (const d of formato.descripcion) lineas.push({ texto: `  - ${d}`, escala: 1.5 });
       if (p.notas) lineas.push({ texto: `  NOTA: ${p.notas}`, negrita: true });
     }
     for (const extra of extrasEnMix.filter((e) => e.mix_grupo === bloque.grupo)) {

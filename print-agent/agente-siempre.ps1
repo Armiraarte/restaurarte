@@ -29,7 +29,11 @@ while ($true) {
     Move-Item -Force $registro "$registro.1" -ErrorAction SilentlyContinue
   }
   Add-Content -Path $registro -Value "$(Get-Date -Format s) iniciando agente"
-  & $node agente.mjs 2>&1 | Add-Content -Path $registro
+  try {
+    & $node agente.mjs 2>&1 | Add-Content -Path $registro
+  } catch {
+    Add-Content -Path $registro -Value "$(Get-Date -Format s) error del programa de impresion: $($_.Exception.Message)" -ErrorAction SilentlyContinue
+  }
   Add-Content -Path $registro -Value "$(Get-Date -Format s) el agente se detuvo (codigo $LASTEXITCODE); reinicio en 3 s"
   Start-Sleep -Seconds 3
 }

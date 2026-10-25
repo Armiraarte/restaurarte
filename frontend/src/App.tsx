@@ -22,6 +22,7 @@ import { MesasView } from './componentes/MesasView';
 import { ConfiguracionView } from './componentes/ConfiguracionView';
 import { InicioView } from './componentes/InicioView';
 import { AgotadosView } from './componentes/AgotadosView';
+import { CocinaView } from './componentes/CocinaView';
 import { getToken, logout, obtenerSesion, Usuario } from './services/authService';
 import { useMesasTurno, useTurnoActual } from './services/sincronizacion';
 import { useTabletsEnLinea } from './services/tabletsService';
@@ -127,7 +128,7 @@ export default function App() {
 }
 
 function PosDashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () => void }) {
-  const [currentTab, setCurrentTab] = useState<MainNavTab>('inicio');
+  const [currentTab, setCurrentTab] = useState<MainNavTab>(() => new URLSearchParams(window.location.search).get('seccion') === 'cocina' ? 'cocina' : 'inicio');
   // Módulo de configuración (solo admin): se muestra en lugar de la sección actual.
   const [enConfiguracion, setEnConfiguracion] = useState(false);
   const verConfiguracion = enConfiguracion && usuario.rol === 'admin';
@@ -161,7 +162,7 @@ function PosDashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () =>
   const tabletsTotal = tabletsEnLinea?.length ?? 0;
   const sinTurno = turnoCaja === null;
   const enOrdenes = !verConfiguracion && currentTab === 'mesas' && !sinTurno;
-  const contenidoAjustado = enOrdenes || (!verConfiguracion && (currentTab === 'turnos' || currentTab === 'ventas' || currentTab === 'inicio' || currentTab === 'agotados'));
+  const contenidoAjustado = enOrdenes || (!verConfiguracion && (currentTab === 'turnos' || currentTab === 'ventas' || currentTab === 'inicio' || currentTab === 'agotados' || currentTab === 'cocina'));
   const [avisoTurnoVisto, setAvisoTurnoVisto] = useState(false);
 
   // Sync with shared central data service
@@ -289,6 +290,7 @@ function PosDashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () =>
               {!verConfiguracion && currentTab === 'turnos' && <TurnosView onIrA={irASeccion} />}
 
               {!verConfiguracion && currentTab === 'agotados' && <AgotadosView />}
+              {!verConfiguracion && currentTab === 'cocina' && <CocinaView />}
 
               {!verConfiguracion && currentTab === 'mesas' && (
                 sinTurno ? <SeccionSinTurno seccion="Órdenes" /> : <MesasView nombreUsuario={usuario.nombre} />

@@ -13,6 +13,7 @@ import crypto from 'node:crypto';
 import { Router, type Request, type Response } from 'express';
 import { config } from './config.js';
 import { anotarEvento } from './monitorImpresion.js';
+import { estadoImpresorasGuardado } from './estadoImpresoras.js';
 
 interface Pendiente {
   resolve: (r: { status: number; data: unknown }) => void;
@@ -22,6 +23,7 @@ interface Pendiente {
 
 let agente: { res: Response; equipo: string; desde: number; pendientes: Set<string> } | null = null;
 const pendientes = new Map<string, Pendiente>();
+const esperandoConexion = new Set<() => void>();
 /** La última computadora que se desconectó y cuándo: para decir en el panel cuál revisar y desde qué hora. */
 let ultimaDesconexion: { equipo: string; hora: number } | null = null;
 
@@ -37,6 +39,20 @@ function tokenValido(req: Request): boolean {
 
 /** Computadora del agente conectado por internet, o null si no hay. */
 export const agenteRemoto = () => (agente ? { equipo: agente.equipo, desde: new Date(agente.desde).toISOString() } : null);
+
+/** Espera antes de despachar un trabajo; nunca vuelve a enviar un ticket que ya se haya mandado. */
+export function esperarAgenteRemoto(tiempoMs = 5_000): Promise<boolean> {
+  if (agente) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const terminar = () => {
+      clearTimeout(tiempo);
+      esperandoConexion.delete(terminar);
+      resolve(!!agente);
+    };
+    const tiempo = setTimeout(terminar, tiempoMs);
+    esperandoConexion.add(terminar);
+  });
+}
 
 /** Le pide algo al agente conectado (las mismas rutas que su servidor local: /impresoras, /imprimir…). */
 export function pedirAlAgenteRemoto(ruta: string, metodo: string, cuerpo: unknown, tiempoMs = 35_000): Promise<{ status: number; data: any }> {
@@ -77,10 +93,15 @@ agenteRemotoRouter.get('/conexion', (req, res) => {
     'X-Accel-Buffering': 'no', // nginx no debe juntar los mensajes
   });
   res.write('retry: 3000\n\n');
+  for (const continuar of [...esperandoConexion]) continuar();
   // Latido para que nginx y la red no cierren la conexión por inactividad.
   const latido = setInterval(() => res.write(': latido\n\n'), 20_000);
   console.log(`[agente-remoto] Conectado: ${equipo}`);
   anotarEvento({ tipo: 'conectado', equipo, hora: conexion.desde });
+  // Conserva las asignaciones aunque nadie tenga abierto el panel y aunque el servidor se reinicie después.
+  pedirAlAgenteRemoto('/impresoras', 'GET', undefined).then(async ({ status, data }) => {
+    if (status < 400 && agente === conexion) await estadoImpresorasGuardado.registrar(equipo, data);
+  }).catch(() => {});
   req.on('close', () => {
     clearInterval(latido);
     if (agente === conexion) {

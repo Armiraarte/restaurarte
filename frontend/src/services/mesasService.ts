@@ -6,6 +6,7 @@ export interface MesaRegistrada {
   id: number; // Autoincrementable, asignado por MySQL.
   codigo: string; // Código generado de la orden: "T1-001"
   nombre: string; // Número de mesa ("5") o nombre del cliente ("Juan")
+  origen?: 'mesa' | 'llamada' | 'nombre';
   tipo_venta_id: number;
   total: string;
   estatus: number;
@@ -17,13 +18,13 @@ export interface MesaRegistrada {
  * Abre la orden de esa mesa del croquis (número del 1 al 9) o a nombre de un cliente.
  * Si esa mesa o ese nombre ya tiene una orden activa, el servidor devuelve la misma.
  */
-export async function registrarMesa(codigo: string, paraLlevar: boolean): Promise<{ mesa: MesaRegistrada; creada: boolean }> {
+export async function registrarMesa(codigo: string, paraLlevar: boolean, origen?: 'mesa' | 'llamada' | 'nombre'): Promise<{ mesa: MesaRegistrada; creada: boolean }> {
   let res: Response;
   try {
     res = await fetch('/api/mesas', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken() ?? ''}` },
-      body: JSON.stringify({ nombre: codigo, tipo_venta_id: paraLlevar ? 2 : 1 }),
+      body: JSON.stringify({ nombre: codigo, tipo_venta_id: paraLlevar ? 2 : 1, ...(origen && { origen }) }),
     });
   } catch {
     throw new Error('No se pudo conectar con el servidor; la mesa no se registró.');

@@ -60,7 +60,8 @@ const FOTO_CATEGORIA: Record<string, string> = {
 
 /** Ruta de la foto de la categoría; null si no tiene (se usa su ícono). */
 export const fotoCategoria = (nombre: string): string | null =>
-  FOTO_CATEGORIA[nombre] ? `/images/categorias/${FOTO_CATEGORIA[nombre]}.webp` : null;
+  nombre === 'Bebidas' ? '/images/categorias/bebida.png'
+    : FOTO_CATEGORIA[nombre] ? `/images/categorias/${FOTO_CATEGORIA[nombre]}.webp` : null;
 
 // Logo de la marca de cada bebida (public/images/bebidas: versiones de 160 px en WebP de public/images/marcas).
 // Varias bebidas comparten logo (Coca-Cola, Coca 1/2 y Coquita; los dos Jumex). Las aguas y la Limita no tienen.

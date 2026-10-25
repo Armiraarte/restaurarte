@@ -5,8 +5,9 @@ import { config } from './config.js';
 import { requireAuth } from './auth.js';
 import { lineasTicketCocina, validarTicketCocina, type TicketCocina } from './ticketCocina.js';
 import { encabezadoRestaurante } from './ticketMarca.js';
-import { agenteDesconectado, agenteRemoto, pedirAlAgenteRemoto } from './agenteRemoto.js';
+import { agenteDesconectado, agenteRemoto, esperarAgenteRemoto, pedirAlAgenteRemoto } from './agenteRemoto.js';
 import { anotarEvento } from './monitorImpresion.js';
+import { estadoImpresorasGuardado } from './estadoImpresoras.js';
 
 // La impresora está conectada por USB a la PC de Windows; el backend (en Docker) no la ve,
 // así que reenvía todo al agente de impresión que corre en esa PC (carpeta print-agent/).
@@ -25,12 +26,16 @@ export interface LineaTicket {
 }
 
 async function llamarAgente(ruta: string, init?: RequestInit) {
+  const usaAgenteRemoto = !!(agenteDesconectado() || estadoImpresorasGuardado.equipo());
+  if (!agenteRemoto() && usaAgenteRemoto && init?.method && init.method !== 'GET') await esperarAgenteRemoto();
   // Agente conectado por internet (la computadora con las impresoras, instalada con el instalador): va primero.
   if (agenteRemoto()) {
     const { status, data } = await pedirAlAgenteRemoto(ruta, init?.method ?? 'GET', init?.body ? JSON.parse(String(init.body)) : undefined);
     if (status >= 400) throw Object.assign(new Error(data?.error || 'Error del agente de impresión.'), { status });
     return data;
   }
+  // Si ya se usaba la laptop por internet, no esperar 35 s ni cambiar al túnel de otra computadora.
+  if (usaAgenteRemoto) throw Object.assign(new Error(mensajeSinAgente()), { status: 503 });
   // Si no, el agente de la PC por el túnel SSH (PRINT_AGENT_URL).
   let res: Response;
   try {
@@ -56,7 +61,12 @@ async function llamarAgente(ruta: string, init?: RequestInit) {
  */
 function mensajeSinAgente(): string {
   const ultima = agenteDesconectado();
-  if (!ultima) return 'No se pudo conectar con el agente de impresión. ¿Está corriendo en la PC de la impresora?';
+  if (!ultima) {
+    const equipo = estadoImpresorasGuardado.equipo();
+    return equipo
+      ? `La computadora de las impresoras («${equipo}») no está conectada. Abre «Reconectar impresoras» en su escritorio. Las asignaciones están conservadas.`
+      : 'No se pudo conectar con el agente de impresión. ¿Está corriendo en la PC de la impresora?';
+  }
   const fecha = new Date(ultima.hora);
   const zona = { timeZone: 'America/Mexico_City' } as const;
   const hoy = fecha.toLocaleDateString('es-MX', zona) === new Date().toLocaleDateString('es-MX', zona);
@@ -127,9 +137,12 @@ impresionRouter.get('/instalador', (req, res) => {
 impresionRouter.get('/estado', async (_req, res) => {
   try {
     // equipo: la computadora del agente conectado por internet (sin él, la PC del túnel).
-    res.json({ agente: true, equipo: agenteRemoto()?.equipo ?? null, ...(await llamarAgente('/impresoras')) });
+    const datos = await llamarAgente('/impresoras');
+    const equipo = agenteRemoto()?.equipo ?? null;
+    await estadoImpresorasGuardado.registrar(equipo, datos);
+    res.json({ agente: true, equipo, ...datos });
   } catch (err: any) {
-    res.status(err.status === 503 ? 200 : err.status || 500).json({ agente: false, error: err.message });
+    res.status(err.status === 503 ? 200 : err.status || 500).json(estadoImpresorasGuardado.sinConexion(err.message, agenteDesconectado()?.equipo));
   }
 });
 
@@ -147,9 +160,11 @@ impresionRouter.post('/sincronizar', async (_req, res) => {
       if (err.status !== 404) throw err;
       datos = await llamarAgente('/impresoras');
     }
-    res.json({ agente: true, equipo: agenteRemoto()?.equipo ?? null, ...datos });
+    const equipo = agenteRemoto()?.equipo ?? null;
+    await estadoImpresorasGuardado.registrar(equipo, datos);
+    res.json({ agente: true, equipo, ...datos });
   } catch (err: any) {
-    res.status(err.status === 503 ? 200 : err.status || 500).json({ agente: false, error: err.message });
+    res.status(err.status === 503 ? 200 : err.status || 500).json(estadoImpresorasGuardado.sinConexion(err.message, agenteDesconectado()?.equipo));
   }
 });
 
@@ -165,7 +180,9 @@ impresionRouter.put('/asignacion', async (req, res) => {
   }
   try {
     const estado = await llamarAgente('/asignacion', { method: 'PUT', body: JSON.stringify({ destino, impresora }) });
-    res.json({ agente: true, ...estado });
+    const equipo = agenteRemoto()?.equipo ?? null;
+    await estadoImpresorasGuardado.registrar(equipo, estado);
+    res.json({ agente: true, equipo, ...estado });
   } catch (err: any) {
     res.status(err.status || 500).json({ error: err.message });
   }

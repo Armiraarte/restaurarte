@@ -52,34 +52,31 @@ test('complementos se ordenan alfabéticamente en español sin modificar el cat�
   assert.equal(original[0].nombre, 'Salsa verde');
 });
 
-test('ticket de cocina: complementos en los menos renglones posibles', () => {
+test('ticket de cocina: con todo se omite y lo que se quita se lista con SIN y comas', () => {
   const [crema, lechuga, queso, salsa] = ['Crema', 'Lechuga', 'Queso', 'Salsa'].map((nombre, i) => ({ id: i + 1, nombre }));
   const todos = [crema, lechuga, queso, salsa];
-  assert.deepEqual(complementosTicket(todos, []), ['CON TODO']);
-  // Sin nada: no se lista cada uno ni sale SIN QUESO aparte.
-  assert.deepEqual(complementosTicket(todos, todos, { sinQueso: true }), ['SIN NADA']);
-  // Solo uno (o menos de los que se quitaron): se dice lo que sí lleva.
-  assert.deepEqual(complementosTicket(todos, [crema, lechuga, salsa], { conQueso: true }), ['SOLO CON QUESO']);
-  assert.deepEqual(complementosTicket([...todos, { id: 5, nombre: 'Cebolla' }], [crema, lechuga, { id: 5, nombre: 'Cebolla' }]), ['SOLO CON QUESO Y SALSA']);
-  // Quitan pocos: lo que no quiere, en un renglón; SIN QUESO y CON QUESO aparte.
-  assert.deepEqual(complementosTicket(todos, [lechuga]), ['Sin lechuga']);
-  assert.deepEqual(complementosTicket(todos, [crema, lechuga], { conQueso: true }), ['CON QUESO', 'Sin crema ni lechuga']);
-  assert.deepEqual(complementosTicket(todos, [queso, salsa], { sinQueso: true }), ['SIN QUESO', 'Sin salsa']);
-  // Sin complementos: nada; sin queso cuando el queso no se puede elegir: aparte, como antes.
+  assert.deepEqual(complementosTicket(todos, []), []);
+  assert.deepEqual(complementosTicket(todos, todos, { sinQueso: true }), ['SIN CREMA, LECHUGA, QUESO, SALSA']);
+  assert.deepEqual(complementosTicket(todos, [crema, lechuga, salsa], { conQueso: true }), ['SIN CREMA, LECHUGA, SALSA']);
+  assert.deepEqual(complementosTicket([...todos, { id: 5, nombre: 'Cebolla' }], [crema, lechuga, { id: 5, nombre: 'Cebolla' }]), ['SIN CREMA, LECHUGA, CEBOLLA']);
+  assert.deepEqual(complementosTicket(todos, [lechuga]), ['SIN LECHUGA']);
+  assert.deepEqual(complementosTicket(todos, [crema, lechuga], { conQueso: true }), ['SIN CREMA, LECHUGA']);
+  assert.deepEqual(complementosTicket(todos, [queso, salsa], { sinQueso: true }), ['SIN QUESO, SALSA']);
   assert.deepEqual(complementosTicket([], []), []);
-  assert.deepEqual(complementosTicket([crema, salsa], [], { sinQueso: true }), ['SIN QUESO', 'CON TODO']);
+  assert.deepEqual(complementosTicket([crema, salsa], [], { sinQueso: true }), ['SIN QUESO']);
+  assert.deepEqual(complementosTicket([], [crema, lechuga]), ['SIN CREMA, LECHUGA']);
 });
 
 test('tacos: el queso no va de base; solo se imprime si lo piden', () => {
   const [cebolla, cilantro, queso, salsa] = ['Cebolla', 'Cilantro', 'Queso', 'Salsa'].map((nombre, i) => ({ id: i + 1, nombre }));
   const taco = [cebolla, cilantro, queso, salsa];
   // Como sale de la pantalla: sin queso de base (está entre los quitados) y sin decir SIN QUESO.
-  assert.deepEqual(complementosTicketQuesoOpcional(taco, [queso], false), ['CON TODO']);
-  assert.deepEqual(complementosTicketQuesoOpcional(taco, [queso, cilantro], false), ['Sin cilantro']);
-  assert.deepEqual(complementosTicketQuesoOpcional(taco, [queso, cebolla, cilantro, salsa], false), ['SIN NADA']);
+  assert.deepEqual(complementosTicketQuesoOpcional(taco, [queso], false), []);
+  assert.deepEqual(complementosTicketQuesoOpcional(taco, [queso, cilantro], false), ['SIN CILANTRO']);
+  assert.deepEqual(complementosTicketQuesoOpcional(taco, [queso, cebolla, cilantro, salsa], false), ['SIN CEBOLLA, CILANTRO, SALSA']);
   // Con queso pedido.
-  assert.deepEqual(complementosTicketQuesoOpcional(taco, [], true), ['CON TODO Y QUESO']);
-  assert.deepEqual(complementosTicketQuesoOpcional(taco, [cilantro], true), ['CON QUESO', 'Sin cilantro']);
-  assert.deepEqual(complementosTicketQuesoOpcional(taco, [cebolla, cilantro], true), ['SOLO CON SALSA Y QUESO']);
-  assert.deepEqual(complementosTicketQuesoOpcional(taco, [cebolla, cilantro, salsa], true), ['SOLO CON QUESO']);
+  assert.deepEqual(complementosTicketQuesoOpcional(taco, [], true), ['CON QUESO']);
+  assert.deepEqual(complementosTicketQuesoOpcional(taco, [cilantro], true), ['CON QUESO', 'SIN CILANTRO']);
+  assert.deepEqual(complementosTicketQuesoOpcional(taco, [cebolla, cilantro], true), ['CON QUESO', 'SIN CEBOLLA, CILANTRO']);
+  assert.deepEqual(complementosTicketQuesoOpcional(taco, [cebolla, cilantro, salsa], true), ['CON QUESO', 'SIN CEBOLLA, CILANTRO, SALSA']);
 });

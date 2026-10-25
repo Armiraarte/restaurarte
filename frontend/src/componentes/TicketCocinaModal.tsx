@@ -5,55 +5,37 @@ import { AlertTriangle, Braces, CheckCircle2, Loader2, Printer, X } from 'lucide
 import { Comanda } from '../types/pos';
 import { TicketCocina } from '../types/ticketCocina';
 import { construirTicketCocina, imprimirTicketCocina } from '../services/ticketCocinaService';
-
-const hora = (iso: string) => {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
-};
+import { agruparMix } from '../services/pedidoMix';
+import { formatoProductoCocina } from '../services/formatoProductoCocina';
 
 /** El ticket en papel: mismo orden y contenido que backend/src/ticketCocina.ts (lineasTicketCocina). */
-export const TicketCocinaPapel: React.FC<{ ticket: TicketCocina }> = ({ ticket: t }) => (
+export const TicketCocinaPapel: React.FC<{ ticket: TicketCocina }> = ({ ticket: t }) => {
+  const grupos = agruparMix(t.productos, (p) => p.mix_grupo);
+  const extrasEnMix = (t.extras ?? []).filter((e) => e.mix_grupo != null && grupos.some((g) => g.grupo === e.mix_grupo));
+  const extrasFinales = (t.extras ?? []).filter((e) => !extrasEnMix.includes(e));
+  const separador = <div className="border-t border-dashed border-neutral-400 my-2" />;
+  const extra = (e: NonNullable<TicketCocina['extras']>[number], i: number) => <div key={i} className="flex justify-between gap-2"><span>{e.descripcion}</span><span>${e.importe.toFixed(2)}</span></div>;
+  return (
   <div className="w-[300px] max-w-full mx-auto bg-white text-neutral-950 font-mono text-[13px] leading-snug px-4 py-5 shadow-md border border-neutral-200">
-    <div className="text-center font-bold">COCINA</div>
-    <div className="text-center text-2xl font-black uppercase leading-tight break-words">{t.mesa}</div>
-    {t.para_llevar && <div className="text-center text-lg font-black">*** PARA LLEVAR ***</div>}
-
-    <div className="border-t border-dashed border-neutral-400 my-2" />
-    {/* Orden de cocina: control interno */}
-    <div className="flex justify-between font-bold">
-      <span>Orden cocina {t.orden_cocina}</span>
-      <span>{hora(t.enviada_en)}</span>
-    </div>
-    <div className="flex justify-between">
-      <span>{t.adicion ? `Ronda ${t.ronda} · ADICIÓN` : 'Pedido inicial'}</span>
-      <span>{t.tablet}</span>
-    </div>
-    <div>Mesero: {t.mesero}</div>
-    <div className="border-t border-dashed border-neutral-400 my-2" />
-
-    {t.productos.map((p) => (
-      <div key={p.partida_id} className="mb-2.5">
-        <div className="text-base font-black leading-tight">
-          {p.cantidad} {p.nombre}
-        </div>
-        {p.descripcion.map((d, i) => (
-          <div key={i} className="pl-3">
-            - {d}
-          </div>
-        ))}
-        {p.notas && <div className="pl-3 font-bold">NOTA: {p.notas}</div>}
-      </div>
-    ))}
-
-    {t.notas_generales && <div className="font-bold">NOTA GENERAL: {t.notas_generales}</div>}
-    <div className="border-t border-dashed border-neutral-400 my-2" />
-    <div className="flex justify-between font-bold">
-      <span>Total de piezas</span>
-      <span>{t.total_piezas}</span>
-    </div>
-    <div className="text-center text-[11px] text-neutral-500 mt-1">Control interno de cocina</div>
+    <div>{t.area === 'bebidas' ? 'BEBIDAS' : 'Orden cocina'} {t.orden_cocina}{t.tablet && ` · ${t.tablet}`}</div>
+    <div className="text-[26px] leading-tight break-words">{t.mesa}</div>
+    {t.para_llevar && <div className="text-[21px]">PARA LLEVAR</div>}
+    {separador}
+    {grupos.map((g, i) => <React.Fragment key={i}>
+      {g.grupo !== null && <>{separador}<div className="text-xl font-bold">MIX</div></>}
+      {g.lineas.map((p) => { const formato = formatoProductoCocina(p); return <div key={p.partida_id} className="text-[19px] mb-1 break-words">
+        {formato.renglones.map((r, j) => <div key={j} className="font-bold">{r.cantidad} {r.nombre}</div>)}
+        {formato.descripcion.map((d, j) => <div key={j} className="pl-3">- {d}</div>)}
+        {p.notas && <div className="text-[13px] pl-3 font-bold">NOTA: {p.notas}</div>}
+      </div>; })}
+      {extrasEnMix.filter((e) => e.mix_grupo === g.grupo).map((e, j) => extra({ ...e, descripcion: `+ ${e.descripcion}` }, j))}
+      {g.grupo !== null && separador}
+    </React.Fragment>)}
+    {t.notas_generales && <>{separador}<div className="font-bold">NOTA: {t.notas_generales}</div></>}
+    {extrasFinales.length > 0 && <>{separador}<div className="font-bold">EXTRAS</div>{extrasFinales.map(extra)}</>}
   </div>
-);
+  );
+};
 
 export const TicketCocinaModal: React.FC<{ comanda: Comanda; onCerrar: () => void }> = ({ comanda, onCerrar }) => {
   const ticket = useMemo(() => construirTicketCocina(comanda), [comanda]);
