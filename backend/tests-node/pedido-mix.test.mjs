@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { guardarDetallePedido, itemsValidos, terminoPermitido } from '../src/detallePedido.ts';
-import { lineasTicketCocina, validarTicketCocina } from '../src/ticketCocina.ts';
+import { lineasTicketCocina, RENGLONES_PARA_COLGAR, validarTicketCocina } from '../src/ticketCocina.ts';
 
 test('MIX conserva productos, cantidades, precios y opciones; cada envío recibe grupos nuevos', async () => {
   const filas = [];
@@ -113,8 +113,12 @@ test('ticket agrupa un solo plato sin perder modificadores y separa productos su
   assert.equal(lineasTicketCocina({ ...ticket, productos: [producto('Anterior', undefined)] }).some((l) => l.texto?.includes('MIX')), false);
   for (const area of ['cocina', 'bebidas']) {
     const compacto = lineasTicketCocina({ ...ticket, area });
+    // Cocina: espacio arriba para colgarla (≈3 cm); bebidas (caja) no lo lleva.
+    const arriba = area === 'cocina' ? RENGLONES_PARA_COLGAR : 0;
+    assert.ok(compacto.slice(0, arriba).every((l) => l.texto === '' && Object.keys(l).length === 1), 'Arriba solo renglones en blanco');
+    assert.match(compacto[arriba].texto, area === 'cocina' ? /^ORDEN COCINA/ : /^BEBIDAS/);
     assert.deepEqual(compacto.at(-1), { texto: '' });
-    assert.equal(compacto.filter((l) => l.texto === '').length, 1, 'Solo queda una línea en blanco antes del corte');
+    assert.equal(compacto.filter((l) => l.texto === '').length, arriba + 1, 'Abajo solo una línea en blanco antes del corte');
     assert.ok(!compacto.some((l) => l.texto === '.'), 'No se imprime una marca que alargue el papel');
   }
 });
@@ -190,7 +194,10 @@ test('comanda: sin logo ni fecha, el número de orden arriba y chico, la mesa y 
     orden_cocina: '#00012-2', mesa: 'Mesa 9', para_llevar: true, tablet: 'Tablet 01', enviada_en: '2026-10-24T02:00:00Z',
     productos: [{ nombre: 'Tacos · Pollo', cantidad: 2, descripcion: ['CON TODO'] }],
   };
-  const lineas = lineasTicketCocina(ticket);
+  const completo = lineasTicketCocina(ticket);
+  // Arriba, el espacio en blanco para colgarla en cocina; después, el encabezado.
+  assert.ok(completo.slice(0, RENGLONES_PARA_COLGAR).every((l) => l.texto === ''));
+  const lineas = completo.slice(RENGLONES_PARA_COLGAR);
   assert.ok(!lineas.some((l) => l.imagen), 'Sin logo');
   assert.ok(!lineas.some((l) => /CON TODO/i.test(l.texto ?? '')), 'Con todo no agrega texto al papel');
   assert.equal(lineas[0].texto, 'ORDEN COCINA #00012-2 · TABLET 01');
@@ -200,7 +207,7 @@ test('comanda: sin logo ni fecha, el número de orden arriba y chico, la mesa y 
   assert.deepEqual(lineas[3], { separador: true }, 'Sin fecha: después va la raya');
   assert.ok(!lineas.some((l) => /\d{2}\/\d{2}\/\d{4}/.test(l.texto ?? '')), 'Sin fecha en ninguna línea');
   // Comer aquí: no se escribe nada (ni PARA LLEVAR ni COMER AQUÍ); bebidas: el número en negritas.
-  const aqui = lineasTicketCocina({ ...ticket, para_llevar: false });
+  const aqui = lineasTicketCocina({ ...ticket, para_llevar: false }).slice(RENGLONES_PARA_COLGAR);
   assert.deepEqual(aqui.slice(0, 3).map((l) => l.texto ?? '—'), ['ORDEN COCINA #00012-2 · TABLET 01', 'MESA 9', '—']);
   assert.ok(!aqui.some((l) => /PARA LLEVAR|COMER AQU/i.test(l.texto ?? '')));
   assert.equal(lineasTicketCocina({ ...ticket, para_llevar: false, area: 'bebidas' })[0].negrita, true);

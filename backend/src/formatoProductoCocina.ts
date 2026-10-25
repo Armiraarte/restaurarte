@@ -66,8 +66,10 @@ export function formatoProductoCocina(p: ProductoCocina): { renglones: { cantida
     };
   }
   let quesoEnRelleno = false;
+  // Hamburguesas y lonches no llevan la Q del queso (el queso va de base; si no lo lleva, sale NO QUESO).
+  const sinMarcaQueso = categoria === 'hamburguesas' || categoria === 'lonches';
   const marcarQueso = (nombre: string) => {
-    if (categoria === 'hamburguesas') return nombre.replace(/\s+Q$/i, '');
+    if (sinMarcaQueso) return quesoEnRelleno ? nombre : nombre.replace(/\s+Q$/i, '');
     if (quesoEnRelleno) return nombre;
     return conQueso && !/\sQ$/i.test(nombre) ? `${nombre} Q` : nombre;
   };

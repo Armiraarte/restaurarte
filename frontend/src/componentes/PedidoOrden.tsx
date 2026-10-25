@@ -202,7 +202,7 @@ function ticketDe(orden: OrdenBD, lineas: LineaNueva[], ronda: number, origen: s
           conQueso: l.conQueso, quesoOpcional: quesoOpcional(l), complementosExtra: l.complementosExtra,
         }),
       })) }),
-      // Solo lo que se quita, en una lista SIN separada por comas; con todo no ocupa un renglón.
+      // Lo más corto: SOLO, SOLO CON lo que queda o SIN lo que se quitó (ver complementos.ts); con todo no ocupa un renglón.
       descripcion: [
         ...(l.reparto ?? []).map((r) => `${r.cantidad} ${r.nombre}`),
         ...(l.termino ? [l.termino.nombre.toUpperCase()] : []), // solo el término: «DORADO»

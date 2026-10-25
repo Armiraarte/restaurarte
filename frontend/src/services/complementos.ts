@@ -3,8 +3,10 @@ export const ordenarComplementos = <T extends { nombre: string }>(lista: T[]): T
   [...lista].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }));
 
 /**
- * Solo se imprime lo que se quitó: SIN CHILE, CEBOLLA, CREMA (en la comanda sale como NO).
- * Con todo no agrega renglones. Si se quitaron todos los complementos, en vez de la lista va SOLO.
+ * Lo más corto para cocina (en la comanda SIN sale como NO). Con todo no agrega renglones.
+ *   - Se quitó todo:                 SOLO
+ *   - Se quitó más de lo que queda:  SOLO CON LECHUGA   (lo que sí lleva)
+ *   - Si no:                         SIN CHILE, CEBOLLA, CREMA   (lo que se quitó)
  */
 export function complementosTicket<T extends { id: number; nombre: string }>(
   ofrecidos: T[],
@@ -16,14 +18,19 @@ export function complementosTicket<T extends { id: number; nombre: string }>(
   if (sinQueso && !nombres.includes('QUESO')) nombres.push('QUESO');
   const quitado = (c: T) => (sinQueso && esQueso(c)) || quitados.some((q) => q.id === c.id || nombre(q) === nombre(c));
   const todoQuitado = ofrecidos.length > 0 && ofrecidos.every(quitado);
+  const quedan = [...new Set(ofrecidos.filter((c) => !quitado(c)).map(nombre))];
   // Queso de base que no está entre los complementos (quesadillas): SOLO no lo cubre, se avisa aparte.
   const quesoDeBaseFuera = sinQueso && !ofrecidos.some(esQueso);
+  const sinQuesoAparte = quesoDeBaseFuera ? ['SIN QUESO'] : [];
+  const cuantosQuitados = nombres.length - (quesoDeBaseFuera ? 1 : 0);
   return [
     // El queso incluido de base no se repite; una adición que no está entre los complementos sí se conserva.
     ...(conQueso && !sinQueso && !ofrecidos.some(esQueso) ? ['CON QUESO'] : []),
     ...(todoQuitado
-      ? ['SOLO', ...(quesoDeBaseFuera ? ['SIN QUESO'] : [])]
-      : nombres.length ? [`SIN ${nombres.join(', ')}`] : []),
+      ? ['SOLO', ...sinQuesoAparte]
+      : quedan.length && cuantosQuitados > quedan.length
+        ? [`SOLO CON ${quedan.join(', ')}`, ...sinQuesoAparte]
+        : nombres.length ? [`SIN ${nombres.join(', ')}`] : []),
   ];
 }
 

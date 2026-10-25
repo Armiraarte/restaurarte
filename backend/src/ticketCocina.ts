@@ -73,6 +73,7 @@ export function validarTicketCocina(t: any): string | null {
 
 /**
  * Formato impreso (impresora térmica de 80 mm), todo alineado a la izquierda (sin logo ni fecha):
+ *   (≈3 cm en blanco para colgarla; solo en cocina, ver RENGLONES_PARA_COLGAR)
  *   Orden cocina #00004-2 · Tablet 01   (chico)
  *   MESA 1                      (muy grande; o el nombre del cliente)
  *   PARA LLEVAR                 (grande, solo si es para llevar; comer aquí no se escribe)
@@ -87,8 +88,16 @@ export function validarTicketCocina(t: any): string | null {
  * Sin precios en los productos: cocina solo necesita qué preparar. Los cobros extra van con su importe:
  * debajo de su MIX si se agregaron dentro de uno, y los demás al final.
  */
+/**
+ * Renglones en blanco al inicio de las comandas de cocina (no las de bebidas, que salen en caja): en cocina se
+ * cuelgan de arriba y el gancho no debe tapar nada. Cada renglón mide ~3.7 mm: 8 ≈ 3 cm. Se usan renglones en
+ * blanco (y no un campo nuevo) para que funcione con cualquier versión del agente de impresión.
+ */
+export const RENGLONES_PARA_COLGAR = 8;
+
 export function lineasTicketCocina(t: TicketCocina): LineaTicket[] {
   const lineas: LineaTicket[] = [
+    ...(t.area === 'bebidas' ? [] : Array.from({ length: RENGLONES_PARA_COLGAR }, () => ({ texto: '' }))),
     // Sin logo ni fecha: arriba y chico el número de orden; luego de quién es el pedido, en grande, y PARA LLEVAR
     // solo si lo es (comer aquí no se escribe).
     {

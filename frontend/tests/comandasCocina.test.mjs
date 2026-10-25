@@ -73,13 +73,13 @@ test('cocina: reimprime envíos de solo extras y reconstruye pedidos anteriores 
   assert.equal(tickets[1].ronda, 2);
 });
 
-test('la Q identifica el queso incluido, agregado o extra, excepto en hamburguesas', () => {
+test('la Q identifica el queso incluido, agregado o extra, excepto en hamburguesas y lonches', () => {
   const queso = { id: 1, nombre: 'Queso' }, cebolla = { id: 2, nombre: 'Cebolla' };
   for (const categoria of ['Tacos Dorados', 'Quesadillas', 'Sopes', 'Enchiladas', 'Tostadas', 'Burritas', 'Lonches', 'Hamburguesas', 'Ensaladas', 'Salchichas', 'Carnes']) {
     const p = construirComandasCocina(orden, [fila(1, a, { categoria,
       opciones: { sin: [cebolla], mezcla: [], comanda: { producto: { nombre: 'Pollo', tamano: null, categoria }, ofrecidos: [queso, cebolla] } },
     })], [], [])[0].productos[0];
-    const esperado = categoria === 'Hamburguesas' ? 'POLLO' : 'POLLO Q';
+    const esperado = ['Hamburguesas', 'Lonches'].includes(categoria) ? 'POLLO' : 'POLLO Q';
     assert.ok(formatoProductoCocina(p).renglones[0].nombre.toUpperCase().endsWith(esperado), categoria);
     assert.deepEqual(p.descripcion, ['SIN CEBOLLA']);
     assert.equal(p.nombre, `${categoria} · Pollo`, 'Conserva el nombre original del producto');

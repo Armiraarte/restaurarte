@@ -60,7 +60,8 @@ test('cada producto usa la abreviatura solicitada y conserva la Q cuando lleva q
     for (const con_queso of [false, true]) {
       const producto = { categoria, nombre: `${categoria} · ${nombre}`, cantidad: 3, con_queso, descripcion: ['SIN CHILE, CEBOLLA'] };
       const formato = formatoProductoCocina(producto);
-      assert.deepEqual(formato, { renglones: [{ cantidad: 3, nombre: `${esperado}${con_queso && categoria !== 'Hamburguesas' && !/\bqueso\b/i.test(nombre) ? ' Q' : ''}` }], descripcion: ['NO CHILE, CEBOLLA'] });
+      const llevaQ = con_queso && !['Hamburguesas', 'Lonches'].includes(categoria) && !/\bqueso\b/i.test(nombre);
+      assert.deepEqual(formato, { renglones: [{ cantidad: 3, nombre: `${esperado}${llevaQ ? ' Q' : ''}` }], descripcion: ['NO CHILE, CEBOLLA'] });
       assert.deepEqual(formatoProductoCocina({ ...producto, nombre: formato.renglones[0].nombre }), formato, 'No duplica prefijos al recibir una comanda ya abreviada');
     }
   }

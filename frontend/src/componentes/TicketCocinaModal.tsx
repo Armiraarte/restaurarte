@@ -17,6 +17,8 @@ export const TicketCocinaPapel: React.FC<{ ticket: TicketCocina }> = ({ ticket: 
   const extra = (e: NonNullable<TicketCocina['extras']>[number], i: number) => <div key={i} className="flex justify-between gap-2 text-[19px] font-bold"><span className="min-w-0 break-words">{mayusculasComanda(e.descripcion)}</span><span className="shrink-0">${e.importe.toFixed(2)}</span></div>;
   return (
   <div className="w-[300px] max-w-full mx-auto bg-white text-neutral-950 font-mono text-[13px] leading-snug px-4 py-5 shadow-md border border-neutral-200">
+    {/* Cocina: ≈3 cm en blanco arriba para colgarla (RENGLONES_PARA_COLGAR en backend/src/ticketCocina.ts) */}
+    {t.area !== 'bebidas' && <div aria-hidden="true" className="h-[120px]" />}
     <div>{t.area === 'bebidas' ? 'BEBIDAS' : 'ORDEN COCINA'} {mayusculasComanda(t.orden_cocina)}{t.tablet && ` · ${mayusculasComanda(t.tablet)}`}</div>
     <div className="text-[26px] leading-tight break-words">{mayusculasComanda(t.mesa)}</div>
     {t.para_llevar && <div className="text-[21px]">PARA LLEVAR</div>}
