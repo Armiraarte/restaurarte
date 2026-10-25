@@ -113,7 +113,7 @@ test('ticket agrupa un solo plato sin perder modificadores y separa productos su
   assert.equal(lineasTicketCocina({ ...ticket, productos: [producto('Anterior', undefined)] }).some((l) => l.texto?.includes('MIX')), false);
   for (const area of ['cocina', 'bebidas']) {
     const compacto = lineasTicketCocina({ ...ticket, area });
-    // Cocina: espacio arriba para colgarla (≈3 cm); bebidas (caja) no lo lleva.
+    // Cocina: espacio arriba para colgarla (≈1.5 cm); bebidas (caja) no lo lleva.
     const arriba = area === 'cocina' ? RENGLONES_PARA_COLGAR : 0;
     assert.ok(compacto.slice(0, arriba).every((l) => l.texto === '' && Object.keys(l).length === 1), 'Arriba solo renglones en blanco');
     assert.match(compacto[arriba].texto, area === 'cocina' ? /^ORDEN COCINA/ : /^BEBIDAS/);
