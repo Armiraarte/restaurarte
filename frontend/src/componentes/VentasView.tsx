@@ -1,11 +1,11 @@
 // Ventas: las órdenes ya cobradas (orden.estatus = 2, PAGADO) del turno abierto, con su total y la opción
-// de reimprimir el ticket de cobro. Se actualiza sola con los avisos en vivo (useMesasTurno).
+// de reimprimir el ticket de cobro (dividida: un ticket por cuenta). Se actualiza sola con los avisos en vivo (useMesasTurno).
 import React, { useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { AlertTriangle, CheckCircle2, Eye, Home, Loader2, Printer, ShoppingBag, Split, TrendingUp } from 'lucide-react';
 import { etiquetaMesaRegistrada, MesaRegistrada } from '../services/mesasService';
 import { useMesasTurno, useTurnoActual } from '../services/sincronizacion';
-import { reimprimirTicketCobro } from '../services/pedidosService';
+import { divisionVigente, reimprimirTicketCobro } from '../services/pedidosService';
 import { CuentaDetalle } from './CuentaDetalle';
 import { ListaPaginada } from './ListaPaginada';
 
@@ -14,6 +14,14 @@ const dinero = (n: number) => `$${n.toFixed(2)}`;
 const hora = (fecha?: string) => (fecha ? new Date(fecha).toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' }) : '—');
 
 type EstadoImpresion = { cargando: boolean; ok?: boolean; texto?: string };
+
+/** Cuántos tickets salen al reimprimir: uno por cuenta si está dividida (y la división cuadra), si no uno. */
+const ticketsDe = (m: MesaRegistrada) => (divisionVigente(m.partes_divididas, Number(m.total)) ? m.partes_divididas!.length : 1);
+
+function textoImpresion(r: { ok: boolean; impresas?: number; error?: string }, tickets: number) {
+  if (r.ok) return tickets > 1 ? `${tickets} tickets impresos` : 'Impreso';
+  return tickets > 1 && r.impresas ? `Solo salieron ${r.impresas} de ${tickets}: ${r.error ?? 'falló la impresora'}` : r.error;
+}
 
 export const VentasView: React.FC = () => {
   const turno = useTurnoActual();
@@ -31,7 +39,7 @@ export const VentasView: React.FC = () => {
     setImpresion((s) => ({ ...s, [m.id]: { cargando: true } }));
     try {
       const r = await reimprimirTicketCobro(m.id);
-      setImpresion((s) => ({ ...s, [m.id]: { cargando: false, ok: r.impresion.ok, texto: r.impresion.ok ? 'Impreso' : r.impresion.error } }));
+      setImpresion((s) => ({ ...s, [m.id]: { cargando: false, ok: r.impresion.ok, texto: textoImpresion(r.impresion, ticketsDe(m)) } }));
     } catch (err) {
       setImpresion((s) => ({ ...s, [m.id]: { cargando: false, ok: false, texto: err instanceof Error ? err.message : 'No se imprimió' } }));
     }
@@ -132,17 +140,18 @@ export const VentasView: React.FC = () => {
           <CuentaDetalle
             idOrden={verCuenta}
             onCerrar={() => setVerCuenta(null)}
-            acciones={
-              <button
-                onClick={() => {
-                  const m = pagadas.find((x) => x.id === verCuenta);
-                  if (m) reimprimir(m);
-                }}
-                className="w-full h-12 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white font-semibold flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <Printer className="w-4 h-4" /> Reimprimir ticket
-              </button>
-            }
+            acciones={(() => {
+              const m = pagadas.find((x) => x.id === verCuenta);
+              const tickets = m ? ticketsDe(m) : 1;
+              return (
+                <button
+                  onClick={() => m && reimprimir(m)}
+                  className="w-full h-12 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white font-semibold flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Printer className="w-4 h-4" /> {tickets > 1 ? `Reimprimir los ${tickets} tickets` : 'Reimprimir ticket'}
+                </button>
+              );
+            })()}
           />
         )}
       </AnimatePresence>

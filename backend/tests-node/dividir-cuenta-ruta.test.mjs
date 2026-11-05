@@ -132,4 +132,25 @@ test('dividir la cuenta guarda Cuenta 1…N, la manda a Cajas (PAGANDO) y devuel
   assert.equal(reimpresion.status, 200);
   assert.equal(reimpresion.impresion.ok, false);
   assert.equal((await enviar('cuentas-divididas/1/ticket-cobro')).status, 200);
+
+  // Reimprimir desde Ventas: un ticket por cuenta con lo que pagó cada quien, no uno solo con toda la orden.
+  const tickets = [];
+  const fetchReal = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    if (!String(url).startsWith('http://127.0.0.1:9/')) return fetchReal(url, init);
+    tickets.push(JSON.parse(init.body).lineas.map((l) => [l.texto, l.derecha].filter(Boolean).join(' | ')));
+    return new Response(JSON.stringify({ ok: true, impresora: 'Caja' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  t.after(() => { globalThis.fetch = fetchReal; });
+  const ventas = await enviar('ticket-cobro');
+  assert.equal(ventas.status, 200);
+  assert.deepEqual(ventas.impresion, { ok: true, impresas: 2 });
+  assert.equal(tickets.length, 2, 'Un ticket por cuenta');
+  for (const esperado of ['CUENTA 1 DE 2 · PAGADA', '*** REIMPRESIÓN ***', 'Atendió: Caja | Cobró: Administrador', 'TOTAL A PAGAR | $50.00', 'Efectivo | $100.00', 'Cambio | $50.00']) {
+    assert.ok(tickets[0].includes(esperado), esperado);
+  }
+  for (const esperado of ['CUENTA 2 DE 2 · PAGADA', 'TOTAL A PAGAR | $50.00', 'Efectivo | $50.00', 'Cambio | $0.00']) {
+    assert.ok(tickets[1].includes(esperado), esperado);
+  }
+  assert.ok(!tickets.flat().some((l) => /CUENTA DIVIDIDA EN/.test(l)), 'Ya no sale el ticket con toda la orden');
 });

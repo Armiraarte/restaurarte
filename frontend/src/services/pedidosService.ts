@@ -216,9 +216,12 @@ export const cobrarCuentaDividida = (idOrden: number, numero: number, recibido: 
 export const reimprimirCobroCuenta = (idOrden: number, numero: number) =>
   pedir<{ impresion: { ok: boolean; error?: string } }>(`/ordenes/${idOrden}/cuentas-divididas/${numero}/ticket-cobro`, { method: 'POST' });
 
-/** Vuelve a imprimir el ticket de cobro de una orden pagada (sin `recibido` no imprime efectivo ni cambio). */
+/**
+ * Vuelve a imprimir el ticket de cobro de una orden pagada (sin `recibido` no imprime efectivo ni cambio).
+ * Dividida: sale un ticket por cuenta y `impresas` dice cuántos.
+ */
 export const reimprimirTicketCobro = (idOrden: number, recibido?: number) =>
-  pedir<{ impresion: { ok: boolean; error?: string } }>(`/ordenes/${idOrden}/ticket-cobro`, {
+  pedir<{ impresion: { ok: boolean; impresas?: number; error?: string } }>(`/ordenes/${idOrden}/ticket-cobro`, {
     method: 'POST',
     body: JSON.stringify({ recibido }),
   });

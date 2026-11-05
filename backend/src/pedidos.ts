@@ -15,12 +15,14 @@
 //   POST  /api/ordenes/:idOrden/pedir-cuenta  orden.estatus 0 (ABIERTA) → 1 (PAGANDO): la caja hace el cobro
 //   POST  /api/ordenes/:idOrden/cobrar      { recibido } orden.estatus 1 (PAGANDO) → 2 (PAGADO) e imprime el ticket de cobro
 //   POST  /api/ordenes/:idOrden/ticket-cobro  { recibido? } reimprime el ticket de cobro de una orden pagada
-//                                           (sin recibido, p. ej. desde Ventas, no imprime efectivo ni cambio)
+//                                           (sin recibido, p. ej. desde Ventas, no imprime efectivo ni cambio).
+//                                           Dividida: un ticket por cuenta, cada uno con lo que pagó esa persona
 //   POST  /api/ordenes/:idOrden/dividir     { modo: 'iguales' | 'productos', personas, total, asignadas? }
 //                                           guarda Cuenta 1…N (reemplaza la división anterior), imprime un ticket
 //                                           por persona en caja y, si estaba abierta, la orden pasa a PAGANDO (Cajas);
 //                                           el total no cambia (cuentasDivididas.ts). Ya no, si se cobró alguna cuenta.
 //   POST  /api/ordenes/:idOrden/cuentas-divididas/imprimir   reimprime los tickets de las cuentas guardadas
+//                                           (las ya cobradas con PAGADA, efectivo y cambio)
 //   POST  /api/ordenes/:idOrden/cuentas-divididas/:numero/cobrar  { recibido } Cajas cobra esa cuenta sola e imprime
 //                                           su ticket; al cobrar la última, la orden pasa a PAGADO
 //   POST  /api/ordenes/:idOrden/cuentas-divididas/:numero/ticket-cobro  reimprime el ticket de cobro de esa cuenta
@@ -269,16 +271,33 @@ async function imprimirTicketCobro(idOrden: number, recibido: number | null, cob
   }
 }
 
-/** Un ticket por cuenta, en orden (Cuenta 1, 2…). Si la impresora falla, las cuentas ya quedaron guardadas. */
+/**
+ * Lo que va en el ticket de una cuenta ya cobrada: quién la cobró, con cuánto pagaron y su cambio. Si la orden se
+ * cobró completa (sin cobrar por cuenta), solo PAGADA. undefined = por cobrar.
+ */
+function cobroDeCuenta(cuenta: CuentaDividida, ordenPagada: boolean) {
+  if (cuentaPagada(cuenta)) {
+    return { cobro: cuenta.cobrada_por, recibido: cuenta.recibido, cambio: cuenta.recibido == null ? null : redondear(cuenta.recibido - cuenta.importe) };
+  }
+  return ordenPagada ? { cobro: null, recibido: null, cambio: null } : undefined;
+}
+
+/**
+ * Un ticket por cuenta, en orden (Cuenta 1, 2…); las ya cobradas salen con PAGADA, efectivo y cambio.
+ * Si la impresora falla, las cuentas ya quedaron guardadas.
+ */
 async function imprimirCuentasDivididas(idOrden: number, cuentas: CuentaDividida[], reimpresion = false) {
   const datos = await ordenConDetalle(idOrden);
   if (!datos) return { ok: false, impresas: 0, error: 'La orden no existe.' };
-  const o = datos.orden as unknown as { idOrden: number; etiqueta: string; tipo_orden: number; abierta_por: string };
+  const o = datos.orden as unknown as { idOrden: number; etiqueta: string; tipo_orden: number; abierta_por: string; estatus: number };
+  const ordenPagada = Number(o.estatus) === 2;
   let impresas = 0;
   try {
     for (const cuenta of cuentas) {
+      const cobro = cobroDeCuenta(cuenta, ordenPagada);
       await imprimirLineas(lineasTicketCuentaDividida({
         idOrden: o.idOrden, etiqueta: o.etiqueta, paraLlevar: o.tipo_orden === 2, abiertaPor: o.abierta_por, fecha: new Date(), cuenta, reimpresion,
+        ...(cobro && { cobro }),
       }));
       impresas += 1;
     }
@@ -432,14 +451,23 @@ pedidosRouter.post('/ordenes/:idOrden/cobrar', soloRoles('admin', 'cajero'), asy
   res.json({ ...(await ordenConDetalle(idOrden)), cobro: { total, recibido, cambio: redondear(recibido - total) }, impresion });
 });
 
-/** Reimprimir el ticket de cobro de una orden ya pagada. */
+/**
+ * Reimprimir el ticket de cobro de una orden ya pagada. Si está dividida, un ticket por cuenta (cada uno con lo que
+ * pagó esa persona), no uno solo con toda la orden.
+ */
 pedidosRouter.post('/ordenes/:idOrden/ticket-cobro', soloRoles('admin', 'cajero'), async (req, res) => {
   const idOrden = Number(req.params.idOrden);
   const valor = Number(req.body?.recibido);
   const recibido = req.body?.recibido != null && Number.isFinite(valor) ? redondear(valor) : null;
   const actual = await ordenConDetalle(idOrden);
-  if (!actual || (actual.orden as unknown as { estatus: number }).estatus !== 2) {
+  const orden = actual?.orden as unknown as { estatus: number; total: number } | undefined;
+  if (!actual || !orden || orden.estatus !== 2) {
     res.status(409).json({ error: 'La orden no está pagada.' });
+    return;
+  }
+  res.locals.sinCambios = true; // reimprimir no cambia nada: no se avisa a las pantallas
+  if (divisionVigente(actual.cuentas_divididas, orden.total)) {
+    res.json({ impresion: await imprimirCuentasDivididas(idOrden, actual.cuentas_divididas, true) });
     return;
   }
   res.json({ impresion: await imprimirTicketCobro(idOrden, recibido, req.usuario!.nombre, true) });

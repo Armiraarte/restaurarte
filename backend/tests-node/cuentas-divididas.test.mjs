@@ -99,6 +99,13 @@ test('ticket de cada persona: CUENTA N DE M con sus productos o su parte igual',
   for (const esperado of ['CUENTA 2 DE 3 · PAGADA', 'Atendió: Tablet 01 | Cobró: Ana', 'TOTAL A PAGAR | $71.00', 'Efectivo | $100.00', 'Cambio | $29.00']) {
     assert.ok(cobrada.includes(esperado), esperado);
   }
+
+  // Orden cobrada completa (sin cobrar por cuenta): al reimprimir, cada cuenta dice PAGADA sin efectivo ni cambio.
+  const pagadaCompleta = textos(lineasTicketCuentaDividida({ ...base, cuenta: { numero: 1, personas: 3, modo: 'iguales', importe: 71, total_orden: 213, productos: [], extras: [] },
+    cobro: { cobro: null, recibido: null, cambio: null } }));
+  assert.ok(pagadaCompleta.includes('CUENTA 1 DE 3 · PAGADA'));
+  assert.ok(pagadaCompleta.includes('Atendió: Tablet 01'), 'Sin «Cobró» si no se sabe quién');
+  assert.ok(!pagadaCompleta.some((t) => /Efectivo|Cambio/.test(t)));
 });
 
 test('quitar algo de una cuenta dividida: se descuenta de la cuenta que lo tenía', () => {
