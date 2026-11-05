@@ -36,6 +36,7 @@ class DatabaseSeeder extends Seeder
                 EnchiladaPiernaSeeder::class,
                 HamburguesaAderezoSeeder::class,
                 AlitasNaturalesSeeder::class,
+                BurritaPolloSeeder::class,
             ]);
         });
     }
