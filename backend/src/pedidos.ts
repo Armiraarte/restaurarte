@@ -19,8 +19,11 @@
 //   POST  /api/ordenes/:idOrden/dividir     { modo: 'iguales' | 'productos', personas, total, asignadas? }
 //                                           guarda Cuenta 1…N (reemplaza la división anterior), imprime un ticket
 //                                           por persona en caja y, si estaba abierta, la orden pasa a PAGANDO (Cajas);
-//                                           el total y el cobro no cambian (cuentasDivididas.ts)
+//                                           el total no cambia (cuentasDivididas.ts). Ya no, si se cobró alguna cuenta.
 //   POST  /api/ordenes/:idOrden/cuentas-divididas/imprimir   reimprime los tickets de las cuentas guardadas
+//   POST  /api/ordenes/:idOrden/cuentas-divididas/:numero/cobrar  { recibido } Cajas cobra esa cuenta sola e imprime
+//                                           su ticket; al cobrar la última, la orden pasa a PAGADO
+//   POST  /api/ordenes/:idOrden/cuentas-divididas/:numero/ticket-cobro  reimprime el ticket de cobro de esa cuenta
 //   POST  /api/ordenes/:idOrden/detalle/:idDetalle/quitar  { piezas? } solo caja: quita de la cuenta un producto mandado
 //                                           por error (todo el renglón, o esas piezas) y recalcula el total; no en PAGADO
 //   POST  /api/ordenes/:idOrden/extras/:idExtra/quitar     solo caja: quita un cobro extra mandado por error
@@ -34,8 +37,8 @@ import { imprimirLineas } from './impresion.js';
 import { extraRenglonCobro, lineasTicketCobro, nombreRenglonCobro, productoTicketCobro } from './ticketCobro.js';
 import { lineasTicketCuentaDividida } from './ticketCuentaDividida.js';
 import {
-  calcularCuentasDivididas, divisionVigente, guardarCuentasDivididas, hayTablaCuentasDivididas, leerCuentasDivididas,
-  validarSolicitudDivision, type CuentaDividida, type RenglonDivision, type SolicitudDivision,
+  calcularCuentasDivididas, cuentaPagada, divisionVigente, guardarCuentasDivididas, hayTablaCuentasDivididas, leerCuentasDivididas,
+  marcarCuentaPagada, revisarCobroCuenta, validarSolicitudDivision, type CuentaDividida, type RenglonDivision, type SolicitudDivision,
 } from './cuentasDivididas.js';
 import { guardarDetallePedido, itemsValidos, terminoPermitido, type ItemPedido, type PapasPedido, type ProductosReparto, type RepartoPedido } from './detallePedido.js';
 import { extrasValidos, guardarExtrasPedido, recalcularTotalOrden } from './extrasPedido.js';
@@ -284,6 +287,21 @@ async function imprimirCuentasDivididas(idOrden: number, cuentas: CuentaDividida
   }
 }
 
+/** Ticket de cobro de una sola cuenta dividida (con efectivo y cambio). Si falla, el cobro ya quedó hecho. */
+async function imprimirCobroCuenta(idOrden: number, cuenta: CuentaDividida, cobro: { cobro: string; recibido: number; cambio: number }, reimpresion = false) {
+  const datos = await ordenConDetalle(idOrden);
+  if (!datos) return { ok: false, error: 'La orden no existe.' };
+  const o = datos.orden as unknown as { idOrden: number; etiqueta: string; tipo_orden: number; abierta_por: string };
+  try {
+    await imprimirLineas(lineasTicketCuentaDividida({
+      idOrden: o.idOrden, etiqueta: o.etiqueta, paraLlevar: o.tipo_orden === 2, abiertaPor: o.abierta_por, fecha: new Date(), cuenta, cobro, reimpresion,
+    }));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'No se pudo imprimir.' };
+  }
+}
+
 /**
  * Dividir la cuenta: guarda Cuenta 1…N de la orden (reemplaza la división anterior) e imprime un ticket por persona.
  * `total` es el que vio la pantalla: si la orden cambió mientras tanto, no se guarda para no imprimir otros importes.
@@ -312,10 +330,19 @@ pedidosRouter.post('/ordenes/:idOrden/dividir', soloRoles('tablet', 'admin', 'ca
       res.status(404).json({ error: 'La orden no existe.' });
       return;
     }
-    const total = (datos.orden as unknown as { total: number }).total;
+    const { total, estatus } = datos.orden as unknown as { total: number; estatus: number };
     if (datos.detalle.length === 0 && datos.extras.length === 0) {
       await conexion.rollback();
       res.status(409).json({ error: 'La orden no tiene productos enviados; no hay cuenta que dividir.' });
+      return;
+    }
+    // Con una cuenta ya cobrada, volver a dividir cambiaría lo que esa persona pagó.
+    const cobrada = datos.cuentas_divididas.find(cuentaPagada);
+    if (Number(estatus) === 2 || cobrada) {
+      await conexion.rollback();
+      res.status(409).json({
+        error: cobrada ? `Ya se cobró la Cuenta ${cobrada.numero} en caja; ya no se puede volver a dividir.` : 'Esta orden ya está pagada; ya no se puede dividir.',
+      });
       return;
     }
     if (req.body.total != null && Math.round(Number(req.body.total) * 100) !== Math.round(total * 100)) {
@@ -338,7 +365,9 @@ pedidosRouter.post('/ordenes/:idOrden/dividir', soloRoles('tablet', 'admin', 'ca
     // Dividir es pedir la cuenta: si estaba abierta pasa a PAGANDO y aparece en Cajas para cobrarla.
     await conexion.execute('UPDATE orden SET estatus = 1, actualizado_en = ? WHERE idOrden = ? AND estatus = 0', [ahora, idOrden]);
     await conexion.commit();
-    cuentas = calculo.cuentas.map((c) => ({ ...c, creado_por: creadoPor, creado_en: ahora.toISOString() }));
+    cuentas = calculo.cuentas.map((c) => ({
+      ...c, creado_por: creadoPor, creado_en: ahora.toISOString(), recibido: null, cobrada_por: null, pagada_en: null,
+    }));
   } catch (err) {
     await conexion.rollback();
     console.error('[pedidos] No se pudo guardar la cuenta dividida:', err);
@@ -381,6 +410,11 @@ pedidosRouter.post('/ordenes/:idOrden/cobrar', soloRoles('admin', 'cajero'), asy
     res.status(409).json({ error: estatus === 2 ? 'Esta orden ya está pagada.' : 'La orden no ha pedido la cuenta.' });
     return;
   }
+  // Dividida y con una parte ya pagada: lo que falta se cobra cuenta por cuenta.
+  if (divisionVigente(actual.cuentas_divididas, total) && actual.cuentas_divididas.some(cuentaPagada)) {
+    res.status(409).json({ error: 'Esta cuenta está dividida y ya se cobró una parte: cobra en Cajas las cuentas que faltan.' });
+    return;
+  }
   if (!Number.isFinite(recibido) || recibido < total) {
     res.status(400).json({ error: `El monto recibido debe ser de al menos $${total.toFixed(2)}.` });
     return;
@@ -410,6 +444,84 @@ pedidosRouter.post('/ordenes/:idOrden/ticket-cobro', soloRoles('admin', 'cajero'
   res.json({ impresion: await imprimirTicketCobro(idOrden, recibido, req.usuario!.nombre, true) });
 });
 
+/**
+ * Cobrar una cuenta dividida sola (Cajas: una tarjeta por cuenta). Se guarda quién la cobró y con cuánto pagaron,
+ * se imprime su ticket con efectivo y cambio, y al cobrar la última la orden pasa a PAGADO.
+ */
+pedidosRouter.post('/ordenes/:idOrden/cuentas-divididas/:numero/cobrar', soloRoles('admin', 'cajero'), async (req, res) => {
+  const idOrden = Number(req.params.idOrden);
+  const numero = Number(req.params.numero);
+  const recibido = redondear(Number(req.body?.recibido));
+  if (!Number.isSafeInteger(idOrden) || idOrden < 1 || !Number.isInteger(numero) || numero < 1) {
+    res.status(400).json({ error: 'Cuenta no válida.' });
+    return;
+  }
+  if (!(await turnoAbierto())) {
+    res.status(409).json({ error: 'Inicia el turno para poder cobrar.', sinTurno: true });
+    return;
+  }
+  const conexion = await pool!.getConnection();
+  let cobrada: { cuenta: CuentaDividida; cambio: number; ultima: boolean };
+  try {
+    await conexion.beginTransaction();
+    // Bloquea la orden y sus cuentas: dos cajas no pueden cobrar la misma cuenta.
+    const [ordenes] = await conexion.query<RowDataPacket[]>('SELECT idOrden, estatus, total FROM orden WHERE idOrden = ? FOR UPDATE', [idOrden]);
+    if (!ordenes[0]) {
+      await conexion.rollback();
+      res.status(404).json({ error: 'La orden no existe.' });
+      return;
+    }
+    const cuentas = await leerCuentasDivididas(idOrden, conexion);
+    const revision = revisarCobroCuenta({ estatus: Number(ordenes[0].estatus), total: Number(ordenes[0].total) }, cuentas, numero, recibido);
+    if ('error' in revision) {
+      await conexion.rollback();
+      res.status(revision.status).json({ error: revision.error });
+      return;
+    }
+    const ahora = new Date();
+    const cobradaPor = req.usuario!.nombre;
+    if (!(await marcarCuentaPagada(conexion, idOrden, numero, { recibido, cobradaPor, ahora }))) {
+      await conexion.rollback();
+      res.status(409).json({ error: `La Cuenta ${numero} ya se cobró en otra caja.` });
+      return;
+    }
+    if (revision.ultima) {
+      await conexion.execute('UPDATE orden SET estatus = 2, actualizado_en = ? WHERE idOrden = ? AND estatus = 1', [ahora, idOrden]);
+    }
+    await conexion.commit();
+    cobrada = { ...revision, cuenta: { ...revision.cuenta, recibido, cobrada_por: cobradaPor, pagada_en: ahora.toISOString() } };
+  } catch (err) {
+    await conexion.rollback();
+    console.error('[pedidos] No se pudo cobrar la cuenta dividida:', err);
+    res.status(500).json({ error: 'No se pudo cobrar la cuenta.' });
+    return;
+  } finally {
+    conexion.release();
+  }
+  const { cuenta, cambio, ultima } = cobrada;
+  console.info(`[pedidos] Orden ${idOrden}: ${req.usuario!.nombre} cobró la Cuenta ${numero} de ${cuenta.personas} ($${cuenta.importe.toFixed(2)})${ultima ? '; orden pagada' : ''}`);
+  const impresion = await imprimirCobroCuenta(idOrden, cuenta, { cobro: req.usuario!.nombre, recibido, cambio });
+  res.json({
+    ...(await ordenConDetalle(idOrden)),
+    cobro: { numero, personas: cuenta.personas, total: cuenta.importe, recibido, cambio, ordenPagada: ultima },
+    impresion,
+  });
+});
+
+/** Reimprimir el ticket de cobro de una cuenta dividida ya cobrada (con lo que pagó esa persona). */
+pedidosRouter.post('/ordenes/:idOrden/cuentas-divididas/:numero/ticket-cobro', soloRoles('admin', 'cajero'), async (req, res) => {
+  const idOrden = Number(req.params.idOrden);
+  const numero = Number(req.params.numero);
+  const cuenta = Number.isSafeInteger(idOrden) && idOrden > 0 ? (await leerCuentasDivididas(idOrden)).find((c) => c.numero === numero) : undefined;
+  if (!cuenta || !cuentaPagada(cuenta) || cuenta.recibido == null) {
+    res.status(409).json({ error: 'Esa cuenta no está cobrada.' });
+    return;
+  }
+  res.locals.sinCambios = true; // reimprimir no cambia nada: no se avisa a las pantallas
+  const cambio = Math.round((cuenta.recibido - cuenta.importe) * 100) / 100;
+  res.json({ impresion: await imprimirCobroCuenta(idOrden, cuenta, { cobro: cuenta.cobrada_por ?? req.usuario!.nombre, recibido: cuenta.recibido, cambio }, true) });
+});
+
 /* ---------- Quitar lo mandado por error (solo caja) ---------- */
 
 /**
@@ -424,6 +536,12 @@ async function bloquearOrdenParaQuitar(conexion: import('mysql2/promise').PoolCo
   }
   if (Number(ordenes[0].estatus) === 2) {
     res.status(409).json({ error: 'Esta orden ya se cobró; ya no se puede quitar nada de la cuenta.' });
+    return null;
+  }
+  // Dividida y con una cuenta ya cobrada: quitar algo cambiaría lo que esa persona pagó.
+  const cobrada = (await leerCuentasDivididas(idOrden, conexion)).find(cuentaPagada);
+  if (cobrada) {
+    res.status(409).json({ error: `Ya se cobró la Cuenta ${cobrada.numero} de esta orden dividida; ya no se puede quitar nada.` });
     return null;
   }
   return ordenes[0];

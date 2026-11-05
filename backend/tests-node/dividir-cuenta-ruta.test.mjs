@@ -28,7 +28,7 @@ test('dividir la cuenta guarda Cuenta 1…N, la manda a Cajas (PAGANDO) y devuel
     }
     if (sql.includes('FROM orden_extra')) return [[]];
     if (sql.includes('FROM orden_cuenta_dividida')) return [cuentas];
-    if (sql.includes('FROM orden WHERE idOrden = ? FOR UPDATE')) return [[{ idOrden: valores[0] }]];
+    if (sql.includes('FROM orden WHERE idOrden = ? FOR UPDATE')) return [[{ ...orden, idOrden: valores[0] }]];
     throw new Error(`Consulta sin simular: ${sql}`);
   };
   pool.query = consulta;
@@ -43,6 +43,16 @@ test('dividir la cuenta guarda Cuenta 1…N, la manda a Cajas (PAGANDO) y devuel
       }
       if (sql.startsWith('UPDATE orden SET estatus = 1')) {
         if (orden.estatus === 0) orden.estatus = 1;
+        return [{ affectedRows: 1 }];
+      }
+      if (sql.startsWith('UPDATE orden_cuenta_dividida SET recibido')) {
+        const [recibido, cobrada_por, pagada_en, , numero] = valores;
+        const cuenta = cuentas.find((c) => c.numero === numero && !c.pagada_en);
+        if (cuenta) Object.assign(cuenta, { recibido, cobrada_por, pagada_en });
+        return [{ affectedRows: cuenta ? 1 : 0 }];
+      }
+      if (sql.startsWith('UPDATE orden SET estatus = 2')) {
+        if (orden.estatus === 1) orden.estatus = 2;
         return [{ affectedRows: 1 }];
       }
       throw new Error(`Escritura sin simular: ${sql}`);
@@ -84,4 +94,42 @@ test('dividir la cuenta guarda Cuenta 1…N, la manda a Cajas (PAGANDO) y devuel
   assert.equal(otra.status, 201);
   assert.equal(cuentas.length, 2);
   assert.equal(orden.estatus, 1);
+
+  // En Cajas cada cuenta se cobra por separado.
+  const enviar = async (ruta, cuerpo) => {
+    const res = await fetch(`http://127.0.0.1:${servidor.address().port}/api/ordenes/7/${ruta}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(cuerpo ?? {}),
+    });
+    return { status: res.status, ...await res.json() };
+  };
+  const poco = await enviar('cuentas-divididas/1/cobrar', { recibido: 40 });
+  assert.equal(poco.status, 400);
+  assert.match(poco.error, /al menos \$50\.00/);
+
+  const primera = await enviar('cuentas-divididas/1/cobrar', { recibido: 100 });
+  assert.equal(primera.status, 200);
+  assert.deepEqual(primera.cobro, { numero: 1, personas: 2, total: 50, recibido: 100, cambio: 50, ordenPagada: false });
+  assert.equal(orden.estatus, 1, 'Falta la Cuenta 2: la orden sigue en Cajas');
+  assert.equal(cuentas[0].cobrada_por, 'Administrador');
+  assert.equal(primera.impresion.ok, false, 'Sin impresora el cobro queda hecho y se avisa');
+
+  assert.match((await enviar('cuentas-divididas/1/cobrar', { recibido: 100 })).error, /Cuenta 1 ya se cobró/);
+  assert.equal((await enviar('cuentas-divididas/3/cobrar', { recibido: 100 })).status, 404);
+  const redividir = await dividir({ modo: 'iguales', personas: 3, total: 100 });
+  assert.equal(redividir.status, 409);
+  assert.match(redividir.error, /Ya se cobró la Cuenta 1/);
+  assert.equal(cuentas.length, 2, 'La división cobrada en parte no se reemplaza');
+  assert.match((await enviar('cobrar', { recibido: 100 })).error, /cobra en Cajas las cuentas que faltan/);
+
+  const ultima = await enviar('cuentas-divididas/2/cobrar', { recibido: 50 });
+  assert.equal(ultima.status, 200);
+  assert.equal(ultima.cobro.ordenPagada, true);
+  assert.equal(ultima.cobro.cambio, 0);
+  assert.equal(orden.estatus, 2, 'Con todas cobradas la orden queda PAGADO');
+  assert.equal(ultima.orden.estatus, 2);
+
+  const reimpresion = await enviar('cuentas-divididas/2/ticket-cobro');
+  assert.equal(reimpresion.status, 200);
+  assert.equal(reimpresion.impresion.ok, false);
+  assert.equal((await enviar('cuentas-divididas/1/ticket-cobro')).status, 200);
 });

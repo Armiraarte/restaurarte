@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { calcularCuentasDivididas, divisionVigente, guardarCuentasDivididas, validarSolicitudDivision } from '../src/cuentasDivididas.ts';
+import { calcularCuentasDivididas, divisionVigente, guardarCuentasDivididas, revisarCobroCuenta, validarSolicitudDivision } from '../src/cuentasDivididas.ts';
 import { unidadesDeCuenta } from '../src/dividirCuenta.ts';
 import { lineasTicketCuentaDividida } from '../src/ticketCuentaDividida.ts';
 import { lineasTicketCobro } from '../src/ticketCobro.ts';
@@ -89,6 +89,37 @@ test('ticket de cada persona: CUENTA N DE M con sus productos o su parte igual',
   for (const esperado of ['Mesa 1 · PARA LLEVAR', 'CUENTA 1 DE 5', '*** REIMPRESIÓN ***', 'Parte igual de la cuenta', 'Total de la orden | $990.00', 'Dividida entre 5 personas', 'TOTAL A PAGAR | $198.00']) {
     assert.ok(iguales.includes(esperado), esperado);
   }
+  assert.ok(!iguales.some((t) => /Efectivo|Cambio|PAGADA/.test(t)), 'Sin cobro no lleva efectivo ni cambio');
+
+  // Al cobrar esa cuenta en Cajas: PAGADA, quién cobró, efectivo y cambio.
+  const cobrada = textos(lineasTicketCuentaDividida({ ...base, cuenta: { numero: 2, personas: 3, modo: 'iguales', importe: 71, total_orden: 213, productos: [], extras: [] },
+    cobro: { cobro: 'Ana', recibido: 100, cambio: 29 } }));
+  for (const esperado of ['CUENTA 2 DE 3 · PAGADA', 'Atendió: Tablet 01 | Cobró: Ana', 'TOTAL A PAGAR | $71.00', 'Efectivo | $100.00', 'Cambio | $29.00']) {
+    assert.ok(cobrada.includes(esperado), esperado);
+  }
+});
+
+test('cobrar una cuenta dividida: solo en Cajas, con la división vigente, una vez y con efectivo suficiente', () => {
+  const cuenta = (numero, importe, pagada_en = null) => ({ numero, personas: 3, modo: 'iguales', importe, total_orden: 100, productos: [], extras: [],
+    creado_por: 'Tablet 01', creado_en: '', recibido: pagada_en ? importe : null, cobrada_por: pagada_en ? 'Ana' : null, pagada_en });
+  const cuentas = [cuenta(1, 33.34), cuenta(2, 33.33), cuenta(3, 33.33)];
+  const enCajas = { estatus: 1, total: 100 };
+
+  const ok = revisarCobroCuenta(enCajas, cuentas, 2, 50);
+  assert.equal(ok.cuenta.numero, 2);
+  assert.equal(ok.cambio, 16.67);
+  assert.equal(ok.ultima, false);
+  assert.equal(revisarCobroCuenta(enCajas, cuentas, 1, 33.34).cambio, 0, 'Exacto');
+
+  assert.deepEqual(revisarCobroCuenta(enCajas, cuentas, 2, 33.32), { status: 400, error: 'El monto recibido debe ser de al menos $33.33.' });
+  assert.equal(revisarCobroCuenta(enCajas, cuentas, 4, 50).status, 404);
+  assert.equal(revisarCobroCuenta({ estatus: 0, total: 100 }, cuentas, 1, 50).status, 409);
+  assert.match(revisarCobroCuenta({ estatus: 2, total: 100 }, cuentas, 1, 50).error, /ya está pagada/);
+  assert.match(revisarCobroCuenta({ estatus: 1, total: 120 }, cuentas, 1, 50).error, /cambió después de dividirla/);
+
+  const dosPagadas = [cuenta(1, 33.34, '2026-11-05T03:00:00Z'), cuenta(2, 33.33), cuenta(3, 33.33, '2026-11-05T03:05:00Z')];
+  assert.match(revisarCobroCuenta(enCajas, dosPagadas, 1, 50).error, /Cuenta 1 ya se cobró/);
+  assert.equal(revisarCobroCuenta(enCajas, dosPagadas, 2, 50).ultima, true, 'La última que falta deja la orden pagada');
 });
 
 test('ticket de cobro: marca la cuenta dividida y lo de cada cuenta', () => {

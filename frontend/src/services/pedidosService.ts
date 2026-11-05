@@ -147,8 +147,14 @@ export interface CuentaDividida {
   extras: { descripcion: string; importe: number }[];
   creado_por: string;
   creado_en: string;
+  /** Cobro en Cajas (cada cuenta se paga aparte); null = por cobrar. */
+  recibido?: number | null;
+  cobrada_por?: string | null;
+  pagada_en?: string | null;
 }
 export type ImpresionCuentas = { ok: boolean; impresas: number; error?: string };
+
+export const cuentaPagada = (c: { pagada_en?: string | null; pagada?: boolean }) => c.pagada === true || c.pagada_en != null;
 
 /** La división sigue sirviendo si sus cuentas suman el total actual (no se agregó nada después). */
 export const divisionVigente = (cuentas: { importe: number }[] | undefined, total: number) =>
@@ -192,6 +198,23 @@ export const cobrarOrden = (idOrden: number, recibido: number) =>
     cobro: { total: number; recibido: number; cambio: number };
     impresion: { ok: boolean; error?: string };
   }>(`/ordenes/${idOrden}/cobrar`, { method: 'POST', body: JSON.stringify({ recibido }) });
+
+/**
+ * Cobra una sola cuenta de una orden dividida (Cajas: una tarjeta por cuenta) e imprime su ticket con efectivo y cambio.
+ * Al cobrar la última, la orden pasa a PAGADO (`cobro.ordenPagada`).
+ */
+export const cobrarCuentaDividida = (idOrden: number, numero: number, recibido: number) =>
+  pedir<{
+    orden: OrdenBD;
+    detalle: DetalleOrdenBD[];
+    cuentas_divididas: CuentaDividida[];
+    cobro: { numero: number; personas: number; total: number; recibido: number; cambio: number; ordenPagada: boolean };
+    impresion: { ok: boolean; error?: string };
+  }>(`/ordenes/${idOrden}/cuentas-divididas/${numero}/cobrar`, { method: 'POST', body: JSON.stringify({ recibido }) });
+
+/** Vuelve a imprimir el ticket de cobro de una cuenta dividida ya cobrada. */
+export const reimprimirCobroCuenta = (idOrden: number, numero: number) =>
+  pedir<{ impresion: { ok: boolean; error?: string } }>(`/ordenes/${idOrden}/cuentas-divididas/${numero}/ticket-cobro`, { method: 'POST' });
 
 /** Vuelve a imprimir el ticket de cobro de una orden pagada (sin `recibido` no imprime efectivo ni cambio). */
 export const reimprimirTicketCobro = (idOrden: number, recibido?: number) =>

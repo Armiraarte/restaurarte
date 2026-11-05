@@ -1,13 +1,14 @@
 // Cuentas divididas (botón Dividir en la pantalla de la orden): cada persona queda guardada como Cuenta 1…N
-// de la misma orden (tabla orden_cuenta_dividida, migración 2026_10_25_000031) y se imprime un ticket por persona.
-// Dividir también pide la cuenta (la orden pasa a PAGANDO y aparece en Cajas). El total y el cobro no cambian:
-// Ventas y el corte la siguen contando una sola vez, y en Cajas, Ventas, el detalle de la cuenta y el ticket de
-// cobro se ve que fue una cuenta dividida.
+// de la misma orden (tabla orden_cuenta_dividida, migraciones 2026_10_25_000031 y 2026_11_05_000032) y se imprime
+// un ticket por persona. Dividir también pide la cuenta (la orden pasa a PAGANDO) y en Cajas aparece una tarjeta
+// por cuenta: cada persona paga la suya (recibido, cobrada_por, pagada_en) y, al pagarse la última, la orden queda
+// PAGADO. Ventas y el corte cuentan la orden una sola vez, cuando ya está pagada completa.
 //
 // El servidor vuelve a calcular las partes con lo guardado en la base (no confía en los importes de la pantalla):
 //   iguales   → el total entre N; los centavos que sobran van a las primeras cuentas.
 //   productos → cada pieza (clave de dividirCuenta.ts) asignada a una persona; todas deben tener dueño.
-import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
+// Con alguna cuenta ya cobrada, la división queda fija: no se vuelve a dividir ni se quita nada de la orden.
+import type { PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import { pool } from './db.js';
 import { repartir, unidadesDeCuenta } from './dividirCuenta.js';
 import { productoTicketCobro, type RenglonCobro } from './ticketCobro.js';
@@ -32,7 +33,16 @@ export interface CuentaDividida {
   extras: { descripcion: string; importe: number }[];
   creado_por: string;
   creado_en: string;
+  /** Cobro en Cajas; null = por cobrar. */
+  recibido: number | null;
+  cobrada_por: string | null;
+  pagada_en: string | null;
 }
+
+/** Una cuenta recién calculada (todavía sin guardar ni cobrar). */
+export type CuentaCalculada = Omit<CuentaDividida, 'creado_por' | 'creado_en' | 'recibido' | 'cobrada_por' | 'pagada_en'>;
+
+export const cuentaPagada = (c: { pagada_en?: string | null }) => c.pagada_en != null;
 
 export interface RenglonDivision extends RenglonCobro {
   idDetalle_Orden: number;
@@ -70,7 +80,7 @@ export function validarSolicitudDivision(s: any): string | null {
 export function calcularCuentasDivididas(
   orden: { total: number; detalle: RenglonDivision[]; extras: { id: number; descripcion: string; importe: number }[] },
   s: SolicitudDivision,
-): { cuentas: Omit<CuentaDividida, 'creado_por' | 'creado_en'>[] } | { error: string } {
+): { cuentas: CuentaCalculada[] } | { error: string } {
   const totalCentavos = Math.round(orden.total * 100);
   const base = { personas: s.personas, modo: s.modo, total_orden: pesos(totalCentavos) };
   if (s.modo === 'iguales') {
@@ -130,6 +140,39 @@ export function calcularCuentasDivididas(
 export const divisionVigente = (cuentas: { importe: number }[], total: number) =>
   cuentas.length > 0 && cuentas.reduce((acc, c) => acc + Math.round(c.importe * 100), 0) === Math.round(total * 100);
 
+export type RevisionCobroCuenta =
+  | { status: 400 | 404 | 409; error: string }
+  | { cuenta: CuentaDividida; cambio: number; ultima: boolean };
+
+/**
+ * ¿Se puede cobrar la Cuenta `numero` con `recibido` (efectivo)? La orden debe estar en Cajas (PAGANDO), la división
+ * debe seguir sumando su total y la cuenta no debe estar pagada. `ultima` = al cobrarla quedan todas pagadas.
+ */
+export function revisarCobroCuenta(
+  orden: { estatus: number; total: number },
+  cuentas: CuentaDividida[],
+  numero: number,
+  recibido: number,
+): RevisionCobroCuenta {
+  if (orden.estatus === 2) return { status: 409, error: 'Esta orden ya está pagada.' };
+  if (orden.estatus !== 1) return { status: 409, error: 'La orden no ha pedido la cuenta.' };
+  const cuenta = cuentas.find((c) => c.numero === numero);
+  if (!cuenta) return { status: 404, error: `Esta orden no tiene Cuenta ${numero}.` };
+  if (!divisionVigente(cuentas, orden.total)) {
+    return { status: 409, error: 'La orden cambió después de dividirla: vuelve a dividirla o cóbrala completa.' };
+  }
+  if (cuentaPagada(cuenta)) return { status: 409, error: `La Cuenta ${numero} ya se cobró.` };
+  const importe = Math.round(cuenta.importe * 100);
+  if (!Number.isFinite(recibido) || Math.round(recibido * 100) < importe) {
+    return { status: 400, error: `El monto recibido debe ser de al menos $${cuenta.importe.toFixed(2)}.` };
+  }
+  return {
+    cuenta,
+    cambio: pesos(Math.round(recibido * 100) - importe),
+    ultima: cuentas.every((c) => c.numero === numero || cuentaPagada(c)),
+  };
+}
+
 /* ---------- Base de datos ---------- */
 
 // Mientras no se corra la migración, la tabla no existe: todo sigue funcionando como antes y solo no se puede
@@ -162,38 +205,60 @@ const deFila = (f: RowDataPacket): CuentaDividida => {
     productos: contenido.productos ?? [],
     extras: contenido.extras ?? [],
     creado_por: f.creado_por,
-    creado_en: f.creado_en instanceof Date ? f.creado_en.toISOString() : String(f.creado_en),
+    creado_en: fechaTexto(f.creado_en)!,
+    // Sin la migración 2026_11_05_000032 las columnas no existen: todas quedan por cobrar.
+    recibido: f.recibido == null ? null : Number(f.recibido),
+    cobrada_por: f.cobrada_por ?? null,
+    pagada_en: fechaTexto(f.pagada_en),
   };
 };
+const fechaTexto = (v: unknown) => (v == null ? null : v instanceof Date ? v.toISOString() : String(v));
 
-/** Las cuentas guardadas de una orden (vacío si no se dividió). */
-export async function leerCuentasDivididas(idOrden: number): Promise<CuentaDividida[]> {
+/**
+ * Las cuentas guardadas de una orden (vacío si no se dividió). Con `conexion`, dentro de su transacción y
+ * bloqueadas (para cobrar una sin que otra caja la cobre al mismo tiempo).
+ */
+export async function leerCuentasDivididas(idOrden: number, conexion?: PoolConnection): Promise<CuentaDividida[]> {
   if (!(await hayTablaCuentasDivididas())) return [];
-  const [filas] = await pool!.query<RowDataPacket[]>(
-    'SELECT * FROM orden_cuenta_dividida WHERE idOrden = ? ORDER BY numero', [idOrden],
+  const [filas] = await (conexion ?? pool!).query<RowDataPacket[]>(
+    `SELECT * FROM orden_cuenta_dividida WHERE idOrden = ? ORDER BY numero${conexion ? ' FOR UPDATE' : ''}`, [idOrden],
   );
   return filas.map(deFila);
 }
 
-/** Lo de cada cuenta de las órdenes divididas (para las listas de Cajas y Ventas). */
-export async function cuentasPorOrden(ids: number[]): Promise<Map<number, { numero: number; importe: number }[]>> {
-  const porOrden = new Map<number, { numero: number; importe: number }[]>();
+/** Lo de cada cuenta de las órdenes divididas (para las listas de Cajas y Ventas), y si ya se cobró. */
+export async function cuentasPorOrden(ids: number[]): Promise<Map<number, { numero: number; importe: number; pagada: boolean }[]>> {
+  const porOrden = new Map<number, { numero: number; importe: number; pagada: boolean }[]>();
   if (!ids.length || !(await hayTablaCuentasDivididas())) return porOrden;
   const [filas] = await pool!.query<RowDataPacket[]>(
-    'SELECT idOrden, numero, importe FROM orden_cuenta_dividida WHERE idOrden IN (?) ORDER BY idOrden, numero', [ids],
+    'SELECT * FROM orden_cuenta_dividida WHERE idOrden IN (?) ORDER BY idOrden, numero', [ids],
   );
   for (const f of filas) {
     const id = Number(f.idOrden);
-    porOrden.set(id, [...(porOrden.get(id) ?? []), { numero: Number(f.numero), importe: Number(f.importe) }]);
+    porOrden.set(id, [...(porOrden.get(id) ?? []), { numero: Number(f.numero), importe: Number(f.importe), pagada: f.pagada_en != null }]);
   }
   return porOrden;
+}
+
+/** Marca la Cuenta `numero` como cobrada (dentro de la transacción de quien llama). false = ya estaba pagada. */
+export async function marcarCuentaPagada(
+  conexion: PoolConnection,
+  idOrden: number,
+  numero: number,
+  cobro: { recibido: number; cobradaPor: string; ahora: Date },
+): Promise<boolean> {
+  const [resultado] = await conexion.execute<ResultSetHeader>(
+    'UPDATE orden_cuenta_dividida SET recibido = ?, cobrada_por = ?, pagada_en = ? WHERE idOrden = ? AND numero = ? AND pagada_en IS NULL',
+    [cobro.recibido.toFixed(2), cobro.cobradaPor.slice(0, 60), cobro.ahora, idOrden, numero],
+  );
+  return resultado.affectedRows === 1;
 }
 
 /** Reemplaza la división anterior de la orden por la nueva (dentro de la transacción de quien llama). */
 export async function guardarCuentasDivididas(
   conexion: PoolConnection,
   idOrden: number,
-  cuentas: Omit<CuentaDividida, 'creado_por' | 'creado_en'>[],
+  cuentas: CuentaCalculada[],
   creadoPor: string,
   ahora: Date,
 ) {

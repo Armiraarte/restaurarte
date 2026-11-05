@@ -54,6 +54,8 @@ import {
   RepartoPedido,
   textoReparto,
   CuentaDividida,
+  cuentaPagada,
+  divisionVigente,
   nombreDetalle,
 } from '../services/pedidosService';
 import { imprimirTicketCocina } from '../services/ticketCocinaService';
@@ -362,7 +364,8 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
 
   // Caja: quitar de la cuenta un producto o extra mandado por error (abierta o en cobro; pagada ya no).
   const [aQuitar, setAQuitar] = useState<AQuitar | null>(null);
-  const quitarHabilitado = puedeQuitar && idOrden !== null && orden !== null && orden.estatus !== 2;
+  // Con una cuenta dividida ya cobrada no se quita nada: cambiaría lo que esa persona pagó.
+  const quitarHabilitado = puedeQuitar && idOrden !== null && orden !== null && orden.estatus !== 2 && !cuentasDivididas.some(cuentaPagada);
   const pedirQuitar = quitarHabilitado
     ? (idDetalle: number) => {
       const linea = detalle.find((d) => d.idDetalle_Orden === idDetalle);
@@ -1147,6 +1150,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
         <DialogoQuitarDelPedido
           idOrden={orden.idOrden}
           aQuitar={aQuitar}
+          dividida={divisionVigente(cuentasDivididas, orden.total)}
           onCancelar={() => setAQuitar(null)}
           onQuitado={(datos) => {
             actualizarOrden(datos);
@@ -1183,6 +1187,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
                 extras={extrasEnviados}
                 guardadas={cuentasDivididas}
                 sinEnviar={hayNuevo}
+                ordenPagada={orden.estatus === 2}
                 onGuardadas={actualizarOrden}
                 onCerrar={() => setDividiendo(false)}
               />

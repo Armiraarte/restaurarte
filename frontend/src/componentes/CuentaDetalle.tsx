@@ -4,9 +4,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
-import { AlertTriangle, Clock, Home, Loader2, Printer, ShoppingBag, Split, Tablet, Trash2, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, Home, Loader2, Printer, ShoppingBag, Split, Tablet, Trash2, X } from 'lucide-react';
 import {
-  CuentaDividida, DetalleOrdenBD, divisionVigente, ESTATUS_ORDEN, ExtraOrdenBD, nombreDetalle, obtenerOrden, OrdenBD, reimprimirCuentasDivididas,
+  CuentaDividida, cuentaPagada, DetalleOrdenBD, divisionVigente, ESTATUS_ORDEN, ExtraOrdenBD, nombreDetalle, obtenerOrden, OrdenBD,
+  reimprimirCuentasDivididas,
 } from '../services/pedidosService';
 import { useEnVivo } from '../services/enVivo';
 import { COLOR_ESTATUS_ORDEN, EtiquetaCarneExtra, EtiquetaConPapas, EtiquetaComplementosExtra, EtiquetaConQueso, EtiquetaSinQueso } from './PedidoEnviado';
@@ -93,7 +94,8 @@ export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones, pu
   const estatus = orden?.estatus ?? 0;
   const paraLlevar = orden?.tipo_orden === 2;
   const vigente = divisionVigente(cuentas, orden?.total ?? 0);
-  const quitarHabilitado = puedeQuitar && orden !== null && estatus !== 2;
+  // Con una cuenta dividida ya cobrada no se quita nada: cambiaría lo que esa persona pagó.
+  const quitarHabilitado = puedeQuitar && orden !== null && estatus !== 2 && !cuentas.some(cuentaPagada);
 
   const reimprimirCuentas = async () => {
     setImpresionCuentas({ cargando: true });
@@ -250,7 +252,16 @@ export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones, pu
                 {cuentas.map((c) => (
                   <li key={c.numero} className="py-1.5">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-bold text-violet-900">Cuenta {c.numero}</span>
+                      <span className="flex flex-wrap items-center gap-1.5 min-w-0">
+                        <span className="text-sm font-bold text-violet-900">Cuenta {c.numero}</span>
+                        {cuentaPagada(c) ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                            <CheckCircle2 className="w-3 h-3" /> PAGADA{c.cobrada_por ? ` · ${c.cobrada_por}` : ''}{c.pagada_en ? ` · ${hora(c.pagada_en)}` : ''}
+                          </span>
+                        ) : estatus === 1 && vigente && (
+                          <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800">POR COBRAR</span>
+                        )}
+                      </span>
                       <span className="font-mono font-bold">{dinero(c.importe)}</span>
                     </div>
                     {c.modo === 'productos' && (
@@ -285,6 +296,7 @@ export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones, pu
           <DialogoQuitarDelPedido
             idOrden={idOrden}
             aQuitar={aQuitar}
+            dividida={vigente}
             onCancelar={() => setAQuitar(null)}
             onQuitado={() => {
               setAQuitar(null);

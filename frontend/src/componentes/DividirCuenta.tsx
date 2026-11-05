@@ -1,27 +1,22 @@
 // Dividir la cuenta (botón junto al historial): cuánto le toca a cada persona, en partes iguales o por productos.
+// Por productos, los platillos salen como se pidieron (MIX con sus extras, MIXTAS, varias piezas juntas): un toque
+// da el platillo completo a la persona elegida y, si lo comparten, se reparten sus piezas.
 // «Guardar e imprimir» la registra como Cuenta 1…N de la orden, imprime un ticket por persona en caja y manda
-// la cuenta a Cajas (como «Pedir cuenta»). La caja cobra el total como siempre; en Cajas y Ventas se ve dividida.
+// la orden a Cajas, donde cada cuenta sale aparte para que cada persona pague la suya.
 import React, { useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Loader2, Lock, Minus, Plus, Printer, Split, Users, X } from 'lucide-react';
 import {
-  CuentaDividida, DetalleOrdenBD, divisionVigente, ExtraOrdenBD, guardarCuentasDivididas, nombreDetalle, OrdenBD, reimprimirCuentasDivididas,
+  CuentaDividida, cuentaPagada, DetalleOrdenBD, divisionVigente, ExtraOrdenBD, guardarCuentasDivididas, nombreDetalle, OrdenBD,
+  reimprimirCuentasDivididas, textoCarneExtra, textoComplementosExtra,
 } from '../services/pedidosService';
 import { alternarAsignacion, partesIguales, totalesPorPersona, unidadesDeCuenta } from '../services/dividirCuenta';
+import { agruparPiezas, alternarGrupo, estadoGrupo } from '../services/gruposDivision';
+import { colorCuenta } from './coloresCuenta';
 
 const pesos = (centavos: number) => `$${(centavos / 100).toFixed(2)}`;
 const MAX_PERSONAS = 12;
-// Un color por persona (se repiten después de 8).
-const COLORES = [
-  'bg-sky-100 border-sky-400 text-sky-900',
-  'bg-amber-100 border-amber-400 text-amber-900',
-  'bg-emerald-100 border-emerald-400 text-emerald-900',
-  'bg-rose-100 border-rose-400 text-rose-900',
-  'bg-violet-100 border-violet-400 text-violet-900',
-  'bg-lime-100 border-lime-500 text-lime-900',
-  'bg-orange-100 border-orange-400 text-orange-900',
-  'bg-cyan-100 border-cyan-400 text-cyan-900',
-];
-const color = (persona: number) => COLORES[persona % COLORES.length];
+// Un color por persona; en Cajas su cuenta sale con el mismo color.
+const color = (persona: number) => colorCuenta(persona).suave;
 const hora = (fecha: string) => new Date(fecha).toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' });
 
 type Aviso = { tipo: 'ok' | 'aviso' | 'error'; texto: string; reimprimir?: boolean };
@@ -31,7 +26,7 @@ type Aviso = { tipo: 'ok' | 'aviso' | 'error'; texto: string; reimprimir?: boole
  * en Cajas (al guardar); null al reimprimir.
  */
 function avisoImpresion(n: number, impresion: { ok: boolean; impresas: number; error?: string }, enCajas: boolean | null): Aviso {
-  const cajas = enCajas ? ' La cuenta ya está en Cajas para cobrarla.' : '';
+  const cajas = enCajas ? ` En Cajas quedan las ${n} cuentas para cobrar cada una por separado.` : '';
   if (impresion.ok) {
     return { tipo: 'ok', texto: `${enCajas !== null ? `Listo: se guardaron Cuenta 1 a ${n} y se` : 'Se'} imprimieron ${n} tickets en caja.${cajas}` };
   }
@@ -48,6 +43,7 @@ export function DividirCuenta({
   extras,
   guardadas,
   sinEnviar = false,
+  ordenPagada = false,
   onGuardadas,
   onCerrar,
 }: {
@@ -60,6 +56,8 @@ export function DividirCuenta({
   guardadas: CuentaDividida[];
   /** Hay productos en «Nuevo pedido» sin enviar: al pasar a Cajas se perderían. */
   sinEnviar?: boolean;
+  /** La orden ya se cobró: solo se pueden reimprimir los tickets. */
+  ordenPagada?: boolean;
   /** La orden como quedó (ya en Cajas) con sus cuentas. */
   onGuardadas: (datos: { orden: OrdenBD; detalle: DetalleOrdenBD[]; extras: ExtraOrdenBD[]; cuentas_divididas: CuentaDividida[] }) => void;
   onCerrar: () => void;
@@ -90,6 +88,24 @@ export function DividirCuenta({
       ),
     [detalle, extras],
   );
+  // Los mismos productos, agrupados en platillos como se pidieron.
+  const grupos = useMemo(
+    () =>
+      agruparPiezas(
+        unidades,
+        detalle.map((d) => ({
+          clave: String(d.idDetalle_Orden),
+          mixGrupo: d.mix_grupo ?? null,
+          titulo: `${d.categoria} · ${nombreDetalle(d)}`,
+          detalle: [
+            d.sin_queso && 'SIN QUESO', d.con_queso && 'CON QUESO', d.carne_extra > 0 && textoCarneExtra(d.carne_extra), d.opciones?.papas && 'CON PAPAS',
+            d.opciones?.complementosExtra?.length && textoComplementosExtra(d.opciones.complementosExtra.map((c) => c.nombre)),
+          ].filter(Boolean).join(' · ') || undefined,
+        })),
+        extras.map((e) => ({ clave: String(e.id), mixGrupo: e.mix_grupo ?? null, titulo: e.descripcion })),
+      ),
+    [unidades, detalle, extras],
+  );
   const iguales = partesIguales(total, personas);
   const { totales, sinAsignar } = totalesPorPersona(unidades, asignadas, personas);
 
@@ -107,13 +123,24 @@ export function DividirCuenta({
     setAsignadas((actual) => alternarAsignacion(actual, clave, activa));
     setAviso(null);
   };
+  // Tocar el platillo: completo para la persona elegida (o se lo quita si ya era suyo).
+  const tocarGrupo = (claves: string[]) => {
+    setAsignadas((actual) => alternarGrupo(vigentes(actual), claves, activa));
+    setAviso(null);
+  };
+  // Solo cuentan las personas que siguen en la división.
+  const vigentes = (actual: Record<string, number>) => Object.fromEntries(Object.entries(actual).filter(([, p]) => p < personas));
+  // Ya se cobró alguna cuenta en Cajas: la división ya no se puede cambiar.
+  const cobradas = guardadas.filter(cuentaPagada);
 
   // Por productos solo se guarda con todo asignado y cada persona con algo.
   const sinNada = modo === 'productos'
     ? Array.from({ length: personas }, (_, i) => i).find((i) => !unidades.some((u) => asignadas[u.clave] === i))
     : undefined;
   const motivoNoGuardar =
-    sinEnviar ? 'Primero envía o quita lo que falta por enviar: al guardar, la cuenta pasa a Cajas.'
+    cobradas.length ? `Ya se cobró la Cuenta ${cobradas[0].numero} en caja; la división ya no se puede cambiar.`
+    : ordenPagada ? 'Esta orden ya se cobró; la división ya no se puede cambiar.'
+    : sinEnviar ? 'Primero envía o quita lo que falta por enviar: al guardar, la cuenta pasa a Cajas.'
       : modo === 'productos' && unidades.length === 0 ? 'Todavía no hay nada enviado.'
       : modo === 'productos' && sinAsignar > 0 ? `Falta asignar ${pesos(sinAsignar)} para poder guardar.`
         : sinNada !== undefined ? `La Persona ${sinNada + 1} no tiene productos.`
@@ -212,7 +239,9 @@ export function DividirCuenta({
           <div className={`rounded-xl border px-3 py-2 text-sm flex items-start gap-2 ${vigente ? 'bg-violet-50 border-violet-200 text-violet-900' : 'bg-amber-50 border-amber-300 text-amber-900'}`}>
             {vigente ? <Split className="w-5 h-5 shrink-0" /> : <AlertTriangle className="w-5 h-5 shrink-0" />}
             <span className="flex-1 min-w-0">
-              {vigente
+              {cobradas.length
+                ? `Ya está guardada en ${guardadas.length} cuentas y en caja ya se ${cobradas.length === 1 ? 'cobró 1' : `cobraron ${cobradas.length}`}.`
+                : vigente
                 ? `Ya está guardada en ${guardadas.length} cuentas (${guardadas[0].creado_por}, ${hora(guardadas[0].creado_en)}). Si guardas otra vez, se reemplaza.`
                 : `Se guardó en ${guardadas.length} cuentas por ${pesos(Math.round(guardadas[0].total_orden * 100))}, pero la orden cambió después. Vuelve a guardarla.`}
             </span>
@@ -253,34 +282,84 @@ export function DividirCuenta({
                   <span className="font-mono text-lg font-black">{pesos(sinAsignar)}</span>
                 </li>
               </ul>
-              <p className="mt-2 text-xs text-neutral-500">Para cambiar un producto de persona, desmárcalo primero con quien lo tiene asignado.</p>
+              <p className="mt-2 text-xs text-neutral-500">
+                Toca un platillo para dárselo completo a la persona elegida. Si lo comparten, toca sus piezas. Para cambiarlo de
+                persona, desmárcalo primero con quien lo tiene.
+              </p>
             </div>
 
+            {/* Un platillo por tarjeta, como se pidió */}
             <ul className="space-y-2">
-              {unidades.map((u) => {
-                const persona = asignadas[u.clave];
-                const asignada = persona !== undefined && persona < personas;
-                const bloqueada = asignada && persona !== activa;
+              {grupos.map((g) => {
+                const claves = g.piezas.map((p) => p.clave);
+                const actuales = vigentes(asignadas);
+                const { dueno, personas: cuantas, libres } = estadoGrupo(actuales, claves);
+                const mias = claves.filter((c) => actuales[c] === activa).length;
+                const ajeno = libres === 0 && mias === 0; // todo lo tienen otras personas
+                const estado =
+                  dueno !== null ? (dueno === activa ? 'Tócalo otra vez para quitárselo' : `Lo tiene la Persona ${dueno + 1}`)
+                    : cuantas > 0 ? `Compartido: ${claves.length - libres} de ${claves.length} piezas asignadas`
+                      : g.piezas.length > 1 ? `Toca para dárselo completo a la Persona ${activa + 1}` : null;
                 return (
-                  <li key={u.clave}>
+                  <li key={g.clave} className={`rounded-xl border-2 overflow-hidden ${dueno !== null ? color(dueno) : g.mix ? 'bg-violet-50/40 border-violet-300' : 'bg-white border-neutral-200'}`}>
                     <button
                       type="button"
-                      onClick={() => tocarPieza(u.clave)}
-                      disabled={bloqueada}
-                      aria-pressed={asignada && persona === activa}
-                      className={`w-full min-h-14 px-3 py-2 rounded-xl border-2 flex items-center justify-between gap-2 text-left cursor-pointer touch-manipulation disabled:cursor-not-allowed disabled:opacity-60 ${
-                        asignada ? color(persona) : 'bg-white border-neutral-200 hover:border-neutral-300'
-                      }`}
+                      onClick={() => tocarGrupo(claves)}
+                      disabled={ajeno}
+                      aria-pressed={dueno === activa}
+                      className="w-full min-h-14 px-3 py-2 flex items-center justify-between gap-2 text-left cursor-pointer touch-manipulation disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      <span className="min-w-0">
-                        <span className="block text-sm font-semibold leading-tight break-words">{u.nombre}</span>
-                        {u.detalle && <span className="block text-[11px] text-neutral-500">{u.detalle}</span>}
+                      <span className="min-w-0 flex items-start gap-2">
+                        {g.mix ? (
+                          <span className="shrink-0 mt-0.5 px-2 py-1 rounded-md bg-violet-600 text-white text-xs font-black tracking-wide">MIX</span>
+                        ) : g.piezas.length > 1 && (
+                          <span className="shrink-0 min-w-8 h-8 px-2 rounded-lg bg-amber-100 text-amber-900 font-mono font-bold flex items-center justify-center">{g.piezas.length}</span>
+                        )}
+                        <span className="min-w-0">
+                          <span className="block text-sm font-semibold leading-tight break-words">{g.titulo}</span>
+                          {g.detalle && <span className="block text-[11px] font-semibold text-neutral-600 break-words">{g.detalle}</span>}
+                          {estado && <span className="block text-[11px] text-neutral-500">{estado}</span>}
+                        </span>
                       </span>
                       <span className="shrink-0 text-right">
-                        <span className="block font-mono text-sm font-bold">{pesos(u.centavos)}</span>
-                        {asignada && <span className="flex items-center justify-end gap-1 text-[11px] font-black">{bloqueada && <Lock aria-hidden="true" className="w-3 h-3" />}Persona {persona + 1}</span>}
+                        <span className="block font-mono text-sm font-bold">{pesos(g.centavos)}</span>
+                        {dueno !== null && (
+                          <span className="flex items-center justify-end gap-1 text-[11px] font-black">
+                            {dueno !== activa && <Lock aria-hidden="true" className="w-3 h-3" />}Persona {dueno + 1}
+                          </span>
+                        )}
                       </span>
                     </button>
+                    {/* Si lo comparten: cada pieza por separado */}
+                    {g.piezas.length > 1 && (
+                      <div className="px-2 pb-2 grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                        {g.piezas.map((u) => {
+                          const persona = actuales[u.clave];
+                          const asignada = persona !== undefined;
+                          const bloqueada = asignada && persona !== activa;
+                          const nombre = g.mix && u.detalle && !u.clave.startsWith('extra-') ? `${u.detalle} · ${u.nombre}` : u.nombre;
+                          return (
+                            <button
+                              key={u.clave}
+                              type="button"
+                              onClick={() => tocarPieza(u.clave)}
+                              disabled={bloqueada}
+                              aria-pressed={asignada && persona === activa}
+                              aria-label={`${nombre} ${pesos(u.centavos)}${asignada ? `, Persona ${persona + 1}` : ''}`}
+                              className={`min-h-11 px-2 py-1 rounded-lg border-2 text-left text-xs leading-tight cursor-pointer touch-manipulation disabled:cursor-not-allowed disabled:opacity-60 ${
+                                asignada ? color(persona) : 'bg-white border-neutral-200 hover:border-neutral-300'
+                              }`}
+                            >
+                              <span className="block font-semibold break-words">{nombre}</span>
+                              <span className="flex items-center justify-between gap-1 font-mono">
+                                <span>{pesos(u.centavos)}</span>
+                                {asignada && <span className="flex items-center gap-0.5 font-sans font-black">{bloqueada && <Lock aria-hidden="true" className="w-3 h-3" />}P{persona + 1}</span>}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </li>
                 );
               })}
@@ -289,7 +368,7 @@ export function DividirCuenta({
         )}
         <p className="text-xs text-neutral-500">
           «Guardar e imprimir» la registra como Cuenta 1 a {personas} de esta orden, imprime un ticket por persona en caja
-          y manda la cuenta a Cajas para cobrarla (ya no se le pueden agregar productos).
+          y manda a Cajas las {personas} cuentas para que cada quien pague la suya (ya no se le pueden agregar productos).
         </p>
       </div>
 

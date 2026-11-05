@@ -1,11 +1,13 @@
 // Cobrar una orden (Cajas): se captura con cuánto paga el cliente, se calcula el cambio y, al confirmar,
 // la orden pasa a PAGADO (orden.estatus = 2) y se imprime el ticket de cobro.
+// Con `cuenta` se cobra solo esa cuenta de una orden dividida; la orden queda pagada al cobrar la última.
 //   POST /api/ordenes/:idOrden/cobrar        { recibido }
 //   POST /api/ordenes/:idOrden/ticket-cobro  { recibido }  (reimprimir)
+//   POST /api/ordenes/:idOrden/cuentas-divididas/:numero/cobrar  { recibido }  (y …/ticket-cobro para reimprimir)
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { AlertTriangle, Banknote, CheckCircle2, Delete, Loader2, Printer, X } from 'lucide-react';
-import { cobrarOrden, reimprimirTicketCobro } from '../services/pedidosService';
+import { cobrarCuentaDividida, cobrarOrden, reimprimirCobroCuenta, reimprimirTicketCobro } from '../services/pedidosService';
 
 const dinero = (n: number) => `$${n.toFixed(2)}`;
 const BILLETES = [50, 100, 200, 500, 1000];
@@ -23,15 +25,19 @@ function limpiarMonto(valor: string): string {
 interface Props {
   idOrden: number;
   etiqueta: string;
+  /** Lo que se cobra: el total de la orden o, con `cuenta`, lo de esa cuenta. */
   total: number;
+  /** Cuenta de una orden dividida: se cobra solo esa. */
+  cuenta?: { numero: number; personas: number };
   onCerrar: () => void;
 }
 
-export const CobrarOrden: React.FC<Props> = ({ idOrden, etiqueta, total, onCerrar }) => {
+export const CobrarOrden: React.FC<Props> = ({ idOrden, etiqueta: orden, total, cuenta, onCerrar }) => {
+  const etiqueta = cuenta ? `${orden} · Cuenta ${cuenta.numero} de ${cuenta.personas}` : orden;
   const [texto, setTexto] = useState(''); // monto recibido como se teclea
   const [cobrando, setCobrando] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hecho, setHecho] = useState<{ recibido: number; cambio: number; impresion: { ok: boolean; error?: string } } | null>(null);
+  const [hecho, setHecho] = useState<{ recibido: number; cambio: number; ordenPagada: boolean; impresion: { ok: boolean; error?: string } } | null>(null);
   const [reimprimiendo, setReimprimiendo] = useState(false);
 
   const recibido = Number(texto) || 0;
@@ -55,8 +61,13 @@ export const CobrarOrden: React.FC<Props> = ({ idOrden, etiqueta, total, onCerra
     setCobrando(true);
     setError(null);
     try {
-      const r = await cobrarOrden(idOrden, recibido);
-      setHecho({ recibido: r.cobro.recibido, cambio: r.cobro.cambio, impresion: r.impresion });
+      if (cuenta) {
+        const r = await cobrarCuentaDividida(idOrden, cuenta.numero, recibido);
+        setHecho({ recibido: r.cobro.recibido, cambio: r.cobro.cambio, ordenPagada: r.cobro.ordenPagada, impresion: r.impresion });
+      } else {
+        const r = await cobrarOrden(idOrden, recibido);
+        setHecho({ recibido: r.cobro.recibido, cambio: r.cobro.cambio, ordenPagada: true, impresion: r.impresion });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cobrar.');
     } finally {
@@ -68,7 +79,7 @@ export const CobrarOrden: React.FC<Props> = ({ idOrden, etiqueta, total, onCerra
     if (!hecho) return;
     setReimprimiendo(true);
     try {
-      const r = await reimprimirTicketCobro(idOrden, hecho.recibido);
+      const r = cuenta ? await reimprimirCobroCuenta(idOrden, cuenta.numero) : await reimprimirTicketCobro(idOrden, hecho.recibido);
       setHecho({ ...hecho, impresion: r.impresion });
     } catch (err) {
       setHecho({ ...hecho, impresion: { ok: false, error: err instanceof Error ? err.message : 'No se pudo imprimir.' } });
@@ -99,6 +110,11 @@ export const CobrarOrden: React.FC<Props> = ({ idOrden, etiqueta, total, onCerra
           <div className="p-6 space-y-4 text-center">
             <CheckCircle2 className="w-14 h-14 mx-auto text-emerald-500" />
             <h2 className="text-xl font-bold">Cobrado · {etiqueta}</h2>
+            {cuenta && (
+              <p className={`text-sm font-semibold ${hecho.ordenPagada ? 'text-emerald-700' : 'text-violet-800'}`}>
+                {hecho.ordenPagada ? `Era la última: ${orden} quedó pagada completa.` : `${orden} sigue en Cajas: faltan otras cuentas por cobrar.`}
+              </p>
+            )}
             <div className="grid grid-cols-3 gap-2 text-sm">
               <div className="bg-neutral-50 rounded-xl p-3">
                 <div className="text-xs text-neutral-500">Total</div>

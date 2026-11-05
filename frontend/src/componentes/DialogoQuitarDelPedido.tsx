@@ -13,9 +13,11 @@ type OrdenActualizada = { orden: OrdenBD; detalle: DetalleOrdenBD[]; extras: Ext
 
 const dinero = (n: number) => `$${n.toFixed(2)}`;
 
-export function DialogoQuitarDelPedido({ idOrden, aQuitar, onQuitado, onCancelar }: {
+export function DialogoQuitarDelPedido({ idOrden, aQuitar, dividida = false, onQuitado, onCancelar }: {
   idOrden: number;
   aQuitar: AQuitar;
+  /** La cuenta está dividida (y nadie ha pagado): al quitar algo, las cuentas dejan de cuadrar. */
+  dividida?: boolean;
   onQuitado: (datos: OrdenActualizada) => void;
   onCancelar: () => void;
 }) {
@@ -83,6 +85,11 @@ export function DialogoQuitarDelPedido({ idOrden, aQuitar, onQuitado, onCancelar
         <p className="text-sm text-neutral-600">
           Se descuentan <b className="font-mono text-neutral-900">{dinero(importe)}</b> del total. No se imprime nada en cocina.
         </p>
+        {dividida && (
+          <p className="text-sm font-semibold text-amber-900 bg-amber-50 border border-amber-300 rounded-xl px-3 py-2">
+            Esta cuenta está dividida: después de quitarlo, vuelve a dividirla (en Cajas sale «Volver a dividir»).
+          </p>
+        )}
         {error && <p role="alert" className="text-sm text-rose-700">{error}</p>}
 
         <div className="grid grid-cols-2 gap-2">

@@ -14,6 +14,8 @@
 //   ----------------------------------------
 //   TOTAL A PAGAR                    $71.00
 //   Cuenta dividida · Orden total   $990.00
+//   Efectivo                        $100.00   (solo al cobrar esa cuenta en Cajas;
+//   Cambio                           $29.00    arriba va «Cobró: …» y el título dice PAGADA)
 //   ----------------------------------------
 //          ¡Gracias por su visita!
 import type { LineaTicket } from './impresion.js';
@@ -28,6 +30,8 @@ export interface DatosTicketCuentaDividida {
   fecha: Date;
   cuenta: Pick<CuentaDividida, 'numero' | 'personas' | 'modo' | 'importe' | 'total_orden' | 'productos' | 'extras'>;
   reimpresion?: boolean;
+  /** Ticket de cobro de esa cuenta (Cajas): quién cobró, con cuánto pagó y su cambio. */
+  cobro?: { cobro: string; recibido: number; cambio: number };
 }
 
 const dinero = (n: number) => `$${n.toFixed(2)}`;
@@ -45,10 +49,10 @@ export function lineasTicketCuentaDividida(t: DatosTicketCuentaDividida): LineaT
   const lineas: LineaTicket[] = [
     ...encabezadoRestaurante(),
     { texto: t.paraLlevar ? `${t.etiqueta} · PARA LLEVAR` : t.etiqueta, alinear: 'centro', negrita: true },
-    { texto: `CUENTA ${c.numero} DE ${c.personas}`, alinear: 'centro', negrita: true, escala: 1.5 },
+    { texto: `CUENTA ${c.numero} DE ${c.personas}${t.cobro ? ' · PAGADA' : ''}`, alinear: 'centro', negrita: true, escala: 1.5 },
     ...(t.reimpresion ? [{ texto: '*** REIMPRESIÓN ***', alinear: 'centro' as const }] : []),
     { texto: fecha, derecha: `Orden #${t.idOrden}` },
-    { texto: `Atendió: ${t.abiertaPor}` },
+    { texto: `Atendió: ${t.abiertaPor}`, ...(t.cobro && { derecha: `Cobró: ${t.cobro.cobro}` }) },
     { separador: true },
   ];
   if (c.modo === 'iguales') {
@@ -66,6 +70,9 @@ export function lineasTicketCuentaDividida(t: DatosTicketCuentaDividida): LineaT
   }
   lineas.push({ separador: true }, { texto: 'TOTAL A PAGAR', derecha: dinero(c.importe), grande: true });
   if (c.modo === 'productos') lineas.push({ texto: 'Cuenta dividida · Orden total', derecha: dinero(c.total_orden), pequeno: true });
+  if (t.cobro) {
+    lineas.push({ texto: 'Efectivo', derecha: dinero(t.cobro.recibido) }, { texto: 'Cambio', derecha: dinero(t.cobro.cambio), negrita: true });
+  }
   lineas.push(
     { separador: true },
     { texto: '¡Gracias por su visita!', alinear: 'centro' },

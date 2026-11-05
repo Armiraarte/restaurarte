@@ -36,6 +36,22 @@ class OrdenCuentaDivididaTest extends TestCase
         $this->assertSame('0.00', $orden->fresh()->total);
     }
 
+    public function test_cada_cuenta_se_cobra_por_separado_y_empieza_por_cobrar(): void
+    {
+        $orden = Orden::create(['nombre' => '6']);
+        $primera = $this->cuenta($orden, 1);
+        $segunda = $this->cuenta($orden, 2);
+        $this->assertFalse($primera->fresh()->pagada());
+        $this->assertNull($primera->fresh()->recibido);
+
+        $segunda->update(['recibido' => '100.00', 'cobrada_por' => 'Caja · Ana', 'pagada_en' => now()]);
+        $segunda = $segunda->fresh();
+        $this->assertTrue($segunda->pagada());
+        $this->assertSame('100.00', $segunda->recibido);
+        $this->assertSame('Caja · Ana', $segunda->cobrada_por);
+        $this->assertFalse($primera->fresh()->pagada(), 'Cobrar una cuenta no toca las demás');
+    }
+
     public function test_no_repite_el_numero_de_cuenta_y_se_borra_con_la_orden(): void
     {
         $orden = Orden::create(['nombre' => '5']);

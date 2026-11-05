@@ -11,7 +11,7 @@
     "lint": "tsc --noEmit",
     "test:pedidos": "node --test tests/pedidoMix.test.mjs tests/quitarDelPedido.test.mjs",
     "test:monitor": "node --test tests/monitorImpresion.test.mjs",
-    "test:dividir": "node --test tests/dividirCuenta.test.mjs",
+    "test:dividir": "node --test tests/dividirCuenta.test.mjs tests/gruposDivision.test.mjs",
     "test:cocina": "node --test tests/comandasCocina.test.mjs tests/formatoProductoCocina.test.mjs",
     "test:impresion": "node --test tests/estadoImpresoras.test.mjs"
   },
