@@ -23,7 +23,7 @@ import { ConfiguracionView } from './componentes/ConfiguracionView';
 import { InicioView } from './componentes/InicioView';
 import { AgotadosView } from './componentes/AgotadosView';
 import { CocinaView } from './componentes/CocinaView';
-import { escucharSesionCerrada, getToken, logout, obtenerSesion, tomarAvisoSesion, Usuario } from './services/authService';
+import { escucharSesionCerrada, getToken, logout, obtenerSesion, ROLES_QUITAR_DEL_PEDIDO, tomarAvisoSesion, Usuario } from './services/authService';
 import { useMesasTurno, useTurnoActual } from './services/sincronizacion';
 import { useTabletsEnLinea } from './services/tabletsService';
 import { AvisoIniciarTurno, BannerSinTurno, SeccionSinTurno } from './componentes/TurnoRequerido';
@@ -144,6 +144,8 @@ function PosDashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () =>
   // Módulo de configuración (solo admin): se muestra en lugar de la sección actual.
   const [enConfiguracion, setEnConfiguracion] = useState(false);
   const verConfiguracion = enConfiguracion && usuario.rol === 'admin';
+  // Caja: quitar de la cuenta lo que se mandó por error.
+  const puedeQuitar = ROLES_QUITAR_DEL_PEDIDO.includes(usuario.rol);
 
   const irASeccion = (tab: MainNavTab) => {
     setEnConfiguracion(false);
@@ -292,7 +294,7 @@ function PosDashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () =>
 
               {!verConfiguracion && currentTab === 'cajas' && (
                 // Órdenes que pidieron la cuenta (orden.estatus = 1, PAGANDO)
-                sinTurno ? <SeccionSinTurno seccion="Cajas" /> : <CajasView />
+                sinTurno ? <SeccionSinTurno seccion="Cajas" /> : <CajasView puedeQuitar={puedeQuitar} />
               )}
 
               {/* Órdenes cobradas del turno abierto (orden.estatus = 2, PAGADO) */}
@@ -305,7 +307,7 @@ function PosDashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () =>
               {!verConfiguracion && currentTab === 'cocina' && <CocinaView />}
 
               {!verConfiguracion && currentTab === 'mesas' && (
-                sinTurno ? <SeccionSinTurno seccion="Órdenes" /> : <MesasView nombreUsuario={usuario.nombre} />
+                sinTurno ? <SeccionSinTurno seccion="Órdenes" /> : <MesasView nombreUsuario={usuario.nombre} puedeQuitar={puedeQuitar} />
               )}
             </LimiteDeErrores>
           </main>

@@ -6,7 +6,7 @@
 // Los envíos se acomodan según el ancho del componente (container queries): una columna en el historial
 // de la tablet y dos o tres en la caja.
 import React from 'react';
-import { Clock, LucideIcon, Plus, Receipt, Send, Tablet } from 'lucide-react';
+import { Clock, LucideIcon, Plus, Receipt, Send, Tablet, Trash2 } from 'lucide-react';
 import { CATEGORIAS_QUESO_OPCIONAL, DetalleOrdenBD, ESTATUS_ORDEN, ExtraOrdenBD, nombreDetalle, OrdenBD, textoCarneExtra, textoComplementosExtra } from '../services/pedidosService';
 import { iconoCategoria } from './iconosCategoria';
 import { agruparMix } from '../services/pedidoMix';
@@ -86,9 +86,25 @@ interface Props {
   onAgregar?: () => void;
   /** Historial: únicamente lo pedido, sin datos administrativos ni importes. */
   soloPedido?: boolean;
+  /** Solo caja: botón para quitar de la cuenta un renglón (idDetalle_Orden) o un extra mandado por error. */
+  onQuitar?: (idDetalle: number) => void;
+  onQuitarExtra?: (idExtra: number) => void;
 }
 
-export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, extras = [], className = '', onAgregar, soloPedido = false }) => {
+/** Bote de basura de un renglón ya enviado. */
+const BotonQuitar: React.FC<{ texto: string; onClick: () => void }> = ({ texto, onClick }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    aria-label={`Quitar ${texto} de la cuenta`}
+    title="Quitar de la cuenta"
+    className="w-10 h-10 shrink-0 rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50 flex items-center justify-center cursor-pointer"
+  >
+    <Trash2 className="w-4 h-4" />
+  </button>
+);
+
+export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, extras = [], className = '', onAgregar, soloPedido = false, onQuitar, onQuitarExtra }) => {
   // Envíos: renglones con la misma hora de registro.
   const envios: Envio[] = [];
   detalle.forEach((d) => {
@@ -145,18 +161,24 @@ export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, extras = [], cl
                     ].filter(Boolean);
                     const nombre = r.producto.toLocaleLowerCase('es').startsWith(r.categoria.toLocaleLowerCase('es'))
                       ? r.producto : `${r.categoria} · ${r.producto}`;
-                    return <li key={r.clave} className="grid grid-cols-[2.5rem_minmax(0,1fr)] items-start gap-3 px-2 py-3">
+                    return <li key={r.clave} className={`grid ${onQuitar ? 'grid-cols-[2.5rem_minmax(0,1fr)_auto]' : 'grid-cols-[2.5rem_minmax(0,1fr)]'} items-start gap-3 px-2 py-3`}>
                       <span className="rounded-lg bg-amber-100 text-amber-900 min-h-10 flex items-center justify-center font-mono font-bold">{r.cantidad}</span>
                       <div className="min-w-0">
                         <div className="font-semibold text-neutral-900 break-words">{nombre}</div>
                         {indicaciones.length > 0 && <div className="mt-1 text-sm text-neutral-600 break-words">{indicaciones.join(' · ')}</div>}
                         {r.nota && <div className="mt-1 text-sm text-neutral-600 break-words">{r.nota}</div>}
                       </div>
+                      {onQuitar && <BotonQuitar texto={nombre} onClick={() => onQuitar(r.clave)} />}
                     </li>;
                   })}
                 </React.Fragment>
               ))}
-              {extras.map((extra) => <li key={`extra-${extra.id}`} className="px-3 py-3 text-sm text-neutral-700 break-words">{extra.descripcion}</li>)}
+              {extras.map((extra) => (
+                <li key={`extra-${extra.id}`} className="flex items-center gap-3 px-3 py-3 text-sm text-neutral-700">
+                  <span className="flex-1 min-w-0 break-words">{extra.descripcion}</span>
+                  {onQuitarExtra && <BotonQuitar texto={`el extra ${extra.descripcion}`} onClick={() => onQuitarExtra(extra.id)} />}
+                </li>
+              ))}
             </ul>
           )}
         </div>
@@ -234,7 +256,7 @@ export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, extras = [], cl
                       {grupo.lineas.map((r) => {
                     const Icono = iconoCategoria(r.categoria);
                     return (
-                      <li key={r.clave} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-2.5">
+                      <li key={r.clave} className={`grid ${onQuitar ? 'grid-cols-[auto_minmax(0,1fr)_auto_auto]' : 'grid-cols-[auto_minmax(0,1fr)_auto]'} items-center gap-3 px-4 py-2.5`}>
                         <span className="min-w-11 h-10 px-2 rounded-lg bg-amber-100 text-amber-900 font-mono text-base font-bold flex items-center justify-center">
                           {r.cantidad}
                         </span>
@@ -261,6 +283,7 @@ export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, extras = [], cl
                             <span className="block font-mono text-xs text-neutral-500">{dinero(r.subtotal / r.cantidad)} c/u</span>
                           )}
                         </span>
+                        {onQuitar && <BotonQuitar texto={r.producto} onClick={() => onQuitar(r.clave)} />}
                       </li>
                     );
                       })}
@@ -270,7 +293,7 @@ export const PedidoEnviado: React.FC<Props> = ({ orden, detalle, extras = [], cl
               </article>
             ))}
           </div>
-          <ListaExtras extras={extras} />
+          <ListaExtras extras={extras} onQuitar={onQuitarExtra} />
         </div>
       )}
     </section>

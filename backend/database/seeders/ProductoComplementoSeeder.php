@@ -24,7 +24,7 @@ class ProductoComplementoSeeder extends Seeder
         'Tostadas' => ['Repollo', 'Lechuga', 'Salsa', 'Crema', 'Queso'],
         'Burritas' => ['Lechuga', 'Jitomate', 'Cebolla', 'Chile', 'Aderezo'],
         'Lonches' => ['Catsup', 'Aderezo', 'Lechuga', 'Jitomate', 'Cebolla', 'Chile', 'Cilantro'],
-        'Hamburguesas' => ['Lechuga', 'Jitomate', 'Cebolla', 'Chile', 'Catsup'],
+        'Hamburguesas' => ['Lechuga', 'Jitomate', 'Cebolla', 'Chile', 'Catsup', 'Aderezo'],
         'Ensaladas' => ['Jitomate', 'Pepino', 'Chile', 'Cebolla'],
         'Salchichas' => ['Repollo', 'Salsa', 'Crema'],
     ];

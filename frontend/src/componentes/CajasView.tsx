@@ -51,7 +51,7 @@ const TIPOS_VENTA: TipoVenta[] = [
   },
 ];
 
-export const CajasView: React.FC = () => {
+export const CajasView: React.FC<{ puedeQuitar?: boolean }> = ({ puedeQuitar = false }) => {
   const { mesas, error } = useMesasTurno();
   const porCobrar = (mesas ?? []).filter((m) => m.estatus === PAGANDO);
   const totalPorCobrar = porCobrar.reduce((acc, m) => acc + Number(m.total), 0);
@@ -172,6 +172,7 @@ export const CajasView: React.FC = () => {
           <CuentaDetalle
             idOrden={cuentaAbierta}
             onCerrar={() => setCuentaAbierta(null)}
+            puedeQuitar={puedeQuitar}
             acciones={(() => {
               const m = porCobrar.find((x) => x.id === cuentaAbierta);
               const tipo = m && (TIPOS_VENTA.find((t) => t.esDelTipo(m)) ?? TIPOS_VENTA[0]);

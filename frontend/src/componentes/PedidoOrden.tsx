@@ -54,6 +54,7 @@ import {
   RepartoPedido,
   textoReparto,
   CuentaDividida,
+  nombreDetalle,
 } from '../services/pedidosService';
 import { imprimirTicketCocina } from '../services/ticketCocinaService';
 import { COLORES_CATEGORIA, fotoCategoria, iconoCategoria, logoBebida, NEON_CATEGORIA } from './iconosCategoria';
@@ -70,6 +71,7 @@ import { TicketCocina } from '../types/ticketCocina';
 import { DialogoAgregarExtra } from './DialogoAgregarExtra';
 import { DividirCuenta } from './DividirCuenta';
 import { DialogoComentario } from './DialogoComentario';
+import { AQuitar, DialogoQuitarDelPedido } from './DialogoQuitarDelPedido';
 import { ListaExtras } from './ListaExtras';
 import { complementosTicket, complementosTicketQuesoOpcional, esQueso } from '../services/complementos';
 import { llevaQuesoComanda } from '../services/quesoComanda';
@@ -157,6 +159,8 @@ interface Props {
   pantallaCompleta?: boolean;
   /** LLAMADA: la orden ya quedó registrada con el nombre del cliente. */
   onOrdenCreada?: (idOrden: number) => void;
+  /** Solo caja: se puede quitar de la cuenta lo que se mandó por error (no en órdenes pagadas). */
+  puedeQuitar?: boolean;
 }
 
 
@@ -220,7 +224,7 @@ function ticketDe(orden: OrdenBD, lineas: LineaNueva[], ronda: number, origen: s
   };
 }
 
-export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantallaCompleta = false, onOrdenCreada }) => {
+export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantallaCompleta = false, onOrdenCreada, puedeQuitar = false }) => {
   const esLlamada = idOrden === null;
   const claveBorrador = idOrden ?? BORRADOR_LLAMADA;
   const [menu, setMenu] = useState<CategoriaMenu[] | null>(null);
@@ -355,6 +359,22 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
   }, [idOrden, actualizarOrden]);
   useEnVivo(['ordenes'], refrescar);
   useCadaTantoVisible(refrescar, 5_000);
+
+  // Caja: quitar de la cuenta un producto o extra mandado por error (abierta o en cobro; pagada ya no).
+  const [aQuitar, setAQuitar] = useState<AQuitar | null>(null);
+  const quitarHabilitado = puedeQuitar && idOrden !== null && orden !== null && orden.estatus !== 2;
+  const pedirQuitar = quitarHabilitado
+    ? (idDetalle: number) => {
+      const linea = detalle.find((d) => d.idDetalle_Orden === idDetalle);
+      if (linea) setAQuitar({ tipo: 'producto', nombre: `${linea.categoria} · ${nombreDetalle(linea)}`, lineas: [linea] });
+    }
+    : undefined;
+  const pedirQuitarExtra = quitarHabilitado
+    ? (idExtra: number) => {
+      const extra = extrasEnviados.find((e) => e.id === idExtra);
+      if (extra) setAQuitar({ tipo: 'extra', extra });
+    }
+    : undefined;
 
   // Productos que se terminaron: en rojo, sin poder comandarse; llegan en vivo.
   const { ids: agotados, recargar: recargarAgotados } = useAgotados();
@@ -670,10 +690,14 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
             <LockKeyhole className="w-9 h-9 shrink-0" />
             <div>
               <div className="text-lg font-bold">{orden.estatus === 2 ? 'ORDEN PAGADA' : 'ORDEN EN COBRO'}</div>
-              <p className="text-sm">Ya no se pueden agregar productos ni modificar el pedido.</p>
+              <p className="text-sm">
+                {quitarHabilitado
+                  ? 'Ya no se pueden agregar productos. Con el bote de basura quitas lo que se mandó por error.'
+                  : 'Ya no se pueden agregar productos ni modificar el pedido.'}
+              </p>
             </div>
           </div>
-          <PedidoEnviado orden={orden} detalle={detalle} extras={extrasEnviados} />
+          <PedidoEnviado orden={orden} detalle={detalle} extras={extrasEnviados} onQuitar={pedirQuitar} onQuitarExtra={pedirQuitarExtra} />
         </div>
       ) : (
       <>
@@ -719,6 +743,8 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
           extras={extrasEnviados}
           className="w-full"
           onAgregar={() => setPestana('agregar')}
+          onQuitar={pedirQuitar}
+          onQuitarExtra={pedirQuitarExtra}
         />
       ) : (
       <div
@@ -1096,7 +1122,15 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
               exit={{ scale: 0.95, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
             >
-              <PedidoEnviado orden={orden} detalle={detalle} extras={extrasEnviados} soloPedido className="flex-1 min-h-0 shadow-xl" />
+              <PedidoEnviado
+                orden={orden}
+                detalle={detalle}
+                extras={extrasEnviados}
+                soloPedido
+                className="flex-1 min-h-0 shadow-xl"
+                onQuitar={pedirQuitar}
+                onQuitarExtra={pedirQuitarExtra}
+              />
               <button
                 onClick={() => setVerHistorial(false)}
                 className="shrink-0 w-full h-12 sm:h-14 rounded-xl bg-white hover:bg-neutral-50 border border-neutral-200 text-lg font-semibold flex items-center justify-center gap-2 cursor-pointer"
@@ -1107,6 +1141,20 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
           </motion.div>
         )}
       </AnimatePresence>, document.body)}
+
+      {/* Caja: quitar de la cuenta lo mandado por error (encima del historial) */}
+      {aQuitar && orden && createPortal(
+        <DialogoQuitarDelPedido
+          idOrden={orden.idOrden}
+          aQuitar={aQuitar}
+          onCancelar={() => setAQuitar(null)}
+          onQuitado={(datos) => {
+            actualizarOrden(datos);
+            setAQuitar(null);
+          }}
+        />,
+        document.body,
+      )}
 
       {/* Dividir la cuenta: cuánto le toca a cada persona; con «Guardar e imprimir» queda como Cuenta 1…N */}
       <AnimatePresence>

@@ -12,11 +12,13 @@ import { LimiteDeErrores } from './AlertasErrores';
 import { CroquisMesas, esMesaDelCroquis, ordenesPorMesa } from './CroquisMesas';
 import { DialogoCambiarMesa } from './DialogoCambiarMesa';
 
-export function FlujoOrdenes({ origen, cabecera, acciones }: {
+export function FlujoOrdenes({ origen, cabecera, acciones, puedeQuitar = false }: {
   /** Identifica quién toma el pedido en los tickets; no cambia su flujo. */
   origen: string;
   cabecera?: React.ReactNode;
   acciones?: React.ReactNode;
+  /** Solo caja: quitar de la cuenta lo que se mandó por error. */
+  puedeQuitar?: boolean;
 }) {
   // Orden abierta en pantalla (BD: orden.idOrden); su pedido se toma con PedidoOrden.
   const [ordenAbierta, setOrdenAbierta] = useState<number | null>(null);
@@ -122,7 +124,7 @@ export function FlujoOrdenes({ origen, cabecera, acciones }: {
             />
           ) : ordenAbierta !== null ? (
             // Pedido desde la base: menú (producto), envío a cocina (orden_has_detalle) y total.
-            <PedidoOrden idOrden={ordenAbierta} origen={origen} pantallaCompleta onVolver={volverAOrdenes} />
+            <PedidoOrden idOrden={ordenAbierta} origen={origen} pantallaCompleta onVolver={volverAOrdenes} puedeQuitar={puedeQuitar} />
           ) : (
             <VistaMesas
               mesas={mesas}

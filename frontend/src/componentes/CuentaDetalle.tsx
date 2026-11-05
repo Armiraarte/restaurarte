@@ -4,13 +4,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
-import { AlertTriangle, Clock, Home, Loader2, Printer, ShoppingBag, Split, Tablet, X } from 'lucide-react';
+import { AlertTriangle, Clock, Home, Loader2, Printer, ShoppingBag, Split, Tablet, Trash2, X } from 'lucide-react';
 import {
   CuentaDividida, DetalleOrdenBD, divisionVigente, ESTATUS_ORDEN, ExtraOrdenBD, nombreDetalle, obtenerOrden, OrdenBD, reimprimirCuentasDivididas,
 } from '../services/pedidosService';
 import { useEnVivo } from '../services/enVivo';
 import { COLOR_ESTATUS_ORDEN, EtiquetaCarneExtra, EtiquetaConPapas, EtiquetaComplementosExtra, EtiquetaConQueso, EtiquetaSinQueso } from './PedidoEnviado';
 import { ListaExtras } from './ListaExtras';
+import { AQuitar, DialogoQuitarDelPedido } from './DialogoQuitarDelPedido';
 
 const dinero = (n: number) => `$${n.toFixed(2)}`;
 const hora = (fecha: string) => new Date(fecha).toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' });
@@ -20,9 +21,12 @@ interface Props {
   onCerrar: () => void;
   /** Botones al pie (Cobrar, Reimprimir…). */
   acciones?: React.ReactNode;
+  /** Solo caja: bote de basura en cada producto para quitar lo que se mandó por error (no en órdenes pagadas). */
+  puedeQuitar?: boolean;
 }
 
-export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones }) => {
+export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones, puedeQuitar = false }) => {
+  const [aQuitar, setAQuitar] = useState<AQuitar | null>(null);
   const [orden, setOrden] = useState<OrdenBD | null>(null);
   const [detalle, setDetalle] = useState<DetalleOrdenBD[]>([]);
   const [extras, setExtras] = useState<ExtraOrdenBD[]>([]);
@@ -57,7 +61,7 @@ export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones }) 
   const categorias = useMemo(() => {
     const porProducto = new Map<
       string,
-      { clave: string; nombre: string; sinQueso: boolean; conQueso: boolean; conPapas: boolean; complementosExtra: string[]; carneExtra: number; categoria: string; cantidad: number; importe: number }
+      { clave: string; nombre: string; sinQueso: boolean; conQueso: boolean; conPapas: boolean; complementosExtra: string[]; carneExtra: number; categoria: string; cantidad: number; importe: number; lineas: DetalleOrdenBD[] }
     >();
     for (const d of detalle) {
       const nombre = nombreDetalle(d);
@@ -73,7 +77,9 @@ export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones }) 
         categoria: d.categoria,
         cantidad: 0,
         importe: 0,
+        lineas: [],
       };
+      p.lineas.push(d);
       p.cantidad += d.cantidad;
       p.importe = Math.round((p.importe + d.subtotal) * 100) / 100;
       porProducto.set(clave, p);
@@ -87,6 +93,7 @@ export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones }) 
   const estatus = orden?.estatus ?? 0;
   const paraLlevar = orden?.tipo_orden === 2;
   const vigente = divisionVigente(cuentas, orden?.total ?? 0);
+  const quitarHabilitado = puedeQuitar && orden !== null && estatus !== 2;
 
   const reimprimirCuentas = async () => {
     setImpresionCuentas({ cargando: true });
@@ -187,12 +194,29 @@ export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones }) 
                       {p.complementosExtra.length > 0 && <EtiquetaComplementosExtra nombres={p.complementosExtra} />}
                     </span>
                     <span className="shrink-0 font-mono font-bold text-base">{dinero(p.importe)}</span>
+                    {quitarHabilitado && (
+                      <button
+                        type="button"
+                        onClick={() => setAQuitar({ tipo: 'producto', nombre: `${categoria} · ${p.nombre}`, lineas: p.lineas })}
+                        aria-label={`Quitar ${p.nombre} de la cuenta`}
+                        title="Quitar de la cuenta"
+                        className="w-9 h-9 shrink-0 rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50 flex items-center justify-center cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
             ))
           )}
-          <ListaExtras extras={extras} />
+          <ListaExtras
+            extras={extras}
+            onQuitar={quitarHabilitado ? (id) => {
+              const extra = extras.find((e) => e.id === id);
+              if (extra) setAQuitar({ tipo: 'extra', extra });
+            } : undefined}
+          />
 
           {/* Cuenta dividida (botón Dividir): lo que le tocó a cada persona y su ticket */}
           {cuentas.length > 0 && (
@@ -255,6 +279,20 @@ export const CuentaDetalle: React.FC<Props> = ({ idOrden, onCerrar, acciones }) 
           {acciones && <div className="mt-3">{acciones}</div>}
         </div>
       </motion.div>
+      {aQuitar && (
+        // Dentro del fondo de la cuenta: sus clics no deben cerrar la cuenta.
+        <div onClick={(e) => e.stopPropagation()}>
+          <DialogoQuitarDelPedido
+            idOrden={idOrden}
+            aQuitar={aQuitar}
+            onCancelar={() => setAQuitar(null)}
+            onQuitado={() => {
+              setAQuitar(null);
+              cargar();
+            }}
+          />
+        </div>
+      )}
     </motion.div>,
     document.body,
   );

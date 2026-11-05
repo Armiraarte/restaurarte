@@ -200,6 +200,18 @@ export const reimprimirTicketCobro = (idOrden: number, recibido?: number) =>
     body: JSON.stringify({ recibido }),
   });
 
+type OrdenCompleta = { orden: OrdenBD; detalle: DetalleOrdenBD[]; extras: ExtraOrdenBD[]; cuentas_divididas?: CuentaDividida[] };
+
+/** Solo caja: quita de la cuenta un producto mandado por error (todo el renglón, o `piezas`) y recalcula el total. */
+export const quitarDelPedido = (idOrden: number, idDetalle: number, piezas?: number) =>
+  pedir<OrdenCompleta & { quitado: { piezas: number; importe: number } }>(`/ordenes/${idOrden}/detalle/${idDetalle}/quitar`, {
+    method: 'POST',
+    body: JSON.stringify(piezas === undefined ? {} : { piezas }),
+  });
+
+/** Solo caja: quita de la cuenta un cobro extra mandado por error. */
+export const quitarExtraDelPedido = (idOrden: number, idExtra: number) =>
+  pedir<OrdenCompleta>(`/ordenes/${idOrden}/extras/${idExtra}/quitar`, { method: 'POST' });
 
 /** "Frijol" / "Milanesa (Grande)". */
 export const nombreProducto = (p: { nombre: string; tamano: string | null }) => (p.tamano ? `${p.nombre} (${p.tamano})` : p.nombre);

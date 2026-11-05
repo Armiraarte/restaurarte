@@ -34,7 +34,8 @@ class ProductoComplementoTest extends TestCase
     {
         $this->cargar();
 
-        $this->assertSame(240, \DB::table('producto_has_complemento')->count());
+        $this->assertSame(243, \DB::table('producto_has_complemento')->count());
+        $this->assertContains('Aderezo', $this->producto('Hamburguesas', 'Res')->complementos->pluck('nombre')->all(), 'Las hamburguesas llevan aderezo');
         $this->assertEqualsCanonicalizing(['Repollo', 'Lechuga', 'Salsa', 'Crema'], $this->producto('Tacos Dorados', 'Frijol')->complementos->pluck('nombre')->all());
         $this->assertEqualsCanonicalizing(['Cilantro', 'Cebolla', 'Salsa'], $this->producto('Tacos', 'Pollo')->complementos->pluck('nombre')->all());
         $this->assertEqualsCanonicalizing(['Jitomate', 'Pepino', 'Chile', 'Cebolla'], $this->producto('Ensaladas', 'Milanesa')->complementos->pluck('nombre')->all());
@@ -47,7 +48,7 @@ class ProductoComplementoTest extends TestCase
         $this->cargar();
         $this->seed(ProductoComplementoSeeder::class);
 
-        $this->assertSame(240, \DB::table('producto_has_complemento')->count());
+        $this->assertSame(243, \DB::table('producto_has_complemento')->count());
     }
 
     public function test_ajuste_queso_corrige_datos_existentes_sin_tocar_precios_ni_otros_complementos(): void
@@ -64,7 +65,7 @@ class ProductoComplementoTest extends TestCase
         $this->assertEqualsCanonicalizing(['Cilantro', 'Cebolla', 'Salsa'], $taco->fresh()->complementos->pluck('nombre')->all());
         $this->assertEqualsCanonicalizing(['Repollo', 'Lechuga', 'Salsa', 'Crema', 'Queso'], $sope->fresh()->complementos->pluck('nombre')->all());
         $this->assertSame('22.50', $taco->fresh()->precio);
-        $this->assertSame(240, \DB::table('producto_has_complemento')->count());
+        $this->assertSame(243, \DB::table('producto_has_complemento')->count());
     }
 
     public function test_no_se_repite_la_misma_relacion(): void

@@ -21,6 +21,9 @@
 //                                           por persona en caja y, si estaba abierta, la orden pasa a PAGANDO (Cajas);
 //                                           el total y el cobro no cambian (cuentasDivididas.ts)
 //   POST  /api/ordenes/:idOrden/cuentas-divididas/imprimir   reimprime los tickets de las cuentas guardadas
+//   POST  /api/ordenes/:idOrden/detalle/:idDetalle/quitar  { piezas? } solo caja: quita de la cuenta un producto mandado
+//                                           por error (todo el renglón, o esas piezas) y recalcula el total; no en PAGADO
+//   POST  /api/ordenes/:idOrden/extras/:idExtra/quitar     solo caja: quita un cobro extra mandado por error
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import type { RowDataPacket } from 'mysql2/promise';
 import { requireAuth } from './auth.js';
@@ -38,6 +41,7 @@ import { guardarDetallePedido, itemsValidos, terminoPermitido, type ItemPedido, 
 import { extrasValidos, guardarExtrasPedido, recalcularTotalOrden } from './extrasPedido.js';
 import { agotadosActuales, estaAgotado } from './agotados.js';
 import { esOrigenOrden, origenOrden } from './origenOrden.js';
+import { calcularQuitar, ROLES_QUITAR_DEL_PEDIDO } from './quitarDelPedido.js';
 
 // Opciones por renglón; las mismas constantes que OrdenDetalle en Laravel.
 /** Categorías que ofrecen SIN QUESO. */
@@ -404,6 +408,122 @@ pedidosRouter.post('/ordenes/:idOrden/ticket-cobro', soloRoles('admin', 'cajero'
     return;
   }
   res.json({ impresion: await imprimirTicketCobro(idOrden, recibido, req.usuario!.nombre, true) });
+});
+
+/* ---------- Quitar lo mandado por error (solo caja) ---------- */
+
+/**
+ * Bloquea la orden (como enviar pedido) y revisa que no esté pagada. Devuelve null si ya respondió el error.
+ * Abierta (0) o en cobro (1) se puede corregir; pagada (2) ya no.
+ */
+async function bloquearOrdenParaQuitar(conexion: import('mysql2/promise').PoolConnection, idOrden: number, res: Response) {
+  const [ordenes] = await conexion.query<RowDataPacket[]>('SELECT idOrden, estatus FROM orden WHERE idOrden = ? FOR UPDATE', [idOrden]);
+  if (!ordenes[0]) {
+    res.status(404).json({ error: 'La orden no existe.' });
+    return null;
+  }
+  if (Number(ordenes[0].estatus) === 2) {
+    res.status(409).json({ error: 'Esta orden ya se cobró; ya no se puede quitar nada de la cuenta.' });
+    return null;
+  }
+  return ordenes[0];
+}
+
+/** Quita de la cuenta un producto mandado por error: el renglón completo o, con `piezas`, solo esas piezas. */
+pedidosRouter.post('/ordenes/:idOrden/detalle/:idDetalle/quitar', soloRoles(...ROLES_QUITAR_DEL_PEDIDO), async (req, res) => {
+  const idOrden = Number(req.params.idOrden);
+  const idDetalle = Number(req.params.idDetalle);
+  if (![idOrden, idDetalle].every((id) => Number.isSafeInteger(id) && id > 0)) {
+    res.status(400).json({ error: 'Producto no válido.' });
+    return;
+  }
+  const conexion = await pool!.getConnection();
+  try {
+    await conexion.beginTransaction();
+    if (!(await bloquearOrdenParaQuitar(conexion, idOrden, res))) {
+      await conexion.rollback();
+      return;
+    }
+    const [renglones] = await conexion.query<RowDataPacket[]>(
+      `SELECT d.cantidad, d.subtotal, d.opciones, c.nombre AS categoria, p.nombre, p.tamano
+         FROM orden_has_detalle d JOIN producto p ON p.id = d.idProducto JOIN categorias c ON c.id = p.categoria_id
+        WHERE d.idDetalle_Orden = ? AND d.idOrden = ? FOR UPDATE`,
+      [idDetalle, idOrden],
+    );
+    const r = renglones[0];
+    if (!r) {
+      await conexion.rollback();
+      res.status(404).json({ error: 'Ese producto ya no está en la cuenta.' });
+      return;
+    }
+    const resultado = calcularQuitar(
+      { cantidad: Number(r.cantidad), subtotal: Number(r.subtotal), opciones: typeof r.opciones === 'string' ? JSON.parse(r.opciones) : r.opciones },
+      req.body?.piezas,
+    );
+    if ('error' in resultado) {
+      await conexion.rollback();
+      res.status(400).json({ error: resultado.error });
+      return;
+    }
+    const ahora = new Date();
+    if (resultado.borrar) {
+      await conexion.execute('DELETE FROM orden_has_detalle WHERE idDetalle_Orden = ? AND idOrden = ?', [idDetalle, idOrden]);
+    } else {
+      await conexion.execute(
+        'UPDATE orden_has_detalle SET cantidad = ?, subtotal = ?, actualizado_en = ? WHERE idDetalle_Orden = ? AND idOrden = ?',
+        [resultado.cantidad, resultado.subtotal.toFixed(2), ahora, idDetalle, idOrden],
+      );
+    }
+    await recalcularTotalOrden(conexion, idOrden, ahora);
+    await conexion.commit();
+    // Queda en el registro del servidor quién quitó qué.
+    console.info(`[pedidos] Orden ${idOrden}: ${req.usuario!.nombre} quitó ${resultado.piezas} × ${r.categoria} ${r.nombre}${r.tamano ? ` (${r.tamano})` : ''} ($${resultado.importe.toFixed(2)})`);
+    res.json({ ...(await ordenConDetalle(idOrden)), quitado: { piezas: resultado.piezas, importe: resultado.importe } });
+  } catch (err) {
+    await conexion.rollback();
+    console.error('[pedidos] No se pudo quitar el producto:', err);
+    res.status(500).json({ error: 'No se pudo quitar el producto de la cuenta.' });
+  } finally {
+    conexion.release();
+  }
+});
+
+/** Quita de la cuenta un cobro extra mandado por error. */
+pedidosRouter.post('/ordenes/:idOrden/extras/:idExtra/quitar', soloRoles(...ROLES_QUITAR_DEL_PEDIDO), async (req, res) => {
+  const idOrden = Number(req.params.idOrden);
+  const idExtra = Number(req.params.idExtra);
+  if (![idOrden, idExtra].every((id) => Number.isSafeInteger(id) && id > 0)) {
+    res.status(400).json({ error: 'Extra no válido.' });
+    return;
+  }
+  const conexion = await pool!.getConnection();
+  try {
+    await conexion.beginTransaction();
+    if (!(await bloquearOrdenParaQuitar(conexion, idOrden, res))) {
+      await conexion.rollback();
+      return;
+    }
+    const [extras] = await conexion.query<RowDataPacket[]>(
+      'SELECT descripcion, importe FROM orden_extra WHERE id = ? AND idOrden = ? FOR UPDATE', [idExtra, idOrden],
+    );
+    if (!extras[0]) {
+      await conexion.rollback();
+      res.status(404).json({ error: 'Ese extra ya no está en la cuenta.' });
+      return;
+    }
+    const ahora = new Date();
+    await conexion.execute('DELETE FROM orden_extra WHERE id = ? AND idOrden = ?', [idExtra, idOrden]);
+    await recalcularTotalOrden(conexion, idOrden, ahora);
+    await conexion.commit();
+    console.info(`[pedidos] Orden ${idOrden}: ${req.usuario!.nombre} quitó el extra «${extras[0].descripcion}» ($${Number(extras[0].importe).toFixed(2)})`);
+    res.json(await ordenConDetalle(idOrden));
+  } catch (err) {
+    await conexion.rollback();
+    console.error('[pedidos] No se pudo quitar el extra:', err);
+    res.status(500).json({ error: 'No se pudo quitar el extra de la cuenta.' });
+  } finally {
+    conexion.release();
+  }
 });
 
 /** Envía un pedido a cocina: guarda el detalle (orden_has_detalle) y recalcula el total de la orden. */

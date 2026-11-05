@@ -34,6 +34,8 @@ class DatabaseSeeder extends Seeder
                 HamburguesasPolloPiernaSeeder::class,
                 SopePiernaSeeder::class,
                 EnchiladaPiernaSeeder::class,
+                HamburguesaAderezoSeeder::class,
+                AlitasNaturalesSeeder::class,
             ]);
         });
     }

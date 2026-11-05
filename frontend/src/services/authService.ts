@@ -12,6 +12,9 @@ export interface Usuario {
 /** Cuentas que pueden abrir la app de meseros (/tablet). Las demás entran por la caja. */
 export const ROLES_APP_MESEROS: Rol[] = ['tablet', 'admin'];
 
+/** Quién puede quitar de la cuenta lo que se mandó por error (igual que backend/src/quitarDelPedido.ts). */
+export const ROLES_QUITAR_DEL_PEDIDO: Rol[] = ['admin', 'cajero'];
+
 const TOKEN_KEY = 'pos_token';
 const oyentesSesion = new Set<(aviso: string) => void>();
 let tokenInvalidado: string | null | undefined;
