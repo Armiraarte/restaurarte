@@ -1173,7 +1173,7 @@ export const PedidoOrden: React.FC<Props> = ({ idOrden, origen, onVolver, pantal
             <motion.div
               role="dialog"
               aria-label="Dividir cuenta"
-              className="w-full max-w-3xl max-h-full flex"
+              className="w-full max-w-5xl max-h-full flex justify-center"
               initial={{ scale: 0.95, y: 10 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0 }}

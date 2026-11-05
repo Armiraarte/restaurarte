@@ -13,7 +13,6 @@ import { useMesasTurno } from '../services/sincronizacion';
 import { CuentaDetalle } from './CuentaDetalle';
 import { CobrarOrden } from './CobrarOrden';
 import { DividirCuenta } from './DividirCuenta';
-import { colorCuenta } from './coloresCuenta';
 
 type Parte = NonNullable<MesaRegistrada['partes_divididas']>[number];
 
@@ -40,7 +39,7 @@ function DividirDesdeCajas({ idOrden, onCerrar }: { idOrden: number; onCerrar: (
   }, [idOrden]);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={onCerrar}>
-      <div role="dialog" aria-label="Volver a dividir la cuenta" className="w-full max-w-3xl max-h-full flex justify-center" onClick={(e) => e.stopPropagation()}>
+      <div role="dialog" aria-label="Volver a dividir la cuenta" className="w-full max-w-5xl max-h-full flex justify-center" onClick={(e) => e.stopPropagation()}>
         {datos ? (
           <DividirCuenta
             idOrden={idOrden}
@@ -71,6 +70,8 @@ interface TipoVenta {
   colorTitulo: string;
   linea: string;
   tarjeta: string;
+  /** Fondo de la tarjeta de cada cuenta de una orden dividida: el color del tipo, un tono más claro. */
+  fondoCuenta: string;
   etiqueta: string;
   cobrar: string;
 }
@@ -85,6 +86,7 @@ const TIPOS_VENTA: TipoVenta[] = [
     colorTitulo: 'text-emerald-900',
     linea: 'bg-emerald-200',
     tarjeta: 'border-emerald-300 border-l-emerald-600 ring-emerald-100',
+    fondoCuenta: 'bg-emerald-50',
     etiqueta: 'bg-emerald-50 text-emerald-800 border-emerald-200',
     cobrar: 'bg-emerald-700 hover:bg-emerald-600',
   },
@@ -96,6 +98,7 @@ const TIPOS_VENTA: TipoVenta[] = [
     colorTitulo: 'text-violet-900',
     linea: 'bg-violet-200',
     tarjeta: 'border-violet-300 border-l-violet-600 ring-violet-100',
+    fondoCuenta: 'bg-violet-50',
     etiqueta: 'bg-violet-50 text-violet-800 border-violet-200',
     cobrar: 'bg-violet-600 hover:bg-violet-500',
   },
@@ -178,29 +181,23 @@ export const CajasView: React.FC<{ puedeQuitar?: boolean }> = ({ puedeQuitar = f
                     return (
                       <div
                         key={cuenta ? `${m.id}-${cuenta.numero}` : m.id}
-                        className={`bg-white border border-l-[6px] ring-2 rounded-xl overflow-hidden flex flex-col ${tipo.tarjeta} ${pagada ? 'opacity-60' : ''}`}
+                        className={`border border-l-[6px] ring-2 rounded-xl p-4 flex flex-col gap-3 ${tipo.tarjeta} ${cuenta ? tipo.fondoCuenta : 'bg-white'} ${pagada ? 'opacity-60' : ''}`}
                       >
-                        {/* Cuenta de una orden dividida: franja del color de esa persona */}
-                        {cuenta && (
-                          <div className={`px-4 py-2 flex items-center justify-between gap-2 ${colorCuenta(cuenta.numero - 1).fuerte}`}>
-                            <span className="flex items-center gap-2 text-xl font-black tracking-wide">
-                              <Split className="w-5 h-5 shrink-0" /> CUENTA {cuenta.numero}
-                            </span>
-                            <span className="text-sm font-bold">de {cuentas.length}</span>
-                          </div>
-                        )}
-                        <div className="p-4 flex-1 flex flex-col gap-3">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
-                            <div className="text-2xl font-bold tracking-tight leading-tight break-words">{etiquetaMesaRegistrada(m)}</div>
+                            {/* Cuenta de una orden dividida: «Mesa 1» y debajo «Cuenta 1» */}
+                            <div className="text-2xl font-bold tracking-tight leading-tight break-words">
+                              {etiquetaMesaRegistrada(m)}
+                              {cuenta && <span className={`block ${tipo.colorTitulo}`}>Cuenta {cuenta.numero}</span>}
+                            </div>
                             <div className="mt-1.5 flex flex-wrap items-center gap-1">
                               <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${tipo.etiqueta}`}>
                                 <tipo.Icono className="w-3.5 h-3.5" />
                                 {tipo.titulo}
                               </span>
-                              {vieja && (
+                              {(cuenta || vieja) && (
                                 <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full border bg-violet-100 text-violet-800 border-violet-300">
-                                  <Split className="w-3.5 h-3.5" /> DIVIDIDA EN {m.cuentas_divididas}
+                                  <Split className="w-3.5 h-3.5" /> {cuenta ? `CUENTA ${cuenta.numero} DE ${cuentas.length}` : `DIVIDIDA EN ${m.cuentas_divididas}`}
                                 </span>
                               )}
                             </div>
@@ -215,7 +212,7 @@ export const CajasView: React.FC<{ puedeQuitar?: boolean }> = ({ puedeQuitar = f
                             </span>
                           )}
                         </div>
-                        <div className="flex items-baseline justify-between border-t border-neutral-100 pt-3">
+                        <div className={`flex items-baseline justify-between border-t pt-3 ${cuenta ? tipo.linea.replace('bg-', 'border-') : 'border-neutral-100'}`}>
                           <span className="text-xs text-neutral-500">
                             {cuenta ? (pagada ? 'Ya pagó' : 'A cobrar de esta cuenta') : 'Total a cobrar'}
                             {cuenta && <span className="block text-[11px]">Orden completa {dinero(Number(m.total))}</span>}
@@ -230,7 +227,7 @@ export const CajasView: React.FC<{ puedeQuitar?: boolean }> = ({ puedeQuitar = f
                         <div className={`grid gap-2 ${pagada ? 'grid-cols-1' : 'grid-cols-[auto_1fr]'}`}>
                           <button
                             onClick={() => setCuentaAbierta(m.id)}
-                            className="h-11 px-3 rounded-lg border border-neutral-200 hover:bg-neutral-50 text-sm font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
+                            className="h-11 px-3 rounded-lg border border-neutral-200 bg-white hover:bg-neutral-50 text-sm font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
                           >
                             <ListChecks className="w-4 h-4" /> Ver cuenta
                           </button>
@@ -243,15 +240,15 @@ export const CajasView: React.FC<{ puedeQuitar?: boolean }> = ({ puedeQuitar = f
                             </button>
                           )}
                         </div>
-                        {vieja && (
+                        {/* Dividir desde Cajas (o volver a dividir si ya no cuadra); una vez dividida, cada cuenta sale aparte */}
+                        {!cuenta && (
                           <button
                             onClick={() => setDividiendo(m.id)}
-                            className="h-11 rounded-lg border-2 border-violet-300 bg-violet-50 hover:bg-violet-100 text-violet-800 text-sm font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                            className={`rounded-lg border-2 border-violet-300 bg-violet-50 hover:bg-violet-100 text-violet-800 text-sm font-bold flex items-center justify-center gap-1.5 cursor-pointer ${vieja ? 'h-11' : 'h-10'}`}
                           >
-                            <Split className="w-4 h-4" /> Volver a dividir
+                            <Split className="w-4 h-4" /> {vieja ? 'Volver a dividir' : 'Dividir cuenta'}
                           </button>
                         )}
-                        </div>
                       </div>
                     );
                   });

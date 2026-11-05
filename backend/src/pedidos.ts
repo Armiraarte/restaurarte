@@ -25,7 +25,8 @@
 //                                           su ticket; al cobrar la última, la orden pasa a PAGADO
 //   POST  /api/ordenes/:idOrden/cuentas-divididas/:numero/ticket-cobro  reimprime el ticket de cobro de esa cuenta
 //   POST  /api/ordenes/:idOrden/detalle/:idDetalle/quitar  { piezas? } solo caja: quita de la cuenta un producto mandado
-//                                           por error (todo el renglón, o esas piezas) y recalcula el total; no en PAGADO
+//                                           por error (todo el renglón, o esas piezas) y recalcula el total; no en PAGADO.
+//                                           Si estaba dividida, se descuenta de la cuenta que lo tenía (ajustarDivision)
 //   POST  /api/ordenes/:idOrden/extras/:idExtra/quitar     solo caja: quita un cobro extra mandado por error
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import type { RowDataPacket } from 'mysql2/promise';
@@ -38,7 +39,7 @@ import { extraRenglonCobro, lineasTicketCobro, nombreRenglonCobro, productoTicke
 import { lineasTicketCuentaDividida } from './ticketCuentaDividida.js';
 import {
   calcularCuentasDivididas, cuentaPagada, divisionVigente, guardarCuentasDivididas, hayTablaCuentasDivididas, leerCuentasDivididas,
-  marcarCuentaPagada, revisarCobroCuenta, validarSolicitudDivision, type CuentaDividida, type RenglonDivision, type SolicitudDivision,
+  marcarCuentaPagada, reconciliarDivision, revisarCobroCuenta, validarSolicitudDivision, type CuentaDividida, type RenglonDivision, type SolicitudDivision,
 } from './cuentasDivididas.js';
 import { guardarDetallePedido, itemsValidos, terminoPermitido, type ItemPedido, type PapasPedido, type ProductosReparto, type RepartoPedido } from './detallePedido.js';
 import { extrasValidos, guardarExtrasPedido, recalcularTotalOrden } from './extrasPedido.js';
@@ -547,6 +548,37 @@ async function bloquearOrdenParaQuitar(conexion: import('mysql2/promise').PoolCo
   return ordenes[0];
 }
 
+/**
+ * Después de quitar algo de una orden dividida (sin cuentas cobradas), ajusta la división a lo que quedó
+ * (reconciliarDivision): lo quitado se descuenta de la cuenta que lo tenía, una cuenta vacía se quita y, si ya solo
+ * queda una, la orden deja de estar dividida. Si falla, la orden queda como estaba y en Cajas sale «Volver a dividir».
+ */
+async function ajustarDivision(idOrden: number) {
+  if (!(await leerCuentasDivididas(idOrden)).length) return;
+  const conexion = await pool!.getConnection();
+  try {
+    await conexion.beginTransaction();
+    await conexion.query('SELECT idOrden FROM orden WHERE idOrden = ? FOR UPDATE', [idOrden]);
+    const cuentas = await leerCuentasDivididas(idOrden, conexion);
+    const datos = await ordenConDetalle(idOrden);
+    const nuevas = datos && reconciliarDivision(
+      { total: (datos.orden as unknown as { total: number }).total, detalle: datos.detalle as unknown as RenglonDivision[], extras: datos.extras as unknown as { id: number; descripcion: string; importe: number }[] },
+      cuentas,
+    );
+    if (nuevas) {
+      if (nuevas.length) await guardarCuentasDivididas(conexion, idOrden, nuevas, cuentas[0].creado_por, new Date(cuentas[0].creado_en));
+      else await conexion.execute('DELETE FROM orden_cuenta_dividida WHERE idOrden = ?', [idOrden]);
+      console.info(`[pedidos] Orden ${idOrden}: división ajustada a ${nuevas.length ? nuevas.map((c) => `Cuenta ${c.numero} $${c.importe.toFixed(2)}`).join(', ') : 'una sola cuenta'}`);
+    }
+    await conexion.commit();
+  } catch (err) {
+    await conexion.rollback();
+    console.error('[pedidos] No se pudo ajustar la cuenta dividida:', err);
+  } finally {
+    conexion.release();
+  }
+}
+
 /** Quita de la cuenta un producto mandado por error: el renglón completo o, con `piezas`, solo esas piezas. */
 pedidosRouter.post('/ordenes/:idOrden/detalle/:idDetalle/quitar', soloRoles(...ROLES_QUITAR_DEL_PEDIDO), async (req, res) => {
   const idOrden = Number(req.params.idOrden);
@@ -596,6 +628,7 @@ pedidosRouter.post('/ordenes/:idOrden/detalle/:idDetalle/quitar', soloRoles(...R
     await conexion.commit();
     // Queda en el registro del servidor quién quitó qué.
     console.info(`[pedidos] Orden ${idOrden}: ${req.usuario!.nombre} quitó ${resultado.piezas} × ${r.categoria} ${r.nombre}${r.tamano ? ` (${r.tamano})` : ''} ($${resultado.importe.toFixed(2)})`);
+    await ajustarDivision(idOrden);
     res.json({ ...(await ordenConDetalle(idOrden)), quitado: { piezas: resultado.piezas, importe: resultado.importe } });
   } catch (err) {
     await conexion.rollback();
@@ -634,6 +667,7 @@ pedidosRouter.post('/ordenes/:idOrden/extras/:idExtra/quitar', soloRoles(...ROLE
     await recalcularTotalOrden(conexion, idOrden, ahora);
     await conexion.commit();
     console.info(`[pedidos] Orden ${idOrden}: ${req.usuario!.nombre} quitó el extra «${extras[0].descripcion}» ($${Number(extras[0].importe).toFixed(2)})`);
+    await ajustarDivision(idOrden);
     res.json(await ordenConDetalle(idOrden));
   } catch (err) {
     await conexion.rollback();

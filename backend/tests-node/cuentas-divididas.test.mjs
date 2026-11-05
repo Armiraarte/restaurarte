@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { calcularCuentasDivididas, divisionVigente, guardarCuentasDivididas, revisarCobroCuenta, validarSolicitudDivision } from '../src/cuentasDivididas.ts';
+import {
+  calcularCuentasDivididas, divisionVigente, guardarCuentasDivididas, reconciliarDivision, revisarCobroCuenta, validarSolicitudDivision,
+} from '../src/cuentasDivididas.ts';
 import { unidadesDeCuenta } from '../src/dividirCuenta.ts';
 import { lineasTicketCuentaDividida } from '../src/ticketCuentaDividida.ts';
 import { lineasTicketCobro } from '../src/ticketCobro.ts';
@@ -97,6 +99,50 @@ test('ticket de cada persona: CUENTA N DE M con sus productos o su parte igual',
   for (const esperado of ['CUENTA 2 DE 3 · PAGADA', 'Atendió: Tablet 01 | Cobró: Ana', 'TOTAL A PAGAR | $71.00', 'Efectivo | $100.00', 'Cambio | $29.00']) {
     assert.ok(cobrada.includes(esperado), esperado);
   }
+});
+
+test('quitar algo de una cuenta dividida: se descuenta de la cuenta que lo tenía', () => {
+  const lonche = renglon({ idDetalle_Orden: 1, categoria: 'Lonches', nombre: 'Mixto', cantidad: 1, subtotal: 70 });
+  const sopes = renglon({ idDetalle_Orden: 2, categoria: 'Sopes', nombre: 'Queso', cantidad: 4, subtotal: 60 });
+  const cocas = renglon({ idDetalle_Orden: 3, categoria: 'Bebidas', nombre: 'Coca Zero', cantidad: 4, subtotal: 120 });
+  const antes = { total: 250, detalle: [lonche, sopes, cocas], extras: [] };
+  const guardar = (asignadas, modo = 'productos', personas = 2, orden = antes) =>
+    calcularCuentasDivididas(orden, { modo, personas, asignadas }).cuentas
+      .map((c) => ({ ...c, creado_por: 'Tablet 04', creado_en: '2026-11-05T05:52:13.000Z', recibido: null, cobrada_por: null, pagada_en: null }));
+  // Cuenta 1: lonche, 2 sopes y 1 coca ($130). Cuenta 2: 2 sopes y 3 cocas ($120).
+  const cuentas = guardar({ '1-0': 0, '2-0': 0, '2-1': 0, '3-0': 0, '2-2': 1, '2-3': 1, '3-1': 1, '3-2': 1, '3-3': 1 });
+  assert.deepEqual(cuentas.map((c) => c.importe), [130, 120]);
+  assert.equal(reconciliarDivision(antes, cuentas), null, 'Si sigue cuadrando no se toca');
+
+  const sinLonche = reconciliarDivision({ total: 180, detalle: [sopes, cocas], extras: [] }, cuentas);
+  assert.deepEqual(sinLonche.map((c) => [c.numero, c.importe]), [[1, 60], [2, 120]], 'Solo baja la cuenta que tenía el lonche');
+  assert.deepEqual(sinLonche[0].productos, [{ cantidad: 2, nombre: 'Sopes Queso', importe: 30 }, { cantidad: 1, nombre: 'Bebidas Coca Zero', importe: 30 }]);
+  assert.equal(sinLonche[0].total_orden, 180);
+
+  const soloCocas = reconciliarDivision({ total: 120, detalle: [cocas], extras: [] }, cuentas);
+  assert.deepEqual(soloCocas.map((c) => [c.numero, c.personas, c.importe]), [[1, 2, 30], [2, 2, 90]]);
+
+  // Se quita parte de un producto compartido: lo que queda es de las primeras cuentas.
+  const dosSopes = renglon({ ...sopes, cantidad: 2, subtotal: 30 });
+  assert.deepEqual(reconciliarDivision({ total: 220, detalle: [lonche, dosSopes, cocas], extras: [] }, cuentas).map((c) => c.importe), [130, 90]);
+
+  // Como Mesa 1: la Cuenta 1 tenía justo lo que se quitó; queda una sola cuenta y la orden deja de estar dividida.
+  const mesa1 = guardar({ '1-0': 0, '2-0': 0, '2-1': 0, '2-2': 0, '2-3': 1, '3-0': 1, '3-1': 1, '3-2': 1, '3-3': 1 });
+  assert.deepEqual(mesa1.map((c) => c.importe), [115, 135]);
+  assert.deepEqual(reconciliarDivision({ total: 120, detalle: [cocas], extras: [] }, mesa1), []);
+
+  // Tres cuentas y una se queda vacía: quedan dos, numeradas 1 y 2.
+  const tres = guardar({ '1-0': 0, '2-0': 1, '2-1': 1, '2-2': 1, '2-3': 1, '3-0': 2, '3-1': 2, '3-2': 2, '3-3': 2 }, 'productos', 3);
+  assert.deepEqual(reconciliarDivision({ total: 180, detalle: [sopes, cocas], extras: [] }, tres).map((c) => [c.numero, c.personas, c.importe]), [[1, 2, 60], [2, 2, 120]]);
+
+  // Partes iguales: el nuevo total entre las mismas personas.
+  const iguales = guardar(undefined, 'iguales', 3);
+  assert.deepEqual(reconciliarDivision({ total: 100, detalle: [cocas], extras: [] }, iguales).map((c) => c.importe), [33.34, 33.33, 33.33]);
+
+  // No se toca: con una cuenta cobrada, o si la orden tiene algo que no era de nadie.
+  assert.equal(reconciliarDivision({ total: 180, detalle: [sopes, cocas], extras: [] }, [{ ...cuentas[0], pagada_en: '2026-11-05T06:00:00Z' }, cuentas[1]]), null);
+  const nuevo = renglon({ idDetalle_Orden: 9, categoria: 'Tacos', nombre: 'Pollo', cantidad: 1, subtotal: 18 });
+  assert.equal(reconciliarDivision({ total: 198, detalle: [sopes, cocas, nuevo], extras: [] }, cuentas), null);
 });
 
 test('cobrar una cuenta dividida: solo en Cajas, con la división vigente, una vez y con efectivo suficiente', () => {

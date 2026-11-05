@@ -10,7 +10,7 @@
 // Con alguna cuenta ya cobrada, la división queda fija: no se vuelve a dividir ni se quita nada de la orden.
 import type { PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import { pool } from './db.js';
-import { repartir, unidadesDeCuenta } from './dividirCuenta.js';
+import { repartir, unidadesDeCuenta, type UnidadCuenta } from './dividirCuenta.js';
 import { productoTicketCobro, type RenglonCobro } from './ticketCobro.js';
 
 export const MAX_PERSONAS = 12;
@@ -89,7 +89,24 @@ export function calcularCuentasDivididas(
     };
   }
 
-  const unidades = unidadesDeCuenta(
+  const unidades = unidadesDeOrden(orden);
+  const asignadas = s.asignadas ?? {};
+  const claves = new Set(unidades.map((u) => u.clave));
+  if (Object.keys(asignadas).some((clave) => !claves.has(clave))) {
+    return { error: 'La cuenta cambió mientras la dividías. Cierra y vuelve a abrir Dividir cuenta.' };
+  }
+  const faltan = unidades.filter((u) => asignadas[u.clave] === undefined);
+  if (faltan.length) return { error: `Falta asignar ${faltan.length === 1 ? '1 producto' : `${faltan.length} productos`} a alguna persona.` };
+
+  const cuentas = Array.from({ length: s.personas }, (_, i) => armarCuenta(unidades.filter((u) => asignadas[u.clave] === i), i + 1, base));
+  const vacia = cuentas.find((c) => c.importe === 0 && !c.productos.length && !c.extras.length);
+  if (vacia) return { error: `La Persona ${vacia.numero} no tiene productos. Asígnale algo o quita una persona.` };
+  return { cuentas };
+}
+
+/** Las piezas de la orden con el nombre que llevan en el ticket (mismas claves que la pantalla, dividirCuenta.ts). */
+function unidadesDeOrden(orden: { detalle: RenglonDivision[]; extras: { id: number; descripcion: string; importe: number }[] }) {
+  return unidadesDeCuenta(
     orden.detalle.map((d) => ({
       clave: String(d.idDetalle_Orden),
       nombre: productoTicketCobro(d),
@@ -100,45 +117,79 @@ export function calcularCuentasDivididas(
     })),
     orden.extras.map((e) => ({ clave: String(e.id), descripcion: e.descripcion, importe: e.importe })),
   );
-  const asignadas = s.asignadas ?? {};
-  const claves = new Set(unidades.map((u) => u.clave));
-  if (Object.keys(asignadas).some((clave) => !claves.has(clave))) {
-    return { error: 'La cuenta cambió mientras la dividías. Cierra y vuelve a abrir Dividir cuenta.' };
-  }
-  const faltan = unidades.filter((u) => asignadas[u.clave] === undefined);
-  if (faltan.length) return { error: `Falta asignar ${faltan.length === 1 ? '1 producto' : `${faltan.length} productos`} a alguna persona.` };
+}
 
-  const cuentas = Array.from({ length: s.personas }, (_, i) => {
-    const mias = unidades.filter((u) => asignadas[u.clave] === i);
-    const productos = new Map<string, { cantidad: number; centavos: number }>();
-    const extras: { descripcion: string; importe: number }[] = [];
-    for (const u of mias) {
-      if (u.clave.startsWith('extra-')) {
-        extras.push({ descripcion: u.nombre, importe: pesos(u.centavos) });
-        continue;
-      }
-      const p = productos.get(u.nombre) ?? { cantidad: 0, centavos: 0 };
-      p.cantidad += 1;
-      p.centavos += u.centavos;
-      productos.set(u.nombre, p);
+/** Una cuenta con sus piezas: el mismo producto junto, como en el ticket de cobro. */
+function armarCuenta(
+  mias: UnidadCuenta[],
+  numero: number,
+  base: { personas: number; modo: ModoDivision; total_orden: number },
+): CuentaCalculada {
+  const productos = new Map<string, { cantidad: number; centavos: number }>();
+  const extras: { descripcion: string; importe: number }[] = [];
+  for (const u of mias) {
+    if (u.clave.startsWith('extra-')) {
+      extras.push({ descripcion: u.nombre, importe: pesos(u.centavos) });
+      continue;
     }
-    return {
-      ...base,
-      numero: i + 1,
-      importe: pesos(mias.reduce((acc, u) => acc + u.centavos, 0)),
-      productos: [...productos.entries()].map(([nombre, p]) => ({ cantidad: p.cantidad, nombre, importe: pesos(p.centavos) })),
-      extras,
-      vacia: mias.length === 0,
-    };
-  });
-  const vacia = cuentas.find((c) => c.vacia);
-  if (vacia) return { error: `La Persona ${vacia.numero} no tiene productos. Asígnale algo o quita una persona.` };
-  return { cuentas: cuentas.map(({ vacia: _vacia, ...c }) => c) };
+    const p = productos.get(u.nombre) ?? { cantidad: 0, centavos: 0 };
+    p.cantidad += 1;
+    p.centavos += u.centavos;
+    productos.set(u.nombre, p);
+  }
+  return {
+    ...base,
+    numero,
+    importe: pesos(mias.reduce((acc, u) => acc + u.centavos, 0)),
+    productos: [...productos.entries()].map(([nombre, p]) => ({ cantidad: p.cantidad, nombre, importe: pesos(p.centavos) })),
+    extras,
+  };
 }
 
 /** La división sigue sirviendo si sus cuentas suman el total actual de la orden. */
 export const divisionVigente = (cuentas: { importe: number }[], total: number) =>
   cuentas.length > 0 && cuentas.reduce((acc, c) => acc + Math.round(c.importe * 100), 0) === Math.round(total * 100);
+
+/**
+ * Ajusta una división (sin cuentas cobradas) a lo que hoy tiene la orden, p. ej. después de quitar algo mandado por
+ * error. Partes iguales: el nuevo total entre las mismas personas. Por productos: cada cuenta se queda con lo suyo
+ * que siga en la orden (si se quitó una parte de un producto compartido, se descuenta de las últimas cuentas); una
+ * cuenta que se queda sin nada se quita y las demás se vuelven a numerar.
+ * Devuelve las cuentas nuevas; [] = ya no queda división (una sola cuenta o nada); null = no hace falta o no se puede
+ * (alguna cuenta ya se cobró, o la orden tiene algo que no era de nadie: hay que volver a dividirla).
+ */
+export function reconciliarDivision(
+  orden: { total: number; detalle: RenglonDivision[]; extras: { id: number; descripcion: string; importe: number }[] },
+  cuentas: CuentaDividida[],
+): CuentaCalculada[] | null {
+  if (!cuentas.length || cuentas.some(cuentaPagada) || divisionVigente(cuentas, orden.total)) return null;
+  const totalCentavos = Math.round(orden.total * 100);
+  const base = (personas: number) => ({ personas, modo: cuentas[0].modo, total_orden: pesos(totalCentavos) });
+  if (cuentas[0].modo === 'iguales') {
+    if (totalCentavos <= 0) return [];
+    return repartir(totalCentavos, cuentas.length).map((centavos, i) => ({
+      ...base(cuentas.length), numero: i + 1, importe: pesos(centavos), productos: [], extras: [],
+    }));
+  }
+  // Las piezas de hoy, por nombre; cada cuenta toma las suyas en orden (Cuenta 1 primero).
+  const libres = new Map<string, UnidadCuenta[]>();
+  for (const u of unidadesDeOrden(orden)) {
+    const clave = `${u.clave.startsWith('extra-') ? 'extra' : 'producto'}:${u.nombre}`;
+    libres.set(clave, [...(libres.get(clave) ?? []), u]);
+  }
+  const tomar = (clave: string, n: number) => {
+    const piezas = libres.get(clave) ?? [];
+    return piezas.splice(0, Math.min(n, piezas.length));
+  };
+  const porCuenta = cuentas.map((c) => [
+    ...c.productos.flatMap((p) => tomar(`producto:${p.nombre}`, p.cantidad)),
+    ...c.extras.flatMap((e) => tomar(`extra:${e.descripcion}`, 1)),
+  ]);
+  if ([...libres.values()].some((piezas) => piezas.length > 0)) return null;
+  const conAlgo = porCuenta.filter((mias) => mias.length > 0);
+  if (conAlgo.length < 2) return [];
+  return conAlgo.map((mias, i) => armarCuenta(mias, i + 1, base(conAlgo.length)));
+}
 
 export type RevisionCobroCuenta =
   | { status: 400 | 404 | 409; error: string }

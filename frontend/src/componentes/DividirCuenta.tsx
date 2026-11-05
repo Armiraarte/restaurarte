@@ -11,12 +11,12 @@ import {
 } from '../services/pedidosService';
 import { alternarAsignacion, partesIguales, totalesPorPersona, unidadesDeCuenta } from '../services/dividirCuenta';
 import { agruparPiezas, alternarGrupo, estadoGrupo } from '../services/gruposDivision';
-import { colorCuenta } from './coloresCuenta';
+import { colorPersona } from './coloresCuenta';
 
 const pesos = (centavos: number) => `$${(centavos / 100).toFixed(2)}`;
 const MAX_PERSONAS = 12;
-// Un color por persona; en Cajas su cuenta sale con el mismo color.
-const color = (persona: number) => colorCuenta(persona).suave;
+// Un color por persona.
+const color = colorPersona;
 const hora = (fecha: string) => new Date(fecha).toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' });
 
 type Aviso = { tipo: 'ok' | 'aviso' | 'error'; texto: string; reimprimir?: boolean };
@@ -175,9 +175,11 @@ export function DividirCuenta({
     }
   };
   const vigente = divisionVigente(guardadas, total);
+  const dosColumnas = modo === 'productos' && unidades.length > 0;
 
   return (
-    <div className="w-full max-w-3xl max-h-full overflow-hidden bg-white rounded-2xl shadow-xl flex flex-col">
+    // Nunca más alta que la pantalla (el alto se mide contra la pantalla: un % del contenedor no siempre aplica).
+    <div className="w-full max-w-5xl max-h-[calc(100dvh-2rem)] overflow-hidden bg-white rounded-2xl shadow-xl flex flex-col">
       <div className="shrink-0 flex items-center justify-between gap-3 px-5 py-3 border-b border-neutral-100">
         <h2 className="text-lg font-black tracking-tight flex items-center gap-2">
           <Split className="w-5 h-5 text-violet-600" /> Dividir cuenta · {etiqueta}
@@ -222,7 +224,15 @@ export function DividirCuenta({
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4">
+      {/* Por productos, en pantalla ancha: personas a la izquierda y platillos a la derecha, cada lado con su scroll */}
+      <div
+        className={`flex-1 min-h-0 overflow-y-auto p-5 ${
+          dosColumnas
+            ? 'space-y-4 lg:space-y-0 lg:overflow-hidden lg:grid lg:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:gap-5'
+            : 'space-y-4'
+        }`}
+      >
+        <div className={dosColumnas ? 'space-y-4 lg:min-h-0 lg:overflow-y-auto lg:pr-1' : 'space-y-4'}>
         {aviso ? (
           <div
             role={aviso.tipo === 'ok' ? 'status' : 'alert'}
@@ -259,8 +269,7 @@ export function DividirCuenta({
         ) : unidades.length === 0 ? (
           <p className="text-sm text-neutral-500">Todavía no hay nada enviado en esta orden.</p>
         ) : (
-          <>
-            {/* Persona a la que se le dan las piezas que se toquen */}
+            /* Persona a la que se le dan las piezas que se toquen */
             <div>
               <div className="text-xs font-semibold text-neutral-500 mb-1.5">Elige la persona y toca lo que va a pagar:</div>
               <ul className="space-y-2">
@@ -287,9 +296,16 @@ export function DividirCuenta({
                 persona, desmárcalo primero con quien lo tiene.
               </p>
             </div>
+        )}
+        <p className="text-xs text-neutral-500">
+          «Guardar e imprimir» la registra como Cuenta 1 a {personas} de esta orden, imprime un ticket por persona en caja
+          y manda a Cajas las {personas} cuentas para que cada quien pague la suya (ya no se le pueden agregar productos).
+        </p>
+        </div>
 
-            {/* Un platillo por tarjeta, como se pidió */}
-            <ul className="space-y-2">
+        {/* Un platillo por tarjeta, como se pidió */}
+        {dosColumnas && (
+            <ul className="space-y-2 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
               {grupos.map((g) => {
                 const claves = g.piezas.map((p) => p.clave);
                 const actuales = vigentes(asignadas);
@@ -364,12 +380,7 @@ export function DividirCuenta({
                 );
               })}
             </ul>
-          </>
         )}
-        <p className="text-xs text-neutral-500">
-          «Guardar e imprimir» la registra como Cuenta 1 a {personas} de esta orden, imprime un ticket por persona en caja
-          y manda a Cajas las {personas} cuentas para que cada quien pague la suya (ya no se le pueden agregar productos).
-        </p>
       </div>
 
       <div className="shrink-0 p-3 border-t border-neutral-100 space-y-2">
