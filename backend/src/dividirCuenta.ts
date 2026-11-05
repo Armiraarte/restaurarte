@@ -8,6 +8,7 @@ export interface UnidadCuenta {
   nombre: string;
   detalle?: string;
   centavos: number;
+  mix_grupo?: number | null;
 }
 
 /** Reparte `centavos` en `partes`; los centavos que sobran van a las primeras («$10.00» en 3 → 3.34, 3.33, 3.33). */
@@ -44,12 +45,14 @@ export function unidadesDeCuenta(
     detalle?: string;
     cantidad: number;
     subtotal: number;
+    mix_grupo?: number | null;
     reparto?: { nombre: string; cantidad: number; precio?: number }[];
   }[],
-  extras: { clave: string; descripcion: string; importe: number }[] = [],
+  extras: { clave: string; descripcion: string; importe: number; mix_grupo?: number | null }[] = [],
 ): UnidadCuenta[] {
   const unidades: UnidadCuenta[] = [];
   for (const r of renglones) {
+    const mix = 'mix_grupo' in r ? { mix_grupo: r.mix_grupo ?? null } : {};
     const total = Math.round(r.subtotal * 100);
     const sabores = r.reparto?.length && r.reparto.reduce((acc, s) => acc + s.cantidad, 0) === r.cantidad ? r.reparto : null;
     if (sabores) {
@@ -60,13 +63,14 @@ export function unidadesDeCuenta(
       const extra = resto >= 0 ? repartir(resto, piezas.length) : null;
       const iguales = repartir(total, piezas.length);
       piezas.forEach((p, i) =>
-        unidades.push({ clave: `${r.clave}-${i}`, nombre: p.nombre, detalle: r.detalle, centavos: extra ? p.centavos + extra[i] : iguales[i] }));
+        unidades.push({ clave: `${r.clave}-${i}`, nombre: p.nombre, detalle: r.detalle, centavos: extra ? p.centavos + extra[i] : iguales[i], ...mix }));
       continue;
     }
     const piezas = repartir(total, r.cantidad);
-    piezas.forEach((centavos, i) => unidades.push({ clave: `${r.clave}-${i}`, nombre: r.nombre, detalle: r.detalle, centavos }));
+    piezas.forEach((centavos, i) => unidades.push({ clave: `${r.clave}-${i}`, nombre: r.nombre, detalle: r.detalle, centavos, ...mix }));
   }
-  for (const e of extras) unidades.push({ clave: `extra-${e.clave}`, nombre: e.descripcion, detalle: 'Cobro extra', centavos: Math.round(e.importe * 100) });
+  for (const e of extras) unidades.push({ clave: `extra-${e.clave}`, nombre: e.descripcion, detalle: 'Cobro extra', centavos: Math.round(e.importe * 100),
+    ...('mix_grupo' in e && { mix_grupo: e.mix_grupo ?? null }) });
   return unidades;
 }
 

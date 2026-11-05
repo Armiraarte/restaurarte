@@ -11,16 +11,12 @@
 import type { PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import { pool } from './db.js';
 import { repartir, unidadesDeCuenta, type UnidadCuenta } from './dividirCuenta.js';
-import { productoTicketCobro, type RenglonCobro } from './ticketCobro.js';
+import { productoTicketCobro, type ExtraTicketCobro, type ProductoTicketCobro, type RenglonCobro } from './ticketCobro.js';
 
 export const MAX_PERSONAS = 12;
 export type ModoDivision = 'iguales' | 'productos';
 
-export interface ProductoCuenta {
-  cantidad: number;
-  nombre: string;
-  importe: number;
-}
+export type ProductoCuenta = ProductoTicketCobro;
 
 /** Una cuenta de la división, como se guarda y se imprime. */
 export interface CuentaDividida {
@@ -30,7 +26,7 @@ export interface CuentaDividida {
   importe: number;
   total_orden: number; // total de la orden al dividirla (si cambió después, la división quedó vieja)
   productos: ProductoCuenta[];
-  extras: { descripcion: string; importe: number }[];
+  extras: ExtraTicketCobro[];
   creado_por: string;
   creado_en: string;
   /** Cobro en Cajas; null = por cobrar. */
@@ -78,7 +74,7 @@ export function validarSolicitudDivision(s: any): string | null {
  * (dividirCuenta.ts), así lo que se tocó en la tablet es lo que se imprime.
  */
 export function calcularCuentasDivididas(
-  orden: { total: number; detalle: RenglonDivision[]; extras: { id: number; descripcion: string; importe: number }[] },
+  orden: { total: number; detalle: RenglonDivision[]; extras: (ExtraTicketCobro & { id: number })[] },
   s: SolicitudDivision,
 ): { cuentas: CuentaCalculada[] } | { error: string } {
   const totalCentavos = Math.round(orden.total * 100);
@@ -105,17 +101,19 @@ export function calcularCuentasDivididas(
 }
 
 /** Las piezas de la orden con el nombre que llevan en el ticket (mismas claves que la pantalla, dividirCuenta.ts). */
-function unidadesDeOrden(orden: { detalle: RenglonDivision[]; extras: { id: number; descripcion: string; importe: number }[] }) {
+function unidadesDeOrden(orden: { detalle: RenglonDivision[]; extras: (ExtraTicketCobro & { id: number })[] }) {
   return unidadesDeCuenta(
     orden.detalle.map((d) => ({
       clave: String(d.idDetalle_Orden),
       nombre: productoTicketCobro(d),
       cantidad: d.cantidad,
       subtotal: d.subtotal,
+      ...('mix_grupo' in d && { mix_grupo: d.mix_grupo ?? null }),
       // MIXTAS: cada pieza con el nombre de su sabor («Lonches Mixto»).
       reparto: d.opciones?.reparto?.map((r) => ({ ...r, nombre: productoTicketCobro(d, r.nombre) })),
     })),
-    orden.extras.map((e) => ({ clave: String(e.id), descripcion: e.descripcion, importe: e.importe })),
+    orden.extras.map((e) => ({ clave: String(e.id), descripcion: e.descripcion, importe: e.importe,
+      ...('mix_grupo' in e && { mix_grupo: e.mix_grupo ?? null }) })),
   );
 }
 
@@ -125,23 +123,25 @@ function armarCuenta(
   numero: number,
   base: { personas: number; modo: ModoDivision; total_orden: number },
 ): CuentaCalculada {
-  const productos = new Map<string, { cantidad: number; centavos: number }>();
-  const extras: { descripcion: string; importe: number }[] = [];
+  const productos = new Map<string, { cantidad: number; nombre: string; centavos: number; mix_grupo?: number | null }>();
+  const extras: ExtraTicketCobro[] = [];
   for (const u of mias) {
+    const mix = 'mix_grupo' in u ? { mix_grupo: u.mix_grupo ?? null } : {};
     if (u.clave.startsWith('extra-')) {
-      extras.push({ descripcion: u.nombre, importe: pesos(u.centavos) });
+      extras.push({ descripcion: u.nombre, importe: pesos(u.centavos), ...mix });
       continue;
     }
-    const p = productos.get(u.nombre) ?? { cantidad: 0, centavos: 0 };
+    const clave = JSON.stringify([u.mix_grupo ?? null, u.nombre]);
+    const p = productos.get(clave) ?? { cantidad: 0, nombre: u.nombre, centavos: 0, ...mix };
     p.cantidad += 1;
     p.centavos += u.centavos;
-    productos.set(u.nombre, p);
+    productos.set(clave, p);
   }
   return {
     ...base,
     numero,
     importe: pesos(mias.reduce((acc, u) => acc + u.centavos, 0)),
-    productos: [...productos.entries()].map(([nombre, p]) => ({ cantidad: p.cantidad, nombre, importe: pesos(p.centavos) })),
+    productos: [...productos.values()].map(({ centavos, ...p }) => ({ ...p, importe: pesos(centavos) })),
     extras,
   };
 }
@@ -159,7 +159,7 @@ export const divisionVigente = (cuentas: { importe: number }[], total: number) =
  * (alguna cuenta ya se cobró, o la orden tiene algo que no era de nadie: hay que volver a dividirla).
  */
 export function reconciliarDivision(
-  orden: { total: number; detalle: RenglonDivision[]; extras: { id: number; descripcion: string; importe: number }[] },
+  orden: { total: number; detalle: RenglonDivision[]; extras: (ExtraTicketCobro & { id: number })[] },
   cuentas: CuentaDividida[],
 ): CuentaCalculada[] | null {
   if (!cuentas.length || cuentas.some(cuentaPagada) || divisionVigente(cuentas, orden.total)) return null;
@@ -177,14 +177,21 @@ export function reconciliarDivision(
     const clave = `${u.clave.startsWith('extra-') ? 'extra' : 'producto'}:${u.nombre}`;
     libres.set(clave, [...(libres.get(clave) ?? []), u]);
   }
-  const tomar = (clave: string, n: number) => {
+  const tomar = (clave: string, n: number, grupo?: number | null) => {
     const piezas = libres.get(clave) ?? [];
-    return piezas.splice(0, Math.min(n, piezas.length));
+    const tomadas: UnidadCuenta[] = [];
+    for (let i = 0; i < piezas.length && tomadas.length < n;) {
+      if (grupo === undefined || (piezas[i].mix_grupo ?? null) === grupo) tomadas.push(...piezas.splice(i, 1));
+      else i += 1;
+    }
+    return tomadas;
   };
-  const porCuenta = cuentas.map((c) => [
-    ...c.productos.flatMap((p) => tomar(`producto:${p.nombre}`, p.cantidad)),
-    ...c.extras.flatMap((e) => tomar(`extra:${e.descripcion}`, 1)),
-  ]);
+  const porCuenta: UnidadCuenta[][] = cuentas.map(() => []);
+  // Primero las cuentas con el MIX guardado; las divisiones antiguas solo conocen el nombre.
+  for (const conGrupo of [true, false]) cuentas.forEach((c, i) => {
+    for (const p of c.productos.filter((p) => ('mix_grupo' in p) === conGrupo)) porCuenta[i].push(...tomar(`producto:${p.nombre}`, p.cantidad, p.mix_grupo));
+    for (const e of c.extras.filter((e) => ('mix_grupo' in e) === conGrupo)) porCuenta[i].push(...tomar(`extra:${e.descripcion}`, 1, e.mix_grupo));
+  });
   if ([...libres.values()].some((piezas) => piezas.length > 0)) return null;
   const conAlgo = porCuenta.filter((mias) => mias.length > 0);
   if (conAlgo.length < 2) return [];

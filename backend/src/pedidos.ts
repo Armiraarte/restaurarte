@@ -37,7 +37,7 @@ import { pool } from './db.js';
 import { mysqlDisponible } from './usuarios.js';
 import { turnoAbierto } from './turnos.js';
 import { imprimirLineas } from './impresion.js';
-import { extraRenglonCobro, lineasTicketCobro, nombreRenglonCobro, productoTicketCobro } from './ticketCobro.js';
+import { lineasTicketCobro, productosTicketCobro, type ExtraTicketCobro, type RenglonCobro } from './ticketCobro.js';
 import { lineasTicketCuentaDividida } from './ticketCuentaDividida.js';
 import {
   calcularCuentasDivididas, cuentaPagada, divisionVigente, guardarCuentasDivididas, hayTablaCuentasDivididas, leerCuentasDivididas,
@@ -232,20 +232,7 @@ async function imprimirTicketCobro(idOrden: number, recibido: number | null, cob
   const datos = await ordenConDetalle(idOrden);
   if (!datos) return { ok: false, error: 'La orden no existe.' };
   const o = datos.orden as unknown as { idOrden: number; etiqueta: string; tipo_orden: number; abierta_por: string; total: number };
-  // Para el cliente se junta el mismo producto aunque se haya pedido en varios envíos
-  // (las quesadillas sin queso van en su propio renglón).
-  const porProducto = new Map<string, { cantidad: number; nombre: string; importe: number }>();
-  type Renglon = { idProducto: number; categoria: string; nombre: string; tamano: string | null; cantidad: number; sin_queso: boolean; con_queso: boolean; carne_extra: number; subtotal: number; opciones: { mezcla?: string[]; reparto?: RepartoPedido[]; papas?: PapasPedido; complementosExtra?: { nombre: string }[] } | null };
-  for (const d of datos.detalle as unknown as Renglon[]) {
-    // MIXTAS: "4 BBQ + 6 Buffalo"; mezcla sin cantidades: "Papa con Frijol".
-    const nombre = nombreRenglonCobro(d);
-    const clave = `${d.idProducto}-${d.sin_queso ? 1 : 0}-${d.con_queso ? 1 : 0}-${d.carne_extra}-${nombre}-${d.opciones?.papas ? 1 : 0}-${extraRenglonCobro(d)}`;
-    // Papas: «Orden de papas» / «Media orden de papas», sin repetir «Papas a la Francesa».
-    const p = porProducto.get(clave) ?? { cantidad: 0, nombre: productoTicketCobro(d, nombre), importe: 0 };
-    p.cantidad += d.cantidad;
-    p.importe = redondear(p.importe + d.subtotal);
-    porProducto.set(clave, p);
-  }
+  type Renglon = RenglonCobro & { idProducto: number; cantidad: number; subtotal: number };
   try {
     await imprimirLineas(
       lineasTicketCobro({
@@ -255,8 +242,8 @@ async function imprimirTicketCobro(idOrden: number, recibido: number | null, cob
         abiertaPor: o.abierta_por,
         cobro,
         fecha: new Date(),
-        productos: [...porProducto.values()],
-        extras: datos.extras as unknown as { descripcion: string; importe: number }[],
+        productos: productosTicketCobro(datos.detalle as unknown as Renglon[]),
+        extras: datos.extras as unknown as ExtraTicketCobro[],
         total: o.total,
         recibido,
         cambio: recibido === null ? null : redondear(recibido - o.total),

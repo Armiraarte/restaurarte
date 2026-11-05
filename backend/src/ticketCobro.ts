@@ -21,6 +21,19 @@
 import type { LineaTicket } from './impresion.js';
 import { encabezadoRestaurante } from './ticketMarca.js';
 
+export interface ProductoTicketCobro {
+  cantidad: number;
+  nombre: string;
+  importe: number;
+  mix_grupo?: number | null;
+}
+
+export interface ExtraTicketCobro {
+  descripcion: string;
+  importe: number;
+  mix_grupo?: number | null;
+}
+
 export interface DatosTicketCobro {
   idOrden: number;
   etiqueta: string; // "Mesa 1" o el nombre del cliente
@@ -28,8 +41,8 @@ export interface DatosTicketCobro {
   abiertaPor: string; // tablet o "Caja"
   cobro: string; // usuario que cobró
   fecha: Date;
-  productos: { cantidad: number; nombre: string; importe: number }[];
-  extras?: { descripcion: string; importe: number }[];
+  productos: ProductoTicketCobro[];
+  extras?: ExtraTicketCobro[];
   total: number;
   /** null al reimprimir desde Ventas: el monto recibido no se guarda, así que no se imprime efectivo ni cambio. */
   recibido: number | null;
@@ -47,6 +60,7 @@ export interface RenglonCobro {
   sin_queso: boolean;
   con_queso: boolean;
   carne_extra: number;
+  mix_grupo?: number | null;
   opciones: {
     mezcla?: string[];
     reparto?: { nombre: string; cantidad: number }[];
@@ -80,6 +94,65 @@ export function productoTicketCobro(d: RenglonCobro, nombre = nombreRenglonCobro
 
 const dinero = (n: number) => `$${n.toFixed(2)}`;
 
+/** Junta productos iguales entre envíos, conservando el plato MIX y sus opciones. */
+export function productosTicketCobro(detalle: (RenglonCobro & { idProducto: number; cantidad: number; subtotal: number })[]): ProductoTicketCobro[] {
+  const porProducto = new Map<string, ProductoTicketCobro>();
+  for (const d of detalle) {
+    const nombre = nombreRenglonCobro(d);
+    const clave = JSON.stringify([d.mix_grupo ?? null, d.idProducto, d.sin_queso, d.con_queso, d.carne_extra, nombre, Boolean(d.opciones?.papas), extraRenglonCobro(d)]);
+    const p = porProducto.get(clave) ?? {
+      cantidad: 0, nombre: productoTicketCobro(d, nombre), importe: 0,
+      ...(d.mix_grupo != null && { mix_grupo: d.mix_grupo }),
+    };
+    p.cantidad += d.cantidad;
+    p.importe = Math.round((p.importe + d.subtotal) * 100) / 100;
+    porProducto.set(clave, p);
+  }
+  return [...porProducto.values()];
+}
+
+/** El mismo formato para cobros, cuentas por persona y sus reimpresiones. */
+export function lineasProductosCobro(productos: ProductoTicketCobro[], extras: ExtraTicketCobro[] = []): LineaTicket[] {
+  const bloques: { grupo: number | null; productos: ProductoTicketCobro[] }[] = [];
+  const porGrupo = new Map<number, (typeof bloques)[number]>();
+  for (const p of productos) {
+    const grupo = p.mix_grupo ?? null;
+    let bloque = grupo === null ? undefined : porGrupo.get(grupo);
+    if (!bloque) {
+      bloque = { grupo, productos: [] };
+      bloques.push(bloque);
+      if (grupo !== null) porGrupo.set(grupo, bloque);
+    }
+    bloque.productos.push(p);
+  }
+  const lineas: LineaTicket[] = [];
+  const separar = () => {
+    if (lineas.length && !lineas[lineas.length - 1].separador) lineas.push({ separador: true });
+  };
+  for (const bloque of bloques) {
+    if (bloque.grupo !== null) {
+      separar();
+      lineas.push({ texto: 'MIX', negrita: true });
+    }
+    for (const p of bloque.productos) lineas.push({ texto: `${p.cantidad}  ${p.nombre}`, derecha: dinero(p.importe) });
+    if (bloque.grupo !== null) {
+      for (const e of extras.filter((e) => e.mix_grupo === bloque.grupo)) {
+        lineas.push({ texto: `+ ${e.descripcion}`, derecha: dinero(e.importe) });
+      }
+      separar();
+    }
+  }
+  const sueltos = extras.filter((e) => e.mix_grupo == null || !porGrupo.has(e.mix_grupo));
+  if (sueltos.length) {
+    separar();
+    lineas.push({ texto: 'EXTRAS', negrita: true });
+    for (const e of sueltos) lineas.push({ texto: e.descripcion, derecha: dinero(e.importe) });
+  }
+  // El encabezado y los totales ya llevan su propio separador.
+  if (lineas[lineas.length - 1]?.separador) lineas.pop();
+  return lineas;
+}
+
 export function lineasTicketCobro(t: DatosTicketCobro): LineaTicket[] {
   const fecha = t.fecha.toLocaleString('es-MX', {
     day: '2-digit',
@@ -97,11 +170,7 @@ export function lineasTicketCobro(t: DatosTicketCobro): LineaTicket[] {
     { texto: `Atendió: ${t.abiertaPor}`, derecha: `Cobró: ${t.cobro}` },
     { separador: true },
   ];
-  for (const p of t.productos) lineas.push({ texto: `${p.cantidad}  ${p.nombre}`, derecha: dinero(p.importe) });
-  if (t.extras?.length) {
-    lineas.push({ separador: true }, { texto: 'EXTRAS', negrita: true });
-    for (const extra of t.extras) lineas.push({ texto: extra.descripcion, derecha: dinero(extra.importe) });
-  }
+  lineas.push(...lineasProductosCobro(t.productos, t.extras));
   lineas.push(
     { separador: true },
     { texto: 'TOTAL', derecha: dinero(t.total), grande: true },

@@ -24,6 +24,7 @@
 import type { LineaTicket } from './impresion.js';
 import { encabezadoRestaurante } from './ticketMarca.js';
 import type { CuentaDividida } from './cuentasDivididas.js';
+import { lineasProductosCobro } from './ticketCobro.js';
 
 export interface DatosTicketCuentaDividida {
   idOrden: number;
@@ -65,11 +66,7 @@ export function lineasTicketCuentaDividida(t: DatosTicketCuentaDividida): LineaT
       { texto: `Dividida entre ${c.personas} personas` },
     );
   } else {
-    for (const p of c.productos) lineas.push({ texto: `${p.cantidad}  ${p.nombre}`, derecha: dinero(p.importe) });
-    if (c.extras.length) {
-      lineas.push({ separador: true }, { texto: 'EXTRAS', negrita: true });
-      for (const e of c.extras) lineas.push({ texto: e.descripcion, derecha: dinero(e.importe) });
-    }
+    lineas.push(...lineasProductosCobro(c.productos, c.extras));
   }
   lineas.push({ separador: true }, { texto: 'TOTAL A PAGAR', derecha: dinero(c.importe), grande: true });
   if (c.modo === 'productos') lineas.push({ texto: 'Cuenta dividida · Orden total', derecha: dinero(c.total_orden), pequeno: true });
